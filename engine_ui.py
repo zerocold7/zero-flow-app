@@ -61,8 +61,15 @@ def play_tone(tone_type, enable_chimes=True):
         "success_polish": [(900, 60), (1200, 60)], "success_translate": [(1100, 60), (1500, 90)],
         "correction": [(1400, 50), (1800, 60)], "empty": [(440, 250)], "clean": [(1200, 80), (1400, 80)]
     }
-    if tone_type in tones:
-        for f, d in tones[tone_type]: winsound.Beep(f, d)
+    seq = tones.get(tone_type)
+    if not seq:
+        return
+    # winsound.Beep blocks for the tone's duration; play it off-thread so it never
+    # stalls a keyboard-hotkey callback (a stalled callback freezes the keyboard).
+    def _beep():
+        for f, d in seq:
+            winsound.Beep(f, d)
+    threading.Thread(target=_beep, daemon=True).start()
 
 def print_boot_sequence(ollama_model, hotkeys):
     os.system('cls' if os.name == 'nt' else 'clear')

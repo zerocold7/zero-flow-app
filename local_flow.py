@@ -529,6 +529,13 @@ def correct_current_line():
 
     pyperclip.copy(saved_clipboard)
 
+def _run_async(fn):
+    """Wrap a hotkey handler so it runs on its own daemon thread. Heavy handlers
+    (LLM calls, key-sending) must never run on the keyboard listener thread —
+    blocking it freezes the whole keyboard until they return, which is what forced
+    the app restarts on Ctrl+F10/F11."""
+    return lambda: threading.Thread(target=fn, daemon=True).start()
+
 # =====================================================================
 # ENTRY POINT
 # =====================================================================
@@ -552,9 +559,11 @@ def main():
     keyboard.add_hotkey(HOTKEYS["polish"],      lambda: on_record_hotkey("polish"), suppress=True)
     keyboard.add_hotkey(HOTKEYS["translate"],   lambda: on_record_hotkey("translate"), suppress=True)
     keyboard.add_hotkey(HOTKEYS["english"],     lambda: on_record_hotkey("english"), suppress=True)
-    keyboard.add_hotkey(HOTKEYS["fix"],         correct_current_line, suppress=True)
-    keyboard.add_hotkey(HOTKEYS["maintenance"], run_memory_maintenance, suppress=True)
-    keyboard.add_hotkey(HOTKEYS["purge"],       purge_diagnostic_files, suppress=True)
+    # These do heavy work (LLM calls, key-sending), so dispatch each to a worker
+    # thread — never block the keyboard listener (that froze the whole keyboard).
+    keyboard.add_hotkey(HOTKEYS["fix"],         _run_async(correct_current_line), suppress=True)
+    keyboard.add_hotkey(HOTKEYS["maintenance"], _run_async(run_memory_maintenance), suppress=True)
+    keyboard.add_hotkey(HOTKEYS["purge"],       _run_async(purge_diagnostic_files), suppress=True)
     keyboard.add_hotkey(HOTKEYS["panic"],       on_cancel_hotkey)
     keyboard.wait()
 
