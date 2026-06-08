@@ -32,6 +32,7 @@
 > Follow the **[Beginner Setup Guide — step by step, no GPU needed](docs/SETUP-CPU-LAPTOP.md)**
 > (also available as a **[printable PDF](docs/Zero-Flow-Setup-Guide.pdf)**). It covers everything
 > below in plain language, including microphone permissions and troubleshooting.
+> <br>🌍 **بالعربية:** **[دليل التثبيت للمبتدئين (نسخة اللابتوب)](docs/SETUP-CPU-LAPTOP.ar.md)** — أو [نسخة Word](docs/SETUP-CPU-LAPTOP.ar.docx).
 
 **Quick version (if you've done this before):**
 1. Clone this repository.

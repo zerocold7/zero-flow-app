@@ -1,6 +1,8 @@
 # Zero- Flow Engine — Beginner Setup Guide (Windows, no GPU needed)
 
 > 📄 Prefer a printable / offline copy? **[Download the PDF version](Zero-Flow-Setup-Guide.pdf)**.
+>
+> 🌍 **بالعربية:** **[اقرأ هذا الدليل بالعربية](SETUP-CPU-LAPTOP.ar.md)** (نسخة Word: [.docx](SETUP-CPU-LAPTOP.ar.docx)).
 
 This guide takes you from a fresh Windows 11 laptop to a working Zero- Flow setup, **one step at a time** — written for someone who has never installed something like this before. It uses **CPU mode**, so **you do not need an NVIDIA graphics card**.
 
@@ -66,10 +68,13 @@ Windows hides the microphone from desktop apps by default. If you skip this, the
 ---
 
 ## Step 4 — Download the project
-Back in PowerShell, run these lines. They put the project in a folder called **local-voice-flow** inside your Documents:
+
+> ⚠️ **Avoid OneDrive.** New laptops often sync your **Desktop** and **Documents** folders to OneDrive, which can break file paths with confusing red errors during install. Put the project on the **`C:\` drive** directly instead.
+
+Back in PowerShell, run these lines. They put the project in a folder at the root of your C: drive (`C:\local-voice-flow`):
 
 ```powershell
-cd $HOME\Documents
+cd C:\
 git clone https://github.com/zerocold7/local-voice-flow.git
 cd local-voice-flow
 ```
@@ -127,7 +132,7 @@ This is about 2 GB, one time only. Lighter option: `gemma2:2b`. Higher quality b
 ---
 
 ## Step 8 — Start it for the first time
-1. Open **File Explorer** and go to **Documents → local-voice-flow**.
+1. Open **File Explorer** and go to **`C:\local-voice-flow`**.
 2. Double-click **`Launch_Flow.bat`**.
 
 > ⚠️ **If Windows shows a blue "Windows protected your PC" box**, click **More info**, then **Run anyway**. This is just Windows being cautious about a new file — it's your own project file.
@@ -143,6 +148,9 @@ Leave that window open (you can minimize it). **Closing the window stops the eng
 ---
 
 ## Step 9 — Test that it works
+
+> ⌨️ **Laptop Fn-key trap (important!).** On most laptops, **F5–F10 are media keys** (volume/brightness) by default, so pressing `F5` alone won't reach the engine. Fix it once: press **`Fn + Esc`** to turn on **Fn-Lock** (this is the Lenovo/IdeaPad shortcut) — now the F-keys work with a single press. Or hold **`Fn`** together with the key every time (e.g. `Fn + F7`). If `Fn + Esc` doesn't work, look for a small padlock icon on the `Esc` key, or check your laptop's manual.
+
 1. Open **Notepad** and click inside it so the cursor is blinking.
 2. Hold **F5**, say "hello, this is a test", then release F5.
 3. After a second or two, your words appear in Notepad.
@@ -192,6 +200,19 @@ Hold the key, speak, release. The key **forces** the language, so it's never mis
 | **Polish / Translate does nothing** | Make sure Ollama is running: type `ollama list` and confirm your model is listed (Step 7). |
 | **Everything feels too slow** | In `.env` set `WHISPER_MODEL_NAME="base"`, save, and restart the engine. |
 | **SmartScreen blocks the launcher** | Click **More info**, then **Run anyway**. |
+| **Pressing F5–F10 does nothing at all** | Your laptop's F-keys are in media mode. Press `Fn + Esc` to enable Fn-Lock (Step 9), or hold `Fn` together with the key. |
+| **The laptop gets hot / fans get loud** | Use the raw modes `F5`/`F7` (they skip the AI). Confirm `.env` has `small` + `qwen2.5:3b` (not `medium`/`7b`). Drop to `base` for more cooling. See below. |
+
+---
+
+## Keeping your laptop cool & fast
+On a CPU laptop, **bigger models = more heat.** The biggest heat source is the AI model (Ollama), which works your CPU hard for a few seconds whenever you **polish** or **translate**. To stay cool:
+
+- **For the least heat, use the raw modes `F5` (English) and `F7` (Arabic).** They type exactly what you say **without** running the AI, so the CPU barely warms up. Only use `F6`/`F8` (polish) and `F9`/`F10` (translate) when you actually need them — those are what run the AI model.
+- **The heat is momentary.** The engine only uses the CPU while it's processing audio (the few seconds after you release the key). The rest of the time it sits idle and cool.
+- **Still warm or slow?** Set `WHISPER_MODEL_NAME="base"` in `.env` (faster and cooler), then restart.
+- **Keep `.env` light:** `small` + `qwen2.5:3b`. Avoid `medium` and `qwen2.5:7b` on a laptop — they're the usual cause of fan noise and heat.
+- **Airflow:** use the laptop on a hard surface (not a bed or cushion) so the vents aren't blocked.
 
 ---
 
