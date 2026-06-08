@@ -144,11 +144,11 @@ Hallucination originates in Whisper, not the app code. Mitigations in `transcrib
 | File | Purpose |
 |------|---------|
 | `flow_capture.wav` | Temporary audio buffer (deleted after each decode) |
-| `flow_vocabulary.txt` | Learned proper nouns / tech terms (deduped on write, pruned by `Ctrl+F11`) |
+| `flow_vocabulary.txt` | Learned proper nouns / tech terms (deduped on write, pruned by `Shift+F1`) |
 | `flow_history.md` | Append-only log of injected text; auto-trimmed at boot past ~500 KB |
 | `flow_debug.log` | Diagnostics; auto-rotated at ~1 MB (×2 backups ≈ 3 MB cap) |
 
 **None of these grow without bound:** the debug log rotates, history is trimmed at boot,
-and `Ctrl+F12` clears both on demand. The debug log is the first place to look when
+and `Shift+F2` clears both on demand. The debug log is the first place to look when
 something misbehaves — every transcription records `mode=…` and `lang=…`, and
 re-decodes / skips / fallbacks are all logged.

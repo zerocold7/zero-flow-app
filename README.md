@@ -55,6 +55,15 @@
 | `Shift + F3` | Rewrite & correct the current line |
 | `Esc` | Cancel the current recording (does nothing when idle) |
 
+## 🛠️ Customizing
+Almost everything is tweakable. See **[CONFIGURATION.md](CONFIGURATION.md)** for:
+- changing hotkeys, the Whisper model, and GPU/CPU behaviour
+- **using a different LLM provider** (LM Studio, llama.cpp, OpenAI, Anthropic…) and **adding an API key**
+- editing the AI prompts, voice macros, punctuation, and vocabulary
+
+And **[ARCHITECTURE.md](ARCHITECTURE.md)** for how the engine works internally.
+
 ## 🔒 Privacy
-Everything runs locally — audio never leaves the machine, transcription is on-device
-(`faster-whisper`), and all refinement uses your local Ollama. No cloud APIs.
+Everything runs locally by default — audio never leaves the machine, transcription is
+on-device (`faster-whisper`), and refinement uses your local Ollama. (If you switch to
+a *cloud* LLM provider per CONFIGURATION.md, dictated text is sent to that provider.)

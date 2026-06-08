@@ -235,7 +235,7 @@ def _absorb_learned_word(output):
     return LEARN_PATTERN.sub('', output).strip()
 
 def run_memory_maintenance():
-    """Ctrl+F11 — let the LLM dedupe / clean the learned-vocabulary file."""
+    """Shift+F1 — let the LLM dedupe / clean the learned-vocabulary file."""
     if recording:
         return
     print(f"\n{ui.C_WARN}🧹 AI Janitor: Analyzing and pruning vocabulary memory...{ui.C_RESET}")
@@ -256,8 +256,8 @@ def run_memory_maintenance():
     ui.update_console_title("ONLINE")
 
 def purge_diagnostic_files():
-    """Ctrl+F12 — clear the debug log and dictation history on demand. These are the
-    files that grow with use; vocabulary is curated separately by Ctrl+F11."""
+    """Shift+F2 — clear the debug log and dictation history on demand. These are the
+    files that grow with use; vocabulary is curated separately by Shift+F1."""
     if recording:
         return
     try:
