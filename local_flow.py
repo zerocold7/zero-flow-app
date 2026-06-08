@@ -460,6 +460,13 @@ def on_record_hotkey(mode_selection):
     """A record key (F8–F11) was pressed: start a capture, or stop the active one."""
     global recording, active_mode, clipboard_context, cancel_flag
 
+    # The keyboard library fires a bare-key hotkey even while Ctrl is held, so
+    # Ctrl+F10 / Ctrl+F11 would otherwise ALSO trigger the base mode (polish /
+    # translate) on top of fix / maintenance. If Ctrl is down, this press belongs
+    # to a Ctrl+ combo — ignore it here and let that handler own it.
+    if keyboard.is_pressed('ctrl'):
+        return
+
     if recording:
         # Any record key stops the capture. We do NOT switch modes mid-recording —
         # that silent switch (e.g. tapping F11 during a raw F9 clip) was the cause
