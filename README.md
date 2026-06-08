@@ -61,7 +61,8 @@ Almost everything is tweakable. See **[CONFIGURATION.md](CONFIGURATION.md)** for
 - **using a different LLM provider** (LM Studio, llama.cpp, OpenAI, Anthropic…) and **adding an API key**
 - editing the AI prompts, voice macros, punctuation, and vocabulary
 
-And **[ARCHITECTURE.md](ARCHITECTURE.md)** for how the engine works internally.
+And **[ARCHITECTURE.md](ARCHITECTURE.md)** for how the engine works internally, or
+**[CHANGELOG.md](CHANGELOG.md)** for the full feature/fix list.
 
 ## 🔒 Privacy
 Everything runs locally by default — audio never leaves the machine, transcription is

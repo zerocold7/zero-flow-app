@@ -15,7 +15,7 @@ only set what you want to change.
 | Variable | Default | What it does |
 |----------|---------|--------------|
 | `WHISPER_MODEL_NAME` | `large-v3` | Speech model — accuracy vs. speed/VRAM (see §3) |
-| `OLLAMA_HOST_URL` | `http://127.0.0.1:11434/api/generate` | Where the LLM lives (see §5) |
+| `OLLAMA_HOST_URL` | `http://127.0.0.1:11434/api/generate` | Where the LLM lives (see §6) |
 | `FALLBACK_LLM` | `gemma2:27b` | Model name used if auto-discovery fails |
 | `SAMPLE_RATE` | `16000` | Mic sample rate (Hz). Whisper expects 16000 — leave it |
 | `CHANNELS` | `1` | Mic channels (mono). Leave it |
@@ -67,7 +67,48 @@ On CPU, prefer `small` or `medium` — `large-v3` is heavy without a GPU.
 
 ---
 
-## 4. GPU vs CPU
+## 4. Changing the languages (e.g. Arabic → French)
+The engine ships with **English + Arabic**, but Whisper `large-v3` understands ~99
+languages, so you can swap Arabic (or English) for any of them. A language is just an
+[ISO 639-1 code](https://en.wikipedia.org/wiki/List_of_ISO_639-1_codes): `en` English,
+`ar` Arabic, `fr` French, `es` Spanish, `de` German, `it` Italian, `pt` Portuguese,
+`ru` Russian, `zh` Chinese, `ja` Japanese, `ko` Korean, `hi` Hindi, `tr` Turkish…
+
+**Worked example — replace Arabic with French.** Make these edits, then restart:
+
+1. **`local_flow.py` → `MODES`:** change each `"ar"` to `"fr"` and update the labels:
+   ```python
+   "ar_raw":    {"lang": "fr", "op": "raw",       "label": "FRENCH"},
+   "ar_polish": {"lang": "fr", "op": "polish",    "label": "FRENCH · POLISH"},
+   "en2ar":     {"lang": "en", "op": "translate", "to": "fr", "label": "TRANSLATE EN→FR"},
+   "ar2en":     {"lang": "fr", "op": "translate", "to": "en", "label": "TRANSLATE FR→EN"},
+   ```
+   (The dict keys like `ar_raw` are just internal names — leave them, or rename them and
+   also update the matching keys in `HOTKEYS` **and** the `HOTKEY_*` lines in `.env`.)
+
+2. **`local_flow.py` → `SUPPORTED_LANGS`:** `("ar", "en")` → `("fr", "en")`.
+
+3. **`local_flow.py` → `refine_text`:** update the two display labels `"AR→EN"` / `"EN→AR"`
+   to `"FR→EN"` / `"EN→FR"` (cosmetic only).
+
+4. **`personas.py` → translate prompts:** edit the text to say *French* instead of *Arabic*:
+   ```python
+   TRANSLATE_TO_EN_PROMPT = "You are an elite French-to-English translation engine. ..."
+   TRANSLATE_TO_AR_PROMPT = "You are an elite English-to-French translation engine. ..."
+   ```
+   (Keep the constant *names* — `refine_text` picks them by `to == "en"` vs. otherwise.)
+
+5. *(Optional)* **`personas.py` → `VOICE_MACROS` / `PUNCTUATION_MAP`:** replace the Arabic
+   spoken triggers (e.g. `"سطر جديد"`) with French ones (`"nouvelle ligne"`), and the
+   Arabic punctuation rules with French equivalents.
+
+Whisper already knows French, so **no model change is needed**. The same recipe works for
+any language — or to go single-language, or to add a **third** language (add more entries
+to `MODES` + `HOTKEYS` + `.env`).
+
+---
+
+## 5. GPU vs CPU
 The engine tries CUDA (`float16`) first and **falls back to CPU (`int8`) automatically**
 if the CUDA libraries are missing (`load_whisper_model` in `local_flow.py`).
 
@@ -80,7 +121,7 @@ The chosen device is written to `flow_debug.log` at startup.
 
 ---
 
-## 5. Using a different LLM provider (instead of Ollama)
+## 6. Using a different LLM provider (instead of Ollama)
 The LLM is only used for **Polish**, **Translate**, and the **line-fix / maintenance**
 actions — transcription itself is always local Whisper. The LLM integration is two
 small functions in `local_flow.py`:
@@ -167,7 +208,7 @@ LLM_API_KEY="sk-ant-..."
 
 ---
 
-## 6. Customizing the AI behavior (prompts)
+## 7. Customizing the AI behavior (prompts)
 All prompts live in **`personas.py`** — edit the strings to change how the LLM behaves.
 
 | Constant | Controls |
@@ -182,7 +223,7 @@ Example: to make Polish more aggressive, add a rule to `STANDARD_SYSTEM_PROMPT` 
 
 ---
 
-## 7. Voice macros, punctuation & vocabulary
+## 8. Voice macros, punctuation & vocabulary
 Also in **`personas.py`**:
 
 - **`BASE_VOCABULARY`** — proper nouns / tech terms Whisper should spell correctly.
@@ -201,7 +242,7 @@ Also in **`personas.py`**:
 
 ---
 
-## 8. Where your data lives (all git-ignored)
+## 9. Where your data lives (all git-ignored)
 | File | What | Managed |
 |------|------|---------|
 | `flow_vocabulary.txt` | learned terms | deduped on write; `Shift+F1` prunes it |
