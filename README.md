@@ -27,6 +27,13 @@
 - *(Recommended)* an NVIDIA GPU with a current driver for real-time speed
 
 ## 🚀 Setup
+
+> 🟢 **New here? Never installed something like this before?**
+> Follow the **[Beginner Setup Guide — step by step, no GPU needed](docs/SETUP-CPU-LAPTOP.md)**
+> (also available as a **[printable PDF](docs/Zero-Flow-Setup-Guide.pdf)**). It covers everything
+> below in plain language, including microphone permissions and troubleshooting.
+
+**Quick version (if you've done this before):**
 1. Clone this repository.
 2. Install dependencies:
    ```bash

@@ -1,0 +1,11 @@
+# Default: let Git normalize line endings on text files it detects.
+* text=auto
+
+# Binary assets — listed AFTER the catch-all so these rules win.
+# `binary` disables text conversion entirely (never CRLF-mangled or diffed).
+*.pdf  binary
+*.ico  binary
+*.jpg  binary
+*.jpeg binary
+*.png  binary
+*.wav  binary
