@@ -67,4 +67,4 @@ And **[ARCHITECTURE.md](ARCHITECTURE.md)** for how the engine works internally, 
 ## 🔒 Privacy
 Everything runs locally by default — audio never leaves the machine, transcription is
 on-device (`faster-whisper`), and refinement uses your local Ollama. (If you switch to
-a *cloud* LLM provider per CONFIGURATION.md, dictated text is sent to that provider.)
+a *cloud* LLM provider per CONFIGURATION.md, dictated text is sent to that provider.) 
