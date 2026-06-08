@@ -3,7 +3,7 @@ flow_capture.wav
 
 # Local user memory & logs
 flow_vocabulary.txt
-flow_debug.log
+flow_debug.log*
 
 # Python cache
 __pycache__/
