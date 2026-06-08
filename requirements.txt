@@ -1,0 +1,19 @@
+faster-whisper==1.0.3
+sounddevice==0.4.6
+soundfile==0.12.1
+keyboard==0.13.5
+pyperclip==1.8.2
+requests==2.31.0
+numpy==1.26.4
+python-dotenv==1.0.1
+win11toast
+colorama==0.4.6
+pystray==0.19.5
+Pillow==10.2.0
+
+# --- NVIDIA GPU acceleration (CUDA 12) ---
+# Required for faster-whisper device="cuda". Without these, CTranslate2 cannot
+# load cublas64_12.dll and transcription fails. Remove these two lines if you
+# are running CPU-only (saves ~1.2 GB of downloads).
+nvidia-cublas-cu12
+nvidia-cudnn-cu12

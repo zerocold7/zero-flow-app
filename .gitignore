@@ -1,0 +1,17 @@
+# Local temporary audio captures
+flow_capture.wav
+
+# Local user memory & logs
+flow_vocabulary.txt
+flow_debug.log
+
+# Python cache
+__pycache__/
+*.py[cod]
+*$py.class
+
+# Environment files
+venv/
+env/
+python_env/
+.env
