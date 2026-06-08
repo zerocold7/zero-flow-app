@@ -79,14 +79,13 @@ def print_boot_sequence(ollama_model, hotkeys):
         f"{C_ACCENT}│ {C_RESET}🔗 Hardware Target: {C_GOOD}[NVIDIA / CPU ALLOCATED]{C_ACCENT}         │{C_RESET}",
         f"{C_ACCENT}│ {C_RESET}🔗 Neural Pipeline: {C_GOOD}[{ollama_model}]{C_ACCENT}" + (" " * max(0, 25 - len(ollama_model))) + f"│{C_RESET}",
         f"{C_ACCENT}└────────────────────────────────────────────────────────┘{C_RESET}",
-        f"👉 Press {C_ACCENT}'{hotkeys['raw'].upper()}'{C_RESET} to Record:     {C_ACCENT}[RAW DICTATION]{C_RESET}",
-        f"👉 Press {C_GOOD}'{hotkeys['polish'].upper()}'{C_RESET} to Record:  {C_GOOD}[AI GRAMMAR CLEANUP]{C_RESET}",
-        f"👉 Press {C_WARN}'{hotkeys['translate'].upper()}'{C_RESET} to Record:{C_WARN}[AUTO-TRANSLATION MODE]{C_RESET}",
-        f"👉 Press {C_ACCENT}'{hotkeys['english'].upper()}'{C_RESET} to Record:  {C_ACCENT}[FORCE ENGLISH]{C_RESET}",
-        f"👉 Tap   {C_ACCENT}'{hotkeys['fix'].upper()}'{C_RESET} to auto-correct active line.",
-        f"👉 Tap   {Fore.MAGENTA}'{hotkeys['maintenance'].upper()}'{C_RESET} to run AI memory maintenance.",
-        f"👉 Tap   {C_GOOD}'{hotkeys['purge'].upper()}'{C_RESET} to clear the debug log & history.",
-        f"👉 Press {C_ERR}'{hotkeys['panic'].upper()}'{C_RESET} to cancel the current recording.",
+        f"  {C_ACCENT}DICTATE{C_RESET}   (the key forces the language)",
+        f"   {C_ACCENT}'{hotkeys['en_raw'].upper()}'{C_RESET} English · raw      {C_GOOD}'{hotkeys['en_polish'].upper()}'{C_RESET} English · polish",
+        f"   {C_WARN}'{hotkeys['ar_raw'].upper()}'{C_RESET} Arabic · raw       {C_WARN}'{hotkeys['ar_polish'].upper()}'{C_RESET} Arabic · polish",
+        f"  {C_ACCENT}TRANSLATE{C_RESET}",
+        f"   {Fore.MAGENTA}'{hotkeys['en2ar'].upper()}'{C_RESET} English → Arabic   {Fore.MAGENTA}'{hotkeys['ar2en'].upper()}'{C_RESET} Arabic → English",
+        f"  {C_ACCENT}ACTIONS{C_RESET}",
+        f"   {C_GOOD}'{hotkeys['fix'].upper()}'{C_RESET} fix line   {Fore.MAGENTA}'{hotkeys['maintenance'].upper()}'{C_RESET} vocab cleanup   {C_GOOD}'{hotkeys['purge'].upper()}'{C_RESET} clear logs   {C_ERR}'{hotkeys['panic'].upper()}'{C_RESET} cancel",
         f"{C_ACCENT}========================================================={C_RESET}\n"
     ]
     for line in lines:

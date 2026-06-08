@@ -51,39 +51,49 @@ cannot change mid-recording.
 ## 3. Modes & hotkeys
 Each is configurable in `.env`; defaults shown.
 
-| Hotkey | Mode | Behaviour |
-|--------|------|-----------|
-| `F9`  | `raw`       | Transcribe and inject exactly as spoken (no LLM) |
-| `F8`  | `english`   | Same as raw, but **forces English** (skips language auto-detect) |
-| `F10` | `polish`    | Transcribe, then LLM cleans grammar/fillers **in the same language** |
-| `F11` | `translate` | Transcribe, then LLM translates **Arabic⇄English** (direction auto-detected) |
-| `Ctrl+F10` | line fix  | Select the current line, fix typos via the LLM, paste back |
-| `Ctrl+F11` | maintenance | LLM dedupes/cleans the learned-vocabulary file |
-| `Ctrl+F12` | purge | Clears the debug log + dictation history on demand |
-| `Esc` | cancel | Cancels an in-progress recording **only** (does nothing when idle) |
+Each is configurable in `.env`; defaults shown. Record modes live in the `MODES`
+table in `local_flow.py` as `{lang, op}` pairs.
+
+| Hotkey | Mode | Forced lang | Behaviour |
+|--------|------|-------------|-----------|
+| `F5` | `en_raw`    | en | Inject English exactly as spoken (no LLM) |
+| `F6` | `en_polish` | en | English, then LLM cleans grammar/fillers |
+| `F7` | `ar_raw`    | ar | Inject Arabic exactly as spoken (no LLM) |
+| `F8` | `ar_polish` | ar | Arabic, then LLM cleans grammar/fillers |
+| `F9` | `en2ar`     | en | Transcribe English, LLM translates **→ Arabic** |
+| `F10`| `ar2en`     | ar | Transcribe Arabic, LLM translates **→ English** |
+| `Shift+F1` | maintenance | — | LLM dedupes/cleans the learned-vocabulary file |
+| `Shift+F2` | purge       | — | Clears the debug log + dictation history |
+| `Shift+F3` | line fix    | — | Select the current line, fix it via the LLM, paste back |
+| `Esc` | cancel | — | Cancels an in-progress recording **only** (does nothing when idle) |
 
 All record keys are registered with `suppress=True` so they never leak into the
-focused app (otherwise `F11` would toggle browser fullscreen, `F10` open menus, etc.).
-`Esc` is intentionally **not** suppressed, so it keeps working normally everywhere.
+focused app (otherwise `F5` would refresh the browser, etc.). `Esc` is intentionally
+**not** suppressed, so it keeps working normally everywhere. The action keys use
+`Shift+F1..F3` (whose bare keys aren't record keys) to avoid the modifier/base-key
+collision that `Ctrl+F10/F11` had.
 
 While recording, pressing **any** record key **stops** the capture — it never switches
 mode. (Mid-recording switching used to cause accidental translations.)
 
+Heavy handlers (LLM calls, key-sending) are dispatched to a **worker thread** so they
+never block the keyboard listener — a blocked listener freezes the whole keyboard.
+
 ---
 
 ## 4. Language handling (the bilingual core)
-- In every mode except `english`, Whisper **auto-detects** the spoken language, so
-  Arabic stays Arabic and English stays English.
-- The engine only supports `ar` and `en` (`SUPPORTED_LANGS`). If auto-detect returns
-  any other language — a misdetection that produces gibberish (e.g. Malay/Hebrew on a
-  noisy clip) — `transcribe_clip` **re-decodes**, forcing whichever of Arabic/English
-  scored higher in `all_language_probs`. Output is therefore never a third language.
-- `F8` (english) bypasses all of this and forces `language="en"`.
+- Every record mode **forces** its language via `MODES[mode]["lang"]` (`en` or `ar`),
+  so there is **no detection step** to get wrong — accented English can no longer be
+  misheard as Arabic. This is the key design choice.
+- `transcribe_clip(force_lang)` passes that language straight to Whisper.
+- It still keeps an auto-detect path (`force_lang=None`): if Whisper ever drifts to a
+  language outside `SUPPORTED_LANGS` (`ar`/`en`), it re-decodes as the closer of the two.
+  No current mode uses this path, but it's there for safety.
 - The Whisper hint (`initial_prompt`) is **only the vocabulary term list** — never an
-  English sentence, which would bias the decoder into writing Arabic as English.
+  English sentence, which would bias the decoder toward English.
 
-For Translate mode, the detected language picks the direction:
-`ar → TRANSLATE_TO_EN_PROMPT`, anything else `→ TRANSLATE_TO_AR_PROMPT`.
+Translate direction is fixed by the mode (`en2ar` / `ar2en`), not detected, so it is
+always correct: `to == "en" → TRANSLATE_TO_EN_PROMPT`, else `TRANSLATE_TO_AR_PROMPT`.
 
 ---
 

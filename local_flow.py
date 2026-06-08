@@ -4,14 +4,13 @@ Zero- Flow Engine — local, bilingual (Arabic / English) voice dictation for Wi
 Pipeline:  hotkey  →  record mic  →  faster-whisper transcribe  →  (optional Ollama
 refine)  →  paste into the focused app.
 
-Modes (one hotkey each):
-    raw       (F9)   transcribe and inject exactly as spoken
-    english   (F8)   same, but force English (skip language auto-detect)
-    polish    (F10)  transcribe, then clean up via the local LLM (same language)
-    translate (F11)  transcribe, then translate Arabic⇄English via the local LLM
-    fix       (Ctrl+F10)  rewrite the current line via the LLM
-    maintenance (Ctrl+F11) prune the learned-vocabulary file via the LLM
-    cancel    (Esc)  cancel an in-progress recording
+Recording modes — each FORCES its language, so it can never misdetect:
+    F5  English — raw          F6  English — polish
+    F7  Arabic  — raw          F8  Arabic  — polish
+    F9  Translate English → Arabic     F10  Translate Arabic → English
+Action keys:
+    Shift+F1  vocabulary maintenance   Shift+F2  clear log & history
+    Shift+F3  fix the current line     Esc       cancel an in-progress recording
 
 See ARCHITECTURE.md for the full design rationale.
 """
@@ -70,14 +69,30 @@ FALLBACK_LLM       = os.getenv("FALLBACK_LLM", "gemma2:27b")
 SAMPLE_RATE        = int(os.getenv("SAMPLE_RATE", 16000))
 CHANNELS           = int(os.getenv("CHANNELS", 1))
 
+# Each record hotkey maps to a recording mode. Forcing the language ("lang")
+# removes language misdetection entirely. Operation ("op"):
+#   raw       — inject the transcription as-is
+#   polish    — LLM cleans grammar/fillers in the same language
+#   translate — LLM translates to the target language ("to")
+MODES = {
+    "en_raw":    {"lang": "en", "op": "raw",       "label": "ENGLISH"},
+    "en_polish": {"lang": "en", "op": "polish",    "label": "ENGLISH · POLISH"},
+    "ar_raw":    {"lang": "ar", "op": "raw",       "label": "ARABIC"},
+    "ar_polish": {"lang": "ar", "op": "polish",    "label": "ARABIC · POLISH"},
+    "en2ar":     {"lang": "en", "op": "translate", "to": "ar", "label": "TRANSLATE EN→AR"},
+    "ar2en":     {"lang": "ar", "op": "translate", "to": "en", "label": "TRANSLATE AR→EN"},
+}
+
 HOTKEYS = {
-    "raw":         os.getenv("HOTKEY_RAW", "f9"),
-    "polish":      os.getenv("HOTKEY_POLISH", "f10"),
-    "translate":   os.getenv("HOTKEY_TRANSLATE", "f11"),
-    "english":     os.getenv("HOTKEY_ENGLISH", "f8"),
-    "fix":         os.getenv("HOTKEY_FIX", "ctrl+f10"),
-    "maintenance": os.getenv("HOTKEY_MAINTENANCE", "ctrl+f11"),
-    "purge":       os.getenv("HOTKEY_PURGE", "ctrl+f12"),
+    "en_raw":      os.getenv("HOTKEY_EN_RAW", "f5"),
+    "en_polish":   os.getenv("HOTKEY_EN_POLISH", "f6"),
+    "ar_raw":      os.getenv("HOTKEY_AR_RAW", "f7"),
+    "ar_polish":   os.getenv("HOTKEY_AR_POLISH", "f8"),
+    "en2ar":       os.getenv("HOTKEY_EN2AR", "f9"),
+    "ar2en":       os.getenv("HOTKEY_AR2EN", "f10"),
+    "fix":         os.getenv("HOTKEY_FIX", "shift+f3"),
+    "maintenance": os.getenv("HOTKEY_MAINTENANCE", "shift+f1"),
+    "purge":       os.getenv("HOTKEY_PURGE", "shift+f2"),
     "panic":       os.getenv("HOTKEY_PANIC", "esc"),
 }
 
@@ -102,7 +117,7 @@ model = None              # faster-whisper model, loaded in main()
 OLLAMA_MODEL = None       # discovered LLM name, set in main()
 recording = False         # True while the mic stream is open
 cancel_flag = False       # set by Esc to discard the current capture
-active_mode = "raw"       # which mode the in-flight recording belongs to
+active_mode = "en_raw"    # which mode the in-flight recording belongs to
 clipboard_context = ""    # clipboard snapshot, fed to the LLM in Polish mode
 audio_queue = queue.Queue()
 
@@ -286,12 +301,12 @@ def drain_audio_queue():
         chunks.append(audio_queue.get())
     return np.concatenate(chunks, axis=0) if chunks else None
 
-def transcribe_clip(force_english):
+def transcribe_clip(force_lang):
     """Decode TEMP_AUDIO_FILE → (text, language).
 
-    Auto-detects the language unless force_english is set. If auto-detect returns
-    a language we don't support (e.g. Malay/Hebrew = a misdetection that produces
-    gibberish), it re-decodes forcing whichever of Arabic/English scored higher.
+    force_lang ('en' or 'ar') forces the output language — no detection, so it can
+    never mishear English as Arabic. If force_lang is None it auto-detects, and if
+    Whisper drifts to a third language (gibberish) it re-decodes as the closer one.
     """
     # Only the vocabulary terms are used as a hint — no English framing sentence,
     # which would otherwise bias the decoder into writing Arabic speech as English.
@@ -308,9 +323,9 @@ def transcribe_clip(force_english):
         return "".join(s.text for s in segments).strip(), info
 
     try:
-        text, info = decode("en" if force_english else None)
-        lang = info.language
-        if not force_english and lang not in SUPPORTED_LANGS:
+        text, info = decode(force_lang)
+        lang = force_lang or info.language
+        if force_lang is None and lang not in SUPPORTED_LANGS:
             probs = dict(getattr(info, "all_language_probs", None) or [])
             lang = "ar" if probs.get("ar", 0) >= probs.get("en", 0) else "en"
             logging.warning(f"Detected non-ar/en language — re-decoding as '{lang}'.")
@@ -323,9 +338,11 @@ def transcribe_clip(force_english):
 # =====================================================================
 # TEXT REFINEMENT & INJECTION
 # =====================================================================
-def refine_text(text, lang):
-    """Apply the active mode's AI step. Raw / English pass straight through."""
-    if active_mode == "polish":
+def refine_text(text):
+    """Apply the active mode's operation. Raw modes pass straight through."""
+    cfg = MODES[active_mode]
+
+    if cfg["op"] == "polish":
         ui.update_console_title("OLLAMA PROCESSING")
         out = query_ollama(text, clipboard_context, personas.STANDARD_SYSTEM_PROMPT)
         print(f"✨ Polished: {ui.C_GOOD}{out}{ui.C_RESET}")
@@ -333,10 +350,10 @@ def refine_text(text, lang):
         ui.play_tone("success_polish", ENABLE_AUDIO_CHIMES)
         return out
 
-    if active_mode == "translate":
+    if cfg["op"] == "translate":
         ui.update_console_title("OLLAMA TRANSLATING")
-        # Translate to the opposite of the detected language.
-        if lang == "ar":
+        # Direction is fixed by the mode (not detected), so it's always correct.
+        if cfg["to"] == "en":
             direction, prompt = "AR→EN", personas.TRANSLATE_TO_EN_PROMPT
         else:
             direction, prompt = "EN→AR", personas.TRANSLATE_TO_AR_PROMPT
@@ -436,7 +453,7 @@ def process_recording():
     sf.write(TEMP_AUDIO_FILE, audio, SAMPLE_RATE)
 
     ui.update_console_title("DECODING")
-    text, lang = transcribe_clip(active_mode == "english")
+    text, lang = transcribe_clip(MODES[active_mode]["lang"])
     logging.info(f"Transcription result (mode={active_mode}, lang={lang}): {text!r}")
     if os.path.exists(TEMP_AUDIO_FILE):
         os.remove(TEMP_AUDIO_FILE)
@@ -448,7 +465,7 @@ def process_recording():
         return
 
     print(f"📝 Raw: {text}")
-    text = refine_text(text, lang)
+    text = refine_text(text)
     inject_text(text)
     log_to_history(text, active_mode)
     ui.update_console_title("ONLINE")
@@ -456,21 +473,13 @@ def process_recording():
 # =====================================================================
 # HOTKEY HANDLERS
 # =====================================================================
-def on_record_hotkey(mode_selection):
-    """A record key (F8–F11) was pressed: start a capture, or stop the active one."""
+def on_record_hotkey(mode_name):
+    """A record key (F5–F10) was pressed: start a capture in that mode, or stop it."""
     global recording, active_mode, clipboard_context, cancel_flag
 
-    # The keyboard library fires a bare-key hotkey even while Ctrl is held, so
-    # Ctrl+F10 / Ctrl+F11 would otherwise ALSO trigger the base mode (polish /
-    # translate) on top of fix / maintenance. If Ctrl is down, this press belongs
-    # to a Ctrl+ combo — ignore it here and let that handler own it.
-    if keyboard.is_pressed('ctrl'):
-        return
-
     if recording:
-        # Any record key stops the capture. We do NOT switch modes mid-recording —
-        # that silent switch (e.g. tapping F11 during a raw F9 clip) was the cause
-        # of surprise translations. The mode is locked in at the start.
+        # Any record key stops the capture. The mode is locked in at the start — we
+        # never switch modes mid-recording (that used to cause surprise translations).
         recording = False
         ui.set_tray_state(False)
         ui.play_tone("stop", ENABLE_AUDIO_CHIMES)
@@ -482,10 +491,10 @@ def on_record_hotkey(mode_selection):
     except Exception:
         clipboard_context = ""
 
-    active_mode = mode_selection
+    active_mode = mode_name
     recording = True
     ui.set_tray_state(True)
-    print(f"\n{ui.C_ACCENT}🔴 [{active_mode.upper()}] Capturing audio...{ui.C_RESET}")
+    print(f"\n{ui.C_ACCENT}🔴 [{MODES[mode_name]['label']}] Capturing audio...{ui.C_RESET}")
     ui.play_tone("start", ENABLE_AUDIO_CHIMES)
     threading.Thread(target=process_recording).start()
 
@@ -553,13 +562,12 @@ def main():
     ui.setup_system_tray()
     ui.set_window_icon()
 
-    # suppress=True consumes the record keys so they never reach the focused app
-    # (F11=fullscreen, F10=menus). Esc is left un-suppressed so it works normally.
-    keyboard.add_hotkey(HOTKEYS["raw"],         lambda: on_record_hotkey("raw"), suppress=True)
-    keyboard.add_hotkey(HOTKEYS["polish"],      lambda: on_record_hotkey("polish"), suppress=True)
-    keyboard.add_hotkey(HOTKEYS["translate"],   lambda: on_record_hotkey("translate"), suppress=True)
-    keyboard.add_hotkey(HOTKEYS["english"],     lambda: on_record_hotkey("english"), suppress=True)
-    # These do heavy work (LLM calls, key-sending), so dispatch each to a worker
+    # Record modes (F5–F10). suppress=True consumes the key so it never reaches the
+    # focused app (e.g. F5 = browser refresh). The lambda captures each mode name.
+    for mode in MODES:
+        keyboard.add_hotkey(HOTKEYS[mode], (lambda m: lambda: on_record_hotkey(m))(mode), suppress=True)
+
+    # Action keys do heavy work (LLM calls, key-sending), so dispatch each to a worker
     # thread — never block the keyboard listener (that froze the whole keyboard).
     keyboard.add_hotkey(HOTKEYS["fix"],         _run_async(correct_current_line), suppress=True)
     keyboard.add_hotkey(HOTKEYS["maintenance"], _run_async(run_memory_maintenance), suppress=True)
