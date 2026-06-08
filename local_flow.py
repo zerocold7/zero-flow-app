@@ -22,6 +22,7 @@ import queue
 import threading
 import re
 import logging
+from logging.handlers import RotatingFileHandler
 import traceback
 from datetime import datetime
 
@@ -50,8 +51,12 @@ TEMP_AUDIO_FILE = os.path.join(BASE_DIR, "flow_capture.wav")
 HISTORY_FILE = os.path.join(BASE_DIR, "flow_history.md")
 LOG_FILE = os.path.join(BASE_DIR, "flow_debug.log")
 
-logging.basicConfig(filename=LOG_FILE, level=logging.INFO,
-                    format='%(asctime)s - %(levelname)s - %(message)s')
+# Rotate the debug log so it can never grow without bound: a ~1 MB live file plus
+# two ~1 MB backups (≈3 MB cap total), oldest discarded automatically.
+_log_handler = RotatingFileHandler(LOG_FILE, maxBytes=1_000_000, backupCount=2, encoding="utf-8")
+logging.basicConfig(level=logging.INFO,
+                    format='%(asctime)s - %(levelname)s - %(message)s',
+                    handlers=[_log_handler])
 logging.info("=== Zero- Core Application Boot Sequence Initiated ===")
 
 load_dotenv()
@@ -72,6 +77,7 @@ HOTKEYS = {
     "english":     os.getenv("HOTKEY_ENGLISH", "f8"),
     "fix":         os.getenv("HOTKEY_FIX", "ctrl+f10"),
     "maintenance": os.getenv("HOTKEY_MAINTENANCE", "ctrl+f11"),
+    "purge":       os.getenv("HOTKEY_PURGE", "ctrl+f12"),
     "panic":       os.getenv("HOTKEY_PANIC", "esc"),
 }
 
@@ -83,6 +89,8 @@ SUPPORTED_LANGS = ("ar", "en")
 # Clips shorter than this (after capture) are dropped — they only ever produce
 # Whisper hallucinations, never real words.
 MIN_CLIP_SECONDS = 0.4
+# flow_history.md is trimmed back to its newest content once it grows past this.
+HISTORY_MAX_BYTES = 500_000
 
 LEARN_PATTERN = re.compile(r'\[LEARN:\s*(.*?)\]')
 URL_PATTERN = re.compile(r'https?://\S+|www\.\S+')
@@ -161,6 +169,19 @@ def log_to_history(text, mode):
     except Exception as e:
         logging.error(f"History write fail: {e}")
 
+def cap_history_file():
+    """Trim flow_history.md to its newest half once it passes HISTORY_MAX_BYTES,
+    so the dictation history can never grow without bound."""
+    try:
+        if os.path.exists(HISTORY_FILE) and os.path.getsize(HISTORY_FILE) > HISTORY_MAX_BYTES:
+            with open(HISTORY_FILE, "r", encoding="utf-8") as f:
+                kept = f.read()[-(HISTORY_MAX_BYTES // 2):]
+            with open(HISTORY_FILE, "w", encoding="utf-8") as f:
+                f.write(f"[... older history trimmed on {datetime.now():%Y-%m-%d %H:%M} ...]\n\n{kept}")
+            logging.info("flow_history.md trimmed (exceeded size cap).")
+    except Exception as e:
+        logging.error(f"History cap failed: {e}")
+
 def query_ollama(raw_text, context_text, instruction):
     """Send text to the local LLM with a task instruction; return its output (or
     the original text on failure). Honours an inline `[LEARN: word]` request."""
@@ -218,6 +239,32 @@ def run_memory_maintenance():
         except Exception:
             print(f"{ui.C_ERR}❌ Failed to write cleaned memory.{ui.C_RESET}")
     ui.update_console_title("ONLINE")
+
+def purge_diagnostic_files():
+    """Ctrl+F12 — clear the debug log and dictation history on demand. These are the
+    files that grow with use; vocabulary is curated separately by Ctrl+F11."""
+    if recording:
+        return
+    try:
+        open(HISTORY_FILE, "w", encoding="utf-8").close()
+    except Exception as e:
+        logging.error(f"History purge failed: {e}")
+    try:
+        _log_handler.acquire()
+        _log_handler.stream.seek(0)
+        _log_handler.stream.truncate()
+        _log_handler.release()
+    except Exception:
+        pass
+    for suffix in (".1", ".2"):                  # also drop the rotated backups
+        try:
+            os.remove(LOG_FILE + suffix)
+        except OSError:
+            pass
+    logging.info("Diagnostic files purged by user.")
+    print(f"\n{ui.C_GOOD}🧹 Debug log & history cleared.{ui.C_RESET}")
+    ui.show_toast("🧹 Cleaned", "Debug log and dictation history cleared.", ENABLE_TOASTS)
+    ui.play_tone("clean", ENABLE_AUDIO_CHIMES)
 
 # =====================================================================
 # AUDIO CAPTURE & TRANSCRIPTION
@@ -484,6 +531,7 @@ def main():
     ui.update_console_title("INITIALIZING HARDWARE")
     OLLAMA_MODEL = discover_ollama_model()
     model = load_whisper_model()
+    cap_history_file()
 
     ui.update_console_title("ONLINE")
     ui.print_boot_sequence(OLLAMA_MODEL, HOTKEYS)
@@ -499,6 +547,7 @@ def main():
     keyboard.add_hotkey(HOTKEYS["english"],     lambda: on_record_hotkey("english"), suppress=True)
     keyboard.add_hotkey(HOTKEYS["fix"],         correct_current_line, suppress=True)
     keyboard.add_hotkey(HOTKEYS["maintenance"], run_memory_maintenance, suppress=True)
+    keyboard.add_hotkey(HOTKEYS["purge"],       purge_diagnostic_files, suppress=True)
     keyboard.add_hotkey(HOTKEYS["panic"],       on_cancel_hotkey)
     keyboard.wait()
 

@@ -59,6 +59,7 @@ Each is configurable in `.env`; defaults shown.
 | `F11` | `translate` | Transcribe, then LLM translates **Arabic⇄English** (direction auto-detected) |
 | `Ctrl+F10` | line fix  | Select the current line, fix typos via the LLM, paste back |
 | `Ctrl+F11` | maintenance | LLM dedupes/cleans the learned-vocabulary file |
+| `Ctrl+F12` | purge | Clears the debug log + dictation history on demand |
 | `Esc` | cancel | Cancels an in-progress recording **only** (does nothing when idle) |
 
 All record keys are registered with `suppress=True` so they never leak into the
@@ -133,9 +134,11 @@ Hallucination originates in Whisper, not the app code. Mitigations in `transcrib
 | File | Purpose |
 |------|---------|
 | `flow_capture.wav` | Temporary audio buffer (deleted after each decode) |
-| `flow_vocabulary.txt` | Learned proper nouns / tech terms |
-| `flow_history.md` | Append-only log of injected text |
-| `flow_debug.log` | Diagnostics: device, detected language, mode, transcription result, errors |
+| `flow_vocabulary.txt` | Learned proper nouns / tech terms (deduped on write, pruned by `Ctrl+F11`) |
+| `flow_history.md` | Append-only log of injected text; auto-trimmed at boot past ~500 KB |
+| `flow_debug.log` | Diagnostics; auto-rotated at ~1 MB (×2 backups ≈ 3 MB cap) |
 
-The debug log is the first place to look when something misbehaves — every transcription
-records `mode=…` and `lang=…`, and re-decodes / skips / fallbacks are all logged.
+**None of these grow without bound:** the debug log rotates, history is trimmed at boot,
+and `Ctrl+F12` clears both on demand. The debug log is the first place to look when
+something misbehaves — every transcription records `mode=…` and `lang=…`, and
+re-decodes / skips / fallbacks are all logged.

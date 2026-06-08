@@ -50,7 +50,8 @@
 | `F8` | Record — **Force English** (skip auto-detect, always transcribe as English) |
 | `Ctrl + F10` | Rewrite & correct the current line |
 | `Ctrl + F11` | Run AI maintenance on the learned vocabulary |
-| `Esc` | Cancel recording, or undo the last injection and flush context |
+| `Ctrl + F12` | Clear the debug log & dictation history |
+| `Esc` | Cancel the current recording (does nothing when idle) |
 
 ## 🔒 Privacy
 Everything runs locally — audio never leaves the machine, transcription is on-device

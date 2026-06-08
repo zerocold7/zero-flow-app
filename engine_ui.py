@@ -78,7 +78,8 @@ def print_boot_sequence(ollama_model, hotkeys):
         f"👉 Press {C_ACCENT}'{hotkeys['english'].upper()}'{C_RESET} to Record:  {C_ACCENT}[FORCE ENGLISH]{C_RESET}",
         f"👉 Tap   {C_ACCENT}'{hotkeys['fix'].upper()}'{C_RESET} to auto-correct active line.",
         f"👉 Tap   {Fore.MAGENTA}'{hotkeys['maintenance'].upper()}'{C_RESET} to run AI memory maintenance.",
-        f"👉 Press {C_ERR}'{hotkeys['panic'].upper()}'{C_RESET} to UNDO injection and wipe memory.",
+        f"👉 Tap   {C_GOOD}'{hotkeys['purge'].upper()}'{C_RESET} to clear the debug log & history.",
+        f"👉 Press {C_ERR}'{hotkeys['panic'].upper()}'{C_RESET} to cancel the current recording.",
         f"{C_ACCENT}========================================================={C_RESET}\n"
     ]
     for line in lines:
