@@ -65,6 +65,7 @@ load_dotenv()
 # =====================================================================
 WHISPER_MODEL_NAME = os.getenv("WHISPER_MODEL_NAME", "large-v3")
 OLLAMA_HOST_URL    = os.getenv("OLLAMA_HOST_URL", "http://127.0.0.1:11434/api/generate")
+OLLAMA_MODEL_NAME  = os.getenv("OLLAMA_MODEL_NAME", "").strip()  # pin an exact model (e.g. qwen2.5:7b); blank = auto-discover
 FALLBACK_LLM       = os.getenv("FALLBACK_LLM", "gemma2:27b")
 SAMPLE_RATE        = int(os.getenv("SAMPLE_RATE", 16000))
 CHANNELS           = int(os.getenv("CHANNELS", 1))
@@ -149,7 +150,13 @@ def load_whisper_model():
         return m
 
 def discover_ollama_model():
-    """Bind to whatever model the local Ollama instance is currently serving."""
+    """Choose the LLM to use, in priority order:
+      1. OLLAMA_MODEL_NAME from .env, if set — pins an exact model (e.g. qwen2.5:7b).
+      2. Otherwise the first model Ollama is currently serving.
+      3. Otherwise FALLBACK_LLM (used when Ollama is unreachable).
+    """
+    if OLLAMA_MODEL_NAME:
+        return OLLAMA_MODEL_NAME
     try:
         tags_url = OLLAMA_HOST_URL.replace("/api/generate", "/api/tags")
         response = requests.get(tags_url, timeout=2)
@@ -371,18 +378,22 @@ def inject_text(text):
     if not text:
         return
     macros = personas.VOICE_MACROS
-    lowered = text.lower().strip()
+    text = text.strip()                          # match the same string the flags use
+    lowered = text.lower()
     lead_newline = any(lowered.startswith(t) for t in macros["new_line"])
     lead_bullet  = any(lowered.startswith(t) for t in macros["bullet"])
     wrap_code    = any(lowered.startswith(t) for t in macros["code_block"])
     end_enter    = any(lowered.endswith(t) for t in macros["press_enter"])
 
-    # Strip a leading macro keyword ("new line", "bullet", "format code", …).
-    for group in macros.values():
-        for token in group:
+    # Strip a leading macro keyword ("new line", "bullet", "format code", …) —
+    # only for the leading-macro groups; press_enter is a trailing macro.
+    for name in ("new_line", "bullet", "code_block"):
+        for token in macros[name]:
             text = re.sub(r'(?i)^' + re.escape(token), '', text, count=1)
     if end_enter:
-        text = text.rsplit(' ', 1)[0] if ' ' in text else text
+        # Strip the full trailing trigger phrase (may be multi-word, e.g. "and send").
+        for token in macros["press_enter"]:
+            text = re.sub(r'(?i)' + re.escape(token) + r'\s*$', '', text, count=1)
 
     for pattern, replacement in personas.PUNCTUATION_MAP.items():
         text = re.sub(pattern, replacement, text)
@@ -406,7 +417,9 @@ def inject_text(text):
     pyperclip.copy(text)
     time.sleep(0.04)
     keyboard.send('ctrl+v')
-    time.sleep(0.04)
+    # Give slow apps time to read the clipboard before we restore it — restoring
+    # too early makes them paste the *old* clipboard contents instead.
+    time.sleep(0.15)
     if end_enter:
         keyboard.send('enter')
     pyperclip.copy(saved_clipboard)              # restore the user's clipboard
@@ -510,7 +523,7 @@ def on_cancel_hotkey():
         ui.play_tone("cancel", ENABLE_AUDIO_CHIMES)
 
 def correct_current_line():
-    """Ctrl+F10 — grab the current line, fix it via the LLM, paste it back."""
+    """Shift+F3 — grab the current line, fix it via the LLM, paste it back."""
     if recording:
         return
     print(f"\n{ui.C_ACCENT}⚡ Running contextual line refinement...{ui.C_RESET}")
@@ -579,4 +592,4 @@ if __name__ == "__main__":
     try:
         main()
     except Exception:
-        logging.critical(f"Fatal Engine Crash: {traceback.format_exc()}")
+        logging.critical(f"Fatal engine crash: {traceback.format_exc()}")

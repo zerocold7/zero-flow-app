@@ -30,7 +30,8 @@
 
 > 🟢 **New here? Never installed something like this before?**
 > Follow the **[Beginner Setup Guide — step by step, no GPU needed](docs/SETUP-CPU-LAPTOP.md)**
-> (also available as a **[printable PDF](docs/Zero-Flow-Setup-Guide.pdf)**). It covers everything
+> (also available as a **[printable PDF](docs/Zero-Flow-Setup-Guide.pdf)**, or the
+> **[laptop edition PDF](docs/Zero-Flow-Laptop-Setup-Guide.pdf)**). It covers everything
 > below in plain language, including microphone permissions and troubleshooting.
 > <br>🌍 **بالعربية:** **[دليل التثبيت للمبتدئين (نسخة اللابتوب)](docs/SETUP-CPU-LAPTOP.ar.md)** — أو [نسخة Word](docs/SETUP-CPU-LAPTOP.ar.docx).
 
@@ -75,4 +76,4 @@ And **[ARCHITECTURE.md](ARCHITECTURE.md)** for how the engine works internally, 
 ## 🔒 Privacy
 Everything runs locally by default — audio never leaves the machine, transcription is
 on-device (`faster-whisper`), and refinement uses your local Ollama. (If you switch to
-a *cloud* LLM provider per CONFIGURATION.md, dictated text is sent to that provider.) 
+a *cloud* LLM

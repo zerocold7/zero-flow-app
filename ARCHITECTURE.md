@@ -108,8 +108,9 @@ always correct: `to == "en" → TRANSLATE_TO_EN_PROMPT`, else `TRANSLATE_TO_AR_P
 ---
 
 ## 6. Local LLM (`discover_ollama_model`, `query_ollama`)
-- At boot the engine queries Ollama's `/api/tags` and binds to the **first model it is
-  serving** — no hardcoded model. If Ollama is unreachable it uses `FALLBACK_LLM`.
+- At boot the engine picks the LLM in priority order: (1) `OLLAMA_MODEL_NAME` from
+  `.env` if set — pins an exact model; (2) otherwise it queries Ollama's `/api/tags` and
+  binds to the **first model it is serving**; (3) otherwise `FALLBACK_LLM` (Ollama unreachable).
 - `query_ollama` sends `instruction + optional context + input` at `temperature 0.2`
   (low, so Polish stays faithful instead of "creatively" translating). On any error it
   returns the original text unchanged, so a dead LLM never loses your dictation.

@@ -16,7 +16,8 @@ only set what you want to change.
 |----------|---------|--------------|
 | `WHISPER_MODEL_NAME` | `large-v3` | Speech model — accuracy vs. speed/VRAM (see §3) |
 | `OLLAMA_HOST_URL` | `http://127.0.0.1:11434/api/generate` | Where the LLM lives (see §6) |
-| `FALLBACK_LLM` | `gemma2:27b` | Model name used if auto-discovery fails |
+| `OLLAMA_MODEL_NAME` | *(blank)* | Pin an exact model, e.g. `qwen2.5:7b`. Blank = auto-pick the first model Ollama serves |
+| `FALLBACK_LLM` | `gemma2:27b` | Model name used only if Ollama is unreachable |
 | `SAMPLE_RATE` | `16000` | Mic sample rate (Hz). Whisper expects 16000 — leave it |
 | `CHANNELS` | `1` | Mic channels (mono). Leave it |
 | `ENABLE_AUDIO_CHIMES` | `True` | Beeps on start/stop/success |
