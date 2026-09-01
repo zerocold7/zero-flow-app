@@ -4,6 +4,38 @@ All notable work on the **Zero- Flow Engine**. Newest first.
 
 ---
 
+## [1.3.0] — 2026-09-01 — One window and the GPU, at the same time
+
+`Launch_Zero.bat` no longer trades speech speed for a single window. It gets both.
+
+### 🔧 Changed
+- **`zero_flow.py` is now a supervisor, not a merge.** It runs dictation in its own
+  process and launches the reader as a **child process** started without
+  `CREATE_NEW_CONSOLE`, so Windows hands the child the parent's console: its output
+  appears in the same window and the pair looks like one program. The child owns the
+  single tray icon, since every control in that menu toggles reader state.
+- **The voice model is back on the GPU under `Launch_Zero.bat`** — two processes mean
+  two DLL namespaces, so the cuDNN collision that forced CPU simply cannot happen.
+  Time to first spoken word: **~2.0 s → ~0.2 s**.
+- **A crash in one half no longer takes the other down.** The parent logs and reports
+  a child that dies; dictation keeps working without it.
+- `READER_DEVICE` is honoured under every launcher again.
+
+### ✨ Added
+- `flow_signals.request_exit()` / `wait_for_exit()` — the tray belongs to the child,
+  so "Exit Engine" has to reach the parent.
+- `reader/app.py` gains a child mode (`ZEROFLOW_CHILD=1`): no banner, no `cls`, and
+  the console title is left to the parent so the two do not overwrite each other.
+
+### 🐛 Fixed
+- **The clipboard race is closed.** `flow_core.CLIPBOARD_LOCK` was a `threading.RLock`
+  and so only ever bound callers inside one process. It is now
+  `flow_signals.clipboard_lock()`, a named Windows mutex that serialises the reader's
+  capture against the dictation half's paste-and-restore across processes too.
+  ARCHITECTURE.md §11 listed this as an open hazard; it no longer is.
+
+---
+
 ## [1.2.1] — 2026-09-01 — Faster reading on CPU
 
 The merged engine's reading was noticeably slower to start, and the 1.2.0 notes

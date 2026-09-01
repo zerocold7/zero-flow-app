@@ -13,7 +13,7 @@ import time
 import keyboard
 import pyperclip
 
-from flow_core import CLIPBOARD_LOCK
+from flow_core import clipboard_lock
 
 VK_CONTROL = 0x11
 VK_C = 0x43
@@ -35,8 +35,8 @@ def capture_highlighted_text(release_key=None, restore_clipboard=True):
         time.sleep(POLL_INTERVAL)
 
     # Held for the whole save/copy/restore cycle so a dictation injection cannot
-    # land in the middle of it (merged engine only — see flow_core).
-    with CLIPBOARD_LOCK:
+    # land in the middle of it, in either process layout.
+    with clipboard_lock():
         return _capture(restore_clipboard)
 
 

@@ -317,12 +317,11 @@ the casing pass, so a phonetic spelling there would corrupt your dictation.
 **GPU.** `READER_DEVICE` picks the device for the voice model: `auto` (default — GPU
 when available), `cpu`, or `cuda`.
 
-> ⚠️ **Ignored in the merged engine.** `zero_flow.py` forces the voice model onto the
-> CPU whatever this is set to. Whisper and Kokoro cannot both hold CUDA in one process
-> — the process **segfaults**, in either load order, with nothing to catch. This is
-> not tunable; see [ARCHITECTURE.md §12](ARCHITECTURE.md). It costs about **2 seconds**
-> before the first spoken word instead of 0.2. Run `Launch_All.bat` (two processes) if
-> you want the voice on the GPU.
+This is honoured under every launcher, `Launch_Zero.bat` included: the reader always
+runs in its own process, so it can hold CUDA without colliding with Whisper. (Host
+both halves in a *single* process and that collision is a hard segfault — see
+[ARCHITECTURE.md §12](ARCHITECTURE.md) — which is exactly why the engine spawns a
+child process instead.)
 
 Two knobs affect how quickly speech starts, both rarely worth changing:
 

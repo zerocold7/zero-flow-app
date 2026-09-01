@@ -39,7 +39,7 @@ try:
     import engine_ui as ui
     import flow_signals as signals
     from flow_core import (
-        CLIPBOARD_LOCK, VOCAB_CACHE_FILE, TEMP_AUDIO_FILE, HISTORY_FILE,
+        clipboard_lock, VOCAB_CACHE_FILE, TEMP_AUDIO_FILE, HISTORY_FILE,
         ENABLE_AUDIO_CHIMES, ENABLE_TOASTS,
         init_logging, log_path, get_ollama_model, load_vocabulary, query_ollama,
     )
@@ -335,8 +335,8 @@ def inject_text(text):
 
     logging.info(f"Injecting text via clipboard paste: {text!r}")
     # Hold the clipboard for the whole save/paste/restore cycle so the reader cannot
-    # copy a selection into the middle of it (merged engine only — see flow_core).
-    with CLIPBOARD_LOCK:
+    # copy a selection into the middle of it, in either process layout.
+    with clipboard_lock():
         saved_clipboard = pyperclip.paste()
         pyperclip.copy(text)
         time.sleep(0.04)

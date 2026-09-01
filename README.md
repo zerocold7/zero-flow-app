@@ -31,26 +31,19 @@
 
 | Launcher | What you get |
 |----------|--------------|
-| **`Launch_Zero.bat`** | **Both halves, one window, one tray icon** — recommended |
+| **`Launch_Zero.bat`** | **The whole engine: one window, one tray icon** — recommended |
 | `Launch_Flow.bat` / `Launch_Reader.bat` | One half only |
-| `Launch_All.bat` | Both halves as two separate processes (two windows, two tray icons) |
+| `Launch_All.bat` | Both halves in two separate windows, if you prefer them apart |
 
 Each has a `_Silent.vbs` twin that starts it hidden.
 
 **You do not need both.** Each half is a complete program — run whichever you want.
 
-**One window or two?** `Launch_Zero.bat` runs both halves in a single process, so
-there is one console and one tray icon, and the two coordinate directly. The cost is
-that the voice model runs on the **CPU**, because Whisper and Kokoro cannot both hold
-CUDA in one process (see [ARCHITECTURE.md §12](ARCHITECTURE.md)):
-
-| | time to first spoken word |
-|---|---|
-| `Launch_All.bat` — two windows, voice on GPU | ~0.2 s |
-| `Launch_Zero.bat` — one window, voice on CPU | ~2 s |
-
-Both keep speaking smoothly once started; the difference is the pause before the
-first word. Pick whichever trade you prefer — nothing else differs.
+**`Launch_Zero.bat` is the one to use.** It runs dictation itself and starts the
+reader as a child process that shares the same console window, so you get one window
+and one tray icon while both models still get the GPU (~0.2 s to the first spoken
+word). Because they are separate processes, a crash in one half cannot take the other
+down. `Launch_All.bat` does the same thing in two visible windows if you prefer that.
 
 They share `flow_core.py` (config, the Ollama client, the learned vocabulary),
 `personas.py` (prompts and word lists) and `engine_ui.py` (console, chimes, toasts,

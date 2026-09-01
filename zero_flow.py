@@ -1,78 +1,124 @@
 """
-Zero- Flow Engine — both halves in one process, one console, one tray icon.
+Zero- Flow Engine — the whole engine in one window.
 
     F5-F10 / Shift+F1-F3   dictate, translate, fix a line   (speech -> text)
     F4                     read the highlighted text aloud   (text -> speech)
     Esc                    cancel a recording / silence the reader
 
-This is the merged engine. The two halves still exist as standalone programs —
-`local_flow.py` and `python -m reader` — and nothing here changes how they behave;
-it just hosts them together so there is one window to look at.
+This process runs the dictation half itself and launches the reader as a **child
+process**. The child is started without CREATE_NEW_CONSOLE, so Windows hands it this
+process's console: its output appears in this window, and the pair looks like a single
+program. The child owns the one tray icon, because every control in that menu toggles
+state that lives inside the reader.
 
 --------------------------------------------------------------------------------
-THE ONE HARD RULE: Kokoro runs on the CPU in this process.
+WHY A CHILD PROCESS AND NOT A THREAD
 --------------------------------------------------------------------------------
-torch 2.5.1+cu121 bundles cuDNN 9.1. CTranslate2 (Whisper) needs the pip-installed
-cuDNN 9.23. Windows loads exactly one DLL per base name per process, so whichever
-CUDA library loads second gets the wrong one and the process dies — a hard segfault
-in either load order, not an exception anything can catch. Whisper keeps the GPU
-because that is where the seconds are.
+An earlier version really did host both halves in one process. It worked, but it had
+to force the voice model onto the CPU: torch 2.5.1+cu121 bundles cuDNN 9.1 while
+CTranslate2 (Whisper) needs the pip-installed cuDNN 9.23, Windows loads exactly one
+DLL per base name per process, and whichever initialises CUDA second gets the wrong
+one and **segfaults** — in either load order, with no exception to catch. That cost
+about 2 seconds of silence before the first spoken word.
 
-The cost is real but bounded: measured time-to-first-word for a paragraph is ~2.0 s
-on CPU against ~0.2 s on GPU. Sentence batching and a background preload get it
-there; run the halves as two processes (Launch_All.bat) if you want the 0.2 s.
+Separate processes have separate DLL namespaces, so the conflict simply does not
+arise: Whisper keeps the GPU here, Kokoro gets the GPU over there, and time to first
+word drops to ~0.2 s. A crash in either half also stops being fatal to the other.
 
-`voice_engine.force_cpu()` enforces this and overrides `READER_DEVICE` on purpose.
-Do not remove it without re-testing both models on CUDA in one process.
+The two coordinate over named Windows objects in `flow_signals.py` — the microphone
+interlock and the clipboard mutex both work across the process boundary.
+
+Both halves still run standalone: `local_flow.py` and `python -m reader`.
 """
 import logging
 import os
+import subprocess
 import sys
 import threading
 import traceback
 
 import keyboard
-import pystray
-from pystray import MenuItem
 
 try:
     # local_flow FIRST, and this order is load-bearing: it pulls in faster-whisper,
     # which must claim the CUDA DLLs before any WinRT library (win11toast, reached
     # through engine_ui) can be loaded. Get this backwards and CTranslate2 segfaults
     # the process when it loads the model. Importing it first also establishes
-    # "flow_debug.log" as this process's single log, before the reader asks for one.
+    # "flow_debug.log" as this process's log.
     import local_flow
     import flow_core
+    import flow_signals as signals
     import engine_ui as ui
-    from reader import app as reader_app
-    from reader import voice_engine
 except ImportError as e:
     print(f"❌ Critical error: Missing local module: {e}")
     sys.exit(1)
 
-CUDA_CONFLICT_REASON = ("Whisper holds the GPU in the merged engine; torch and "
-                        "CTranslate2 cannot both load CUDA in one process")
+BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+reader_process = None
 
 
-def build_tray_menu():
-    """One icon for the whole engine: the reader's controls plus a single exit."""
-    return pystray.Menu(
-        *reader_app.tray_items(),
-        pystray.Menu.SEPARATOR,
-        MenuItem("Exit Engine", lambda icon, item: (voice_engine.interrupt_audio(),
-                                                    icon.stop(), os._exit(0))),
-    )
+def spawn_reader():
+    """Launch the reader as a child sharing this console window.
+
+    No `creationflags`: that is the entire trick. CREATE_NEW_CONSOLE would give it a
+    second window, CREATE_NO_WINDOW would swallow its output; inheriting ours is what
+    makes two processes look like one program.
+    """
+    env = dict(os.environ, ZEROFLOW_CHILD="1")
+    try:
+        return subprocess.Popen([sys.executable, "-m", "reader"], cwd=BASE_DIR, env=env)
+    except Exception as e:
+        logging.error(f"Could not start the reader half: {e}")
+        print(f"{ui.C_ERR}[engine]{ui.C_RESET} Reader failed to start: {e}")
+        print(f"{ui.C_ERR}[engine]{ui.C_RESET} Dictation still works; F4 will not.")
+        return None
+
+
+def watch_for_exit():
+    """The tray icon belongs to the child, so "Exit Engine" reaches us as a signal."""
+    if not signals.available():
+        return
+    if signals.wait_for_exit():
+        logging.info("Exit requested from the tray; shutting the engine down.")
+        shutdown()
+
+
+def watch_reader():
+    """If the child dies on its own, say so loudly — the vanished tray icon is
+    otherwise the only clue, and dictation carries on working regardless."""
+    if reader_process is None:
+        return
+    code = reader_process.wait()
+    if code == 0:
+        return                                   # a clean exit is handled by watch_for_exit
+    logging.error(f"The reader half exited unexpectedly (code {code}).")
+    print(f"\n{ui.C_ERR}[engine]{ui.C_RESET} The reader half stopped (exit code {code}). "
+          f"Dictation is unaffected; restart the engine to get F4 back.")
+
+
+def shutdown():
+    """Stop the child, then this process."""
+    if reader_process and reader_process.poll() is None:
+        try:
+            reader_process.terminate()
+            reader_process.wait(timeout=5)
+        except Exception:
+            try:
+                reader_process.kill()
+            except Exception:
+                pass
+    os._exit(0)
 
 
 def print_boot_sequence(llm_model):
     os.system('cls' if os.name == 'nt' else 'clear')
     hk = local_flow.HOTKEYS
-    read_key = reader_app.HOTKEY_READ.upper()
+    read_key = os.getenv("HOTKEY_READ", "f4").upper()
     lines = [
         f"{ui.C_ACCENT}┌────────────────────────────────────────────────────────┐{ui.C_RESET}",
         f"{ui.C_ACCENT}│ {ui.Fore.MAGENTA}       Z E R O -   F L O W   E N G I N E             {ui.C_ACCENT}│{ui.C_RESET}",
-        f"{ui.C_ACCENT}│ {ui.C_RESET}🔗 Speech to text: {ui.C_GOOD}[Whisper · GPU]{ui.C_ACCENT}                     │{ui.C_RESET}",
-        f"{ui.C_ACCENT}│ {ui.C_RESET}🔗 Text to speech: {ui.C_GOOD}[Kokoro-82M · CPU · loads on first read]{ui.C_RESET}",
+        f"{ui.C_ACCENT}│ {ui.C_RESET}🔗 Speech to text: {ui.C_GOOD}[Whisper]{ui.C_ACCENT}                           │{ui.C_RESET}",
+        f"{ui.C_ACCENT}│ {ui.C_RESET}🔗 Text to speech: {ui.C_GOOD}[Kokoro-82M]{ui.C_ACCENT}                        │{ui.C_RESET}",
         f"{ui.C_ACCENT}│ {ui.C_RESET}🔗 Neural pipeline: {ui.C_GOOD}[{llm_model}]{ui.C_RESET}",
         f"{ui.C_ACCENT}└────────────────────────────────────────────────────────┘{ui.C_RESET}",
         f"  {ui.C_ACCENT}DICTATE{ui.C_RESET}   (the key forces the language)",
@@ -92,10 +138,8 @@ def print_boot_sequence(llm_model):
 
 
 def main():
-    logging.info("=== Zero- Engine (merged) Boot Sequence Initiated ===")
-
-    # Before anything can load a voice model. See the module docstring.
-    voice_engine.force_cpu(CUDA_CONFLICT_REASON)
+    global reader_process
+    logging.info("=== Zero- Engine Boot Sequence Initiated ===")
 
     local_flow.boot()                            # loads Whisper on the GPU
     print_boot_sequence(local_flow.get_ollama_model())
@@ -103,19 +147,21 @@ def main():
     ui.show_toast("🚀 Zero- Flow Engine Online",
                   "Dictation and read-aloud are both active.", flow_core.ENABLE_TOASTS)
 
-    tray_icon = pystray.Icon("ZeroFlow", ui.load_tray_icon("logo_tray.ico"),
-                             "Zero- Flow Engine", build_tray_menu())
-    threading.Thread(target=tray_icon.run, daemon=True).start()
+    # Started after Whisper is up, so the child's torch import cannot race our CUDA
+    # load and its "ready" line lands under the banner rather than through it.
+    reader_process = spawn_reader()
+    threading.Thread(target=watch_for_exit, daemon=True).start()
+    threading.Thread(target=watch_reader, daemon=True).start()
 
     local_flow.register_hotkeys()
-    # After Whisper is up: the preload it starts imports torch, and that must not
-    # race the CUDA load above even though Kokoro itself is pinned to the CPU.
-    reader_app.register_hotkeys()
     keyboard.wait()
 
 
 if __name__ == "__main__":
     try:
         main()
+    except KeyboardInterrupt:
+        shutdown()
     except Exception:
         logging.critical(f"Fatal engine crash: {traceback.format_exc()}")
+        shutdown()

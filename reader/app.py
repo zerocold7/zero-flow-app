@@ -3,9 +3,14 @@ Zero- Flow Engine — the reader half.
 
     highlight text  →  [read hotkey]  →  clean  →  Kokoro speaks it
 
-Written so it can be driven two ways: on its own (`python -m reader`, which calls
-`main()`), or spliced into the merged single-process engine (`zero_flow.py`, which
-calls `register_hotkeys()` and `tray_items()` and supplies its own console and tray).
+Runs two ways, both of them as this process's `main()`:
+
+  * **standalone** (`python -m reader`) — prints its own banner and owns the console;
+  * **as the engine's child** (`zero_flow.py` sets `ZEROFLOW_CHILD=1`) — inherits the
+    parent's console window and prints into it, so the pair looks like one program.
+    It skips the banner and leaves the console title to the parent, but it still owns
+    the single tray icon, because every control in that menu toggles state that lives
+    here. The only thing it has to tell the parent is that the user chose to quit.
 """
 import logging
 import os
@@ -37,6 +42,9 @@ HOTKEY_READ = os.getenv("HOTKEY_READ", "f4")
 HOTKEY_PANIC = os.getenv("HOTKEY_PANIC", "esc")
 # Off by default: the regex clean is instant, the LLM pass costs a few seconds.
 SMART_MODE_DEFAULT = os.getenv("READER_SMART_MODE", "False").lower() in ('true', '1', 't')
+
+# Set by zero_flow.py when this process is the engine's child, sharing its console.
+CHILD_MODE = bool(os.getenv("ZEROFLOW_CHILD"))
 
 # =====================================================================
 # RUNTIME STATE
@@ -74,20 +82,27 @@ def process_and_speak():
         logging.info(f"Reader captured {len(text)} chars (smart_mode={use_smart_mode}).")
 
         if use_smart_mode:
-            ui.update_console_title("OLLAMA PROCESSING")
+            _title("OLLAMA PROCESSING")
             cleaned = clean_text_smart(text)
         else:
             cleaned = clean_text_instant(text)
 
-        ui.update_console_title("SPEAKING")
+        _title("SPEAKING")
         ui.play_tone("start", flow_core.ENABLE_AUDIO_CHIMES)
         voice_engine.stream_audio(cleaned)
     except Exception:
         logging.error(f"Reader pipeline failed: {traceback.format_exc()}")
         traceback.print_exc()
     finally:
-        ui.update_console_title("ONLINE")
+        _title("ONLINE")
         is_processing = False
+
+
+def _title(state):
+    """Set the console title — unless the parent owns the console, in which case the
+    two processes would just overwrite each other's titles."""
+    if not CHILD_MODE:
+        ui.update_console_title(state)
 
 
 def trigger_read():
@@ -133,7 +148,10 @@ def change_voice(icon, item):
 
 
 def exit_application(icon, item):
+    """Quit. This is the engine's only exit control when running as the child, so it
+    has to bring the parent down too."""
     voice_engine.interrupt_audio()
+    signals.request_exit()
     icon.stop()
     os._exit(0)
 
@@ -156,8 +174,9 @@ def tray_items():
 
 
 def build_tray_menu():
+    label = "Exit Engine" if CHILD_MODE else "Exit Reader"
     return pystray.Menu(*tray_items(), pystray.Menu.SEPARATOR,
-                        MenuItem("Exit Reader", exit_application))
+                        MenuItem(label, exit_application))
 
 # =====================================================================
 # HOTKEYS
@@ -196,15 +215,23 @@ def print_boot_sequence():
 # STANDALONE ENTRY POINT
 # =====================================================================
 def main():
-    logging.info("=== Zero- Reader Boot Sequence Initiated ===")
-    ui.update_console_title("ONLINE")
-    print_boot_sequence()
-    ui.set_window_icon()
-    ui.show_toast("🔊 Zero- Reader Online", f"Press {HOTKEY_READ.upper()} to read the selection.",
-                  flow_core.ENABLE_TOASTS)
+    logging.info(f"=== Zero- Reader Boot Sequence Initiated (child={CHILD_MODE}) ===")
+    if CHILD_MODE:
+        # The parent has already drawn the banner and owns the console; adding our
+        # own here (with its cls) would wipe it.
+        print(f"{ui.C_ACCENT}[reader]{ui.C_RESET} read-aloud half ready "
+              f"({HOTKEY_READ.upper()} to speak the selection).")
+    else:
+        _title("ONLINE")
+        print_boot_sequence()
+        ui.set_window_icon()
+        ui.show_toast("🔊 Zero- Reader Online",
+                      f"Press {HOTKEY_READ.upper()} to read the selection.",
+                      flow_core.ENABLE_TOASTS)
 
+    name = "Zero- Flow Engine" if CHILD_MODE else "Zero- Flow Reader"
     tray_icon = pystray.Icon("ZeroFlowReader", ui.load_tray_icon("logo_tray.ico"),
-                             "Zero- Flow Reader", build_tray_menu())
+                             name, build_tray_menu())
     threading.Thread(target=tray_icon.run, daemon=True).start()
 
     register_hotkeys()

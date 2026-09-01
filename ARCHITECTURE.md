@@ -26,15 +26,23 @@ a local LLM to clean up or translate text.
 | `reader/`       | Reader: `app.py` (the half itself), `clipboard_tool.py`, `text_cleaner.py`, `voice_engine.py` |
 | `zero_flow.py`  | The merged engine: hosts both halves in one process, one console, one tray icon |
 
-**One process or two.** Both are supported, and both halves also run standalone:
+**How they are hosted.** `zero_flow.py` is a supervisor, not a merge: it runs the
+dictation half in its own process and launches the reader as a **child process**,
+started without `CREATE_NEW_CONSOLE` so Windows hands it the parent's console. The
+child prints into the same window and owns the single tray icon, which is why the
+pair looks like one program while remaining two.
 
 | Entry point | Processes | Voice model | Notes |
 |-------------|-----------|-------------|-------|
-| `zero_flow.py` | 1 | **CPU** | One window, one tray, one log, one clipboard lock |
-| `local_flow.py` + `reader/` | 2 | GPU | Full isolation: a crash in one cannot touch the other |
+| `zero_flow.py` | 2 (parent + child) | GPU | One window, one tray icon, crash isolation |
+| `local_flow.py` + `reader/` | 2 | GPU | The same pair, two visible windows |
 
-The single-process build must run Kokoro on the CPU. That is a hard constraint, not a
-preference — see §12. Everything else about the halves is identical either way.
+Separate processes are not a compromise here, they are the requirement: hosting both
+halves as threads in one process forces the voice model onto the CPU, because Whisper
+and Kokoro cannot both initialise CUDA in one address space (§12). The child owns the
+tray because every control in that menu — voice, smart cleaning, suspend — toggles
+state that lives in the reader; a parent-owned menu would need a command channel for
+each one. The only signal that flows back is `EXIT`.
 
 The one resource they would fight over — the microphone — is coordinated with Windows
 named events in `flow_signals.py`. Named events work within a single process as well
@@ -238,17 +246,17 @@ re-decodes / skips / fallbacks are all logged. Both halves write to the same log
 ---
 
 ## 11. Known gaps
-Running the halves as **two processes** leaves one thing unsolved:
+- **The child can be orphaned.** If the parent is force-killed (Task Manager, not the
+  tray), the reader survives as a tray app. Its own Exit still works. A Windows Job
+  Object with `JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE` would close this properly; worth
+  adding only if orphans actually turn up in practice.
+- **Console interleaving.** Dictation redraws a live level meter with `` while
+  recording. The mic interlock stops reading and recording overlapping, so the two
+  rarely print at once, but nothing enforces it.
 
-- **Clipboard races.** Both halves drive the clipboard. Each restores what it found,
-  but a capture and an injection overlapping within the same ~150 ms window can still
-  collide. `flow_core.CLIPBOARD_LOCK` serialises them — which only works inside one
-  process, so this is fixed in `zero_flow.py` and remains a (rare) hazard when running
-  split.
-
-Running as **one process** costs:
-
-- **Kokoro on the CPU** (§12), and a fault in either half takes the whole engine down.
+The clipboard race listed here previously is **fixed**: `flow_signals.clipboard_lock()`
+is a named Windows mutex, so it serialises the two halves across the process boundary
+as well as within one.
 
 ---
 
@@ -263,9 +271,11 @@ not an exception — nothing can catch it and no fallback runs.**
   process dies. Verified in **both** load orders: Whisper-then-Kokoro fails with
   `Could not load symbol cudnnGetLibConfig` (error 127), Kokoro-then-Whisper segfaults.
 
-So `zero_flow.py` calls `voice_engine.force_cpu()` before anything can load a voice
-model, deliberately overriding `READER_DEVICE`. Whisper keeps the GPU because that is
-where the seconds are — but the reader does pay for it. Measured, warm:
+**This is why `zero_flow.py` is a supervisor rather than a merge.** Two processes
+have two DLL namespaces, so each model loads the CUDA libraries it was built against
+and neither treads on the other. `voice_engine.force_cpu()` survives as the guard for
+anyone who tries hosting both halves in one process again — it is what the merged
+build had to call, and these are the numbers that cost, measured warm:
 
 | | short sentence | paragraph | throughput |
 |---|---|---|---|
@@ -274,7 +284,7 @@ where the seconds are — but the reader does pay for it. Measured, warm:
 | CPU, sentence-batched (current) | 0.82 s | **1.97 s** | same |
 
 Both devices stay ahead of playback once speech starts; what differs is the wait
-before the first word. `Launch_All.bat` (two processes) buys back the GPU number.
+before the first word. The supervisor layout gets the 0.22 s figure back.
 
 **A second, related trap: import order.** `win11toast` (reached through `engine_ui`)
 loads WinRT native libraries. If that happens *before* faster-whisper claims its CUDA

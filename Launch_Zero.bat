@@ -8,8 +8,8 @@ echo  STARTING THE ZERO- FLOW ENGINE (single process)
 echo =========================================================
 echo.
 echo    Dictation and read-aloud in one window, one tray icon.
-echo    Whisper runs on the GPU; Kokoro runs on the CPU.
-echo    (Required - see the note at the top of zero_flow.py.)
+echo    The reader runs as a child process sharing this console,
+echo    so both models get the GPU. Exit from the tray icon.
 echo.
 
 cd /d "%~dp0"

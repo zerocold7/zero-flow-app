@@ -13,7 +13,6 @@ and one debug log for the whole product. See ARCHITECTURE.md.
 import os
 import re
 import logging
-import threading
 from logging.handlers import RotatingFileHandler
 
 import requests
@@ -85,11 +84,14 @@ LEARN_PATTERN = re.compile(r'\[LEARN:\s*(.*?)\]')
 # Both halves drive the clipboard: the reader copies the selection, the dictation
 # half pastes into the focused app, and each restores what it found. Overlap either
 # of those and one clobbers the other mid-flight. Hold this around any sequence that
-# writes the clipboard and reads it back.
+# writes the clipboard and reads it back:
 #
-# It only serialises callers inside one process, so it does real work in the merged
-# engine (zero_flow.py) and is a harmless no-op when the halves run split.
-CLIPBOARD_LOCK = threading.RLock()
+#     with flow_core.clipboard_lock():
+#         ...
+#
+# Backed by a named Windows mutex, so it serialises the two halves whether they are
+# threads in one process or two separate processes.
+from flow_signals import clipboard_lock            # re-exported: one import for callers
 
 # =====================================================================
 # LOCAL LLM
