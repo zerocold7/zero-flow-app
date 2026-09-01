@@ -18,6 +18,7 @@ from pystray import MenuItem
 try:
     import engine_ui as ui
     import flow_core
+    import flow_signals as signals
     from reader import voice_engine
     from reader.clipboard_tool import capture_highlighted_text
     from reader.text_cleaner import clean_text_instant, clean_text_smart
@@ -49,6 +50,12 @@ def process_and_speak():
     """Capture the selection, clean it, and speak it."""
     global is_processing
     if is_processing or is_suspended:
+        return
+
+    if signals.is_recording():
+        # Dictation has the mic open. Speaking now would be picked up and transcribed.
+        logging.info("Reader: declined to speak — the dictation half is recording.")
+        ui.play_tone("empty", flow_core.ENABLE_AUDIO_CHIMES)
         return
 
     is_processing = True
@@ -83,6 +90,23 @@ def process_and_speak():
 
 def trigger_read():
     threading.Thread(target=process_and_speak, daemon=True).start()
+
+
+def watch_for_silence_requests():
+    """Stop speaking the instant the dictation half opens the microphone.
+
+    Blocks on a Windows named event, so this thread costs nothing while idle. If
+    cross-process signalling is unavailable the thread simply exits and the two
+    halves behave exactly as they did before — independently.
+    """
+    if not signals.available():
+        logging.warning("Cross-process signalling unavailable — the reader will not "
+                        "auto-silence when dictation starts.")
+        return
+    while True:
+        if signals.wait_for_silence_request():
+            voice_engine.interrupt_audio()
+            logging.info("Reader silenced: the dictation half started recording.")
 
 # =====================================================================
 # TRAY MENU
@@ -159,6 +183,7 @@ def main():
     tray_icon = pystray.Icon("ZeroFlowReader", ui.load_tray_icon("logo_tray.ico"),
                              "Zero- Flow Reader", build_tray_menu())
     threading.Thread(target=tray_icon.run, daemon=True).start()
+    threading.Thread(target=watch_for_silence_requests, daemon=True).start()
 
     # suppress=True keeps the read key out of the focused app, the same rule the
     # dictation record keys follow (a leaked F4 would reach the app mid-capture).

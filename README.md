@@ -27,10 +27,22 @@
 | **Flow** | speech → text | `Launch_Flow.bat` | `local_flow.py` |
 | **Reader** | text → speech | `Launch_Reader.bat` | `reader/` (`python -m reader`) |
 
-They are separate processes and either one runs happily on its own. They share
-`flow_core.py` (config, logging, the Ollama client, the learned vocabulary),
+**You do not need both.** Each half is a complete program: run Flow alone for
+dictation, Reader alone for reading aloud, or both together with **`Launch_All.bat`**
+(`Launch_All_Silent.vbs` to start them hidden). Running both gives you two console
+windows and two tray icons.
+
+They share `flow_core.py` (config, the Ollama client, the learned vocabulary),
 `personas.py` (prompts and word lists) and `engine_ui.py` (console, chimes, toasts,
-tray) — so there is one `.env`, one debug log and one vocabulary for both.
+tray) — so there is one `.env` and one vocabulary for both.
+
+**Running both is safe.** Their hotkeys don't overlap, and the two coordinate over
+the one resource they'd otherwise fight for — the microphone:
+- Starting a dictation **silences the reader immediately**.
+- The reader **refuses to speak while the mic is open**, so Whisper can never
+  transcribe the synthetic voice back at you.
+- Each half keeps its own debug log, so neither corrupts the other's.
+- `Esc` does the right thing in whichever half is busy.
 
 ## 🧩 Requirements
 - Windows 11
@@ -61,6 +73,7 @@ tray) — so there is one `.env`, one debug log and one vocabulary for both.
    - **`Launch_Silent.vbs`** — dictation, invisible background process
    - **`Launch_Reader.bat`** / **`Launch_Reader_Silent.vbs`** — the read-aloud half
      (start it as well as, or instead of, dictation)
+   - **`Launch_All.bat`** / **`Launch_All_Silent.vbs`** — both halves at once
 
 > **Windows 11 tray tip:** new tray icons are hidden by default. Click the `^` arrow next to the clock to find the Zero- Flow icon, or pin it permanently via *Settings → Personalization → Taskbar → Other system tray icons*.
 

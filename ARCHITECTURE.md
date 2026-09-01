@@ -27,9 +27,22 @@ a local LLM to clean up or translate text.
 **Why two processes, not one.** They are deliberately separate today. `torch` (Kokoro)
 and CTranslate2 (Whisper) ship DLLs with the same base names, and Windows loads only
 one DLL per name per process — separate processes means each half gets its own set,
-and a crash in one can never take the other down. Merging them into a single process
-is a considered future step, not an oversight; it needs a mic/speaker interlock and a
-shared clipboard broker first (see §10).
+and a crash in one can never take the other down. Either half runs standalone;
+`Launch_All.bat` starts both.
+
+Being separate processes, they cannot share Python state, so the one resource they
+would fight over — the microphone — is coordinated with Windows named events in
+`flow_signals.py`:
+
+| Signal | Set by | Effect |
+|--------|--------|--------|
+| `RECORDING` | Flow, while the mic is open | The reader declines to speak (a live mic would hear the synthetic voice and Whisper would transcribe it) |
+| `SILENCE_READER` | Flow, when a recording starts | The reader stops speaking immediately, from a blocked watcher thread |
+
+Both are best-effort: creating an event is free, setting one nobody listens to is a
+no-op, and if signalling is unavailable each half behaves exactly as it did before.
+Flow clears `RECORDING` at boot, so a run that was force-killed mid-capture cannot
+leave a running reader permanently muted.
 
 ---
 
@@ -195,10 +208,17 @@ Design notes:
 | `flow_capture.wav` | Temporary audio buffer (deleted after each decode) |
 | `flow_vocabulary.txt` | Learned proper nouns / tech terms (deduped on write, pruned by `Shift+F1`) |
 | `flow_history.md` | Append-only log of injected text; auto-trimmed at boot past ~500 KB |
-| `flow_debug.log` | Diagnostics; auto-rotated at ~1 MB (×2 backups ≈ 3 MB cap) |
+| `flow_debug.log` | Dictation diagnostics; auto-rotated at ~1 MB (×2 backups ≈ 3 MB cap) |
+| `reader_debug.log` | Reader diagnostics; rotated the same way |
 
-**None of these grow without bound:** the debug log rotates, history is trimmed at boot,
-and `Shift+F2` clears both on demand. The debug log is the first place to look when
+Each half logs to its **own** file. That is deliberate: two processes sharing one
+`RotatingFileHandler` fight at rollover — on Windows the rename fails outright while
+the other process holds the file open, and the log then grows forever, defeating the
+rotation. `Shift+F2` clears the dictation log and history; the reader's log rotates
+on its own (it writes a handful of lines per read).
+
+**None of these grow without bound:** both debug logs rotate, history is trimmed at boot,
+and `Shift+F2` clears the dictation pair on demand. The debug log is the first place to look when
 something misbehaves — every transcription records `mode=…` and `lang=…`, and
 re-decodes / skips / fallbacks are all logged. Both halves write to the same log.
 
@@ -209,9 +229,9 @@ Because the halves are separate processes, three things are currently the user's
 responsibility rather than the engine's. All three need solving before the two can be
 merged into one process:
 
-1. **Mic / speaker interlock** — nothing stops you starting a dictation while the
-   reader is speaking; Whisper would happily transcribe the synthetic voice.
-2. **Clipboard broker** — both halves drive the clipboard. Each restores what it
+1. **Clipboard broker** — both halves drive the clipboard. Each restores what it
    found, but a capture and an injection overlapping within the same ~150 ms window
-   can still race.
-3. **One tray icon** — today each half owns its own.
+   can still race. (The mic/speaker interlock this needed is already done — see §1.)
+2. **One tray icon, one console** — today each half owns its own.
+3. **One log** — merging the processes would let both halves share `flow_debug.log`
+   again, since a single process has a single handler.

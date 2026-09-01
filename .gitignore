@@ -5,6 +5,7 @@ flow_capture.wav
 flow_vocabulary.txt
 flow_history.md
 flow_debug.log*
+reader_debug.log*
 
 # Python cache
 __pycache__/

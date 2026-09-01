@@ -19,6 +19,13 @@ The engine gained its second half. Highlight text anywhere, press `F4`, and a lo
   can be cut off mid-sentence.
 - **`READER_*` settings** in `.env` (hotkey, voice, smart mode, limits) — see
   CONFIGURATION.md §10.
+- **`Launch_All.bat` / `Launch_All_Silent.vbs`** — start both halves at once. Either
+  half still runs perfectly well on its own.
+- **`flow_signals.py`** — Windows named events that coordinate the two processes over
+  the microphone: starting a dictation silences the reader, and the reader refuses to
+  speak while the mic is open, so Whisper can never transcribe the synthetic voice.
+  Best-effort — if signalling is unavailable both halves behave as they did before,
+  and Flow clears the flag at boot so a force-killed run cannot leave the reader mute.
 
 ### 🔧 Changed
 - **New `flow_core.py`** — paths, `.env` config, the rotating debug log, the learned
@@ -34,6 +41,11 @@ The engine gained its second half. Highlight text anywhere, press `F4`, and a lo
   (the same rule the dictation record keys follow).
 - **`requirements.txt`** — added `kokoro`; corrected the stale `soundfile` and
   `win11toast` pins to the versions actually in use.
+- **Each half logs to its own file** (`flow_debug.log`, `reader_debug.log`). Two
+  processes sharing one `RotatingFileHandler` cannot roll over on Windows — the
+  rename fails while the other holds the file open and the log grows unbounded.
+- **`Launch_*_Silent.vbs` resolve their own folder** instead of relying on the
+  working directory.
 
 ### 🗑️ Removed
 - The reader's duplicate Ollama client, duplicate console theme, and hardcoded

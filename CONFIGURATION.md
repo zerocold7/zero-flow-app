@@ -256,11 +256,13 @@ Also in **`personas.py`**:
 |------|------|---------|
 | `flow_vocabulary.txt` | learned terms | deduped on write; `Shift+F1` prunes it |
 | `flow_history.md` | history of injected text | trimmed at boot past ~500 KB |
-| `flow_debug.log` | diagnostics | auto-rotates (~3 MB cap) |
+| `flow_debug.log` | dictation diagnostics | auto-rotates (~3 MB cap) |
+| `reader_debug.log` | reader diagnostics | auto-rotates (~3 MB cap) |
 | `flow_capture.wav` | temp audio | deleted after each decode |
 
-`Shift+F2` clears the log + history instantly. None of these grow without bound.
-The reader writes nothing of its own — it logs to the same `flow_debug.log`.
+`Shift+F2` clears the dictation log + history instantly. None of these grow without
+bound. The reader keeps its own log (two processes cannot safely rotate one file);
+it rotates itself and only writes a few lines per read.
 
 ---
 

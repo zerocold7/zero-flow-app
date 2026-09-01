@@ -27,17 +27,36 @@ BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 VOCAB_CACHE_FILE = os.path.join(BASE_DIR, "flow_vocabulary.txt")
 TEMP_AUDIO_FILE = os.path.join(BASE_DIR, "flow_capture.wav")
 HISTORY_FILE = os.path.join(BASE_DIR, "flow_history.md")
-LOG_FILE = os.path.join(BASE_DIR, "flow_debug.log")
 
 # =====================================================================
 # LOGGING
 # =====================================================================
-# Rotate the debug log so it can never grow without bound: a ~1 MB live file plus
-# two ~1 MB backups (≈3 MB cap total), oldest discarded automatically.
-LOG_HANDLER = RotatingFileHandler(LOG_FILE, maxBytes=1_000_000, backupCount=2, encoding="utf-8")
-logging.basicConfig(level=logging.INFO,
-                    format='%(asctime)s - %(levelname)s - %(message)s',
-                    handlers=[LOG_HANDLER])
+# Each half logs to its own file: "flow_debug.log" and "reader_debug.log". That is
+# deliberate. Two processes sharing one RotatingFileHandler fight at rollover — on
+# Windows the rename fails outright while the other process holds the file open, and
+# the log then grows without bound, which is exactly what the rotation is there to
+# prevent. Each file rotates independently (~1 MB live + two backups, ~3 MB cap).
+LOG_COMPONENTS = ("flow", "reader")
+_log_handlers = {}
+
+
+def log_path(component):
+    return os.path.join(BASE_DIR, f"{component}_debug.log")
+
+
+def init_logging(component):
+    """Attach this process's rotating debug log. Idempotent per component."""
+    if component in _log_handlers:
+        return _log_handlers[component]
+    handler = RotatingFileHandler(log_path(component), maxBytes=1_000_000,
+                                  backupCount=2, encoding="utf-8")
+    handler.setFormatter(logging.Formatter('%(asctime)s - %(levelname)s - %(message)s'))
+    root = logging.getLogger()
+    root.setLevel(logging.INFO)
+    root.addHandler(handler)
+    _log_handlers[component] = handler
+    return handler
+
 
 load_dotenv()
 

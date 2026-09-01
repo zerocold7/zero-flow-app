@@ -37,15 +37,18 @@ from faster_whisper import WhisperModel
 try:
     import personas
     import engine_ui as ui
+    import flow_signals as signals
     from flow_core import (
-        VOCAB_CACHE_FILE, TEMP_AUDIO_FILE, HISTORY_FILE, LOG_FILE, LOG_HANDLER,
+        VOCAB_CACHE_FILE, TEMP_AUDIO_FILE, HISTORY_FILE,
         ENABLE_AUDIO_CHIMES, ENABLE_TOASTS,
-        get_ollama_model, load_vocabulary, query_ollama,
+        init_logging, log_path, get_ollama_model, load_vocabulary, query_ollama,
     )
 except ImportError as e:
     print(f"❌ Critical error: Missing local module: {e}")
     sys.exit(1)
 
+LOG_HANDLER = init_logging("flow")
+LOG_FILE = log_path("flow")
 logging.info("=== Zero- Core Application Boot Sequence Initiated ===")
 
 # =====================================================================
@@ -179,7 +182,10 @@ def run_memory_maintenance():
 
 def purge_diagnostic_files():
     """Shift+F2 — clear the debug log and dictation history on demand. These are the
-    files that grow with use; vocabulary is curated separately by Shift+F1."""
+    files that grow with use; vocabulary is curated separately by Shift+F1.
+
+    Clears this process's log only. The reader owns `reader_debug.log` and rotates it
+    itself; truncating a file another process holds open would only corrupt it."""
     if recording:
         return
     try:
@@ -356,6 +362,10 @@ def process_recording():
         logging.error(f"Audio InputStream failed to open: {e}")
         recording = False
         return
+    finally:
+        # The mic closes the moment the `with` block exits — release the reader here
+        # rather than after transcription, so it only stays quiet while we listen.
+        signals.set_recording(False)
 
     sys.stdout.write("\r" + " " * 50 + "\r")     # wipe the live meter line
 
@@ -421,6 +431,10 @@ def on_record_hotkey(mode_name):
 
     active_mode = mode_name
     recording = True
+    # Tell the reader to stop talking and stay quiet: a live mic would otherwise pick
+    # up the synthetic voice and Whisper would transcribe the engine reading to itself.
+    signals.request_reader_silence()
+    signals.set_recording(True)
     ui.set_tray_state(True)
     print(f"\n{ui.C_ACCENT}🔴 [{MODES[mode_name]['label']}] Capturing audio...{ui.C_RESET}")
     ui.play_tone("start", ENABLE_AUDIO_CHIMES)
@@ -480,6 +494,9 @@ def main():
     global model
 
     ui.update_console_title("INITIALIZING HARDWARE")
+    # Clear any stale recording flag left behind if a previous run was force-killed
+    # mid-capture — otherwise a running reader would keep refusing to speak.
+    signals.set_recording(False)
     model = load_whisper_model()
     cap_history_file()
 
