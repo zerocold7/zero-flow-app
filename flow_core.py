@@ -13,6 +13,7 @@ and one debug log for the whole product. See ARCHITECTURE.md.
 import os
 import re
 import logging
+import threading
 from logging.handlers import RotatingFileHandler
 
 import requests
@@ -45,9 +46,15 @@ def log_path(component):
 
 
 def init_logging(component):
-    """Attach this process's rotating debug log. Idempotent per component."""
-    if component in _log_handlers:
-        return _log_handlers[component]
+    """Attach this process's rotating debug log.
+
+    One log per process: the first caller names the file and every later call gets
+    that same handler back. Split across two processes that means flow_debug.log and
+    reader_debug.log; in the merged single-process engine both halves land in
+    flow_debug.log, which is the whole point of merging them.
+    """
+    if _log_handlers:
+        return next(iter(_log_handlers.values()))
     handler = RotatingFileHandler(log_path(component), maxBytes=1_000_000,
                                   backupCount=2, encoding="utf-8")
     handler.setFormatter(logging.Formatter('%(asctime)s - %(levelname)s - %(message)s'))
@@ -71,6 +78,18 @@ ENABLE_AUDIO_CHIMES = os.getenv("ENABLE_AUDIO_CHIMES", "True").lower() in ('true
 ENABLE_TOASTS       = os.getenv("ENABLE_TOAST_NOTIFICATIONS", "True").lower() in ('true', '1', 't')
 
 LEARN_PATTERN = re.compile(r'\[LEARN:\s*(.*?)\]')
+
+# =====================================================================
+# CLIPBOARD
+# =====================================================================
+# Both halves drive the clipboard: the reader copies the selection, the dictation
+# half pastes into the focused app, and each restores what it found. Overlap either
+# of those and one clobbers the other mid-flight. Hold this around any sequence that
+# writes the clipboard and reads it back.
+#
+# It only serialises callers inside one process, so it does real work in the merged
+# engine (zero_flow.py) and is a harmless no-op when the halves run split.
+CLIPBOARD_LOCK = threading.RLock()
 
 # =====================================================================
 # LOCAL LLM

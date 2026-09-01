@@ -4,6 +4,44 @@ All notable work on the **Zero- Flow Engine**. Newest first.
 
 ---
 
+## [1.2.0] — 2026-09-01 — One process, one window
+
+`Launch_Zero.bat` runs both halves in a single process: one console, one tray icon,
+one log, one clipboard lock. Both halves still run standalone, and `Launch_All.bat`
+still runs them as two processes.
+
+### ✨ Added
+- **`zero_flow.py`** — the merged engine. Hosts dictation and the reader together,
+  with a combined banner, a single tray menu and a single exit.
+- **`Launch_Zero.bat` / `Launch_Zero_Silent.vbs`**.
+- **`READER_DEVICE`** (`auto` / `cpu` / `cuda`) for the voice model.
+- **`flow_core.CLIPBOARD_LOCK`**, held across the reader's capture and the dictation
+  half's paste-and-restore, closing the clipboard race in the merged engine.
+
+### 🔧 Changed
+- `local_flow.main()` split into `boot()` + `register_hotkeys()`, and the reader's
+  logic moved from `reader/__main__.py` into `reader/app.py`, so the merged entry
+  point can compose both halves instead of duplicating them.
+- One log per process: the first caller names it, so the merged engine puts both
+  halves back into `flow_debug.log`.
+
+### 🐛 Fixed
+- **`engine_ui` no longer imports `win11toast` at module scope.** It pulls in WinRT
+  native libraries, and if that happened before faster-whisper claimed its CUDA DLLs,
+  CTranslate2 **segfaulted the process** when loading the model on the GPU. The import
+  now happens lazily inside the toast thread. `local_flow.py` only ever avoided this
+  by accident of import order.
+
+### ⚠️ Known constraint
+**Whisper and Kokoro cannot both use CUDA in one process** — `torch` bundles cuDNN 9.1,
+CTranslate2 needs 9.23, Windows allows one DLL per name per process, and the loser
+segfaults (verified in both load orders). The merged engine therefore forces the voice
+model onto the CPU and ignores `READER_DEVICE`. Kokoro-82M synthesises at ~2.7x
+realtime there and loads faster than on GPU. Use `Launch_All.bat` for a GPU voice.
+See ARCHITECTURE.md §12.
+
+---
+
 ## [1.1.0] — 2026-09-01 — The reader: text → speech
 
 The engine gained its second half. Highlight text anywhere, press `F4`, and a local

@@ -39,7 +39,7 @@ try:
     import engine_ui as ui
     import flow_signals as signals
     from flow_core import (
-        VOCAB_CACHE_FILE, TEMP_AUDIO_FILE, HISTORY_FILE,
+        CLIPBOARD_LOCK, VOCAB_CACHE_FILE, TEMP_AUDIO_FILE, HISTORY_FILE,
         ENABLE_AUDIO_CHIMES, ENABLE_TOASTS,
         init_logging, log_path, get_ollama_model, load_vocabulary, query_ollama,
     )
@@ -334,16 +334,19 @@ def inject_text(text):
         text = " " + text
 
     logging.info(f"Injecting text via clipboard paste: {text!r}")
-    saved_clipboard = pyperclip.paste()
-    pyperclip.copy(text)
-    time.sleep(0.04)
-    keyboard.send('ctrl+v')
-    # Give slow apps time to read the clipboard before we restore it — restoring
-    # too early makes them paste the *old* clipboard contents instead.
-    time.sleep(0.15)
-    if end_enter:
-        keyboard.send('enter')
-    pyperclip.copy(saved_clipboard)              # restore the user's clipboard
+    # Hold the clipboard for the whole save/paste/restore cycle so the reader cannot
+    # copy a selection into the middle of it (merged engine only — see flow_core).
+    with CLIPBOARD_LOCK:
+        saved_clipboard = pyperclip.paste()
+        pyperclip.copy(text)
+        time.sleep(0.04)
+        keyboard.send('ctrl+v')
+        # Give slow apps time to read the clipboard before we restore it — restoring
+        # too early makes them paste the *old* clipboard contents instead.
+        time.sleep(0.15)
+        if end_enter:
+            keyboard.send('enter')
+        pyperclip.copy(saved_clipboard)          # restore the user's clipboard
 
 # =====================================================================
 # RECORDING WORKER (one per capture, runs off the hotkey thread)
@@ -490,7 +493,9 @@ def _run_async(fn):
 # =====================================================================
 # ENTRY POINT
 # =====================================================================
-def main():
+def boot():
+    """Load the model and get the dictation half ready. Shared by both entry points
+    (this file standalone, and the merged engine in zero_flow.py)."""
     global model
 
     ui.update_console_title("INITIALIZING HARDWARE")
@@ -499,13 +504,11 @@ def main():
     signals.set_recording(False)
     model = load_whisper_model()
     cap_history_file()
-
     ui.update_console_title("ONLINE")
-    ui.print_boot_sequence(get_ollama_model(), HOTKEYS)
-    ui.show_toast("🚀 Zero- Flow Online", "Background engine is active and listening.", ENABLE_TOASTS)
-    ui.setup_system_tray()
-    ui.set_window_icon()
 
+
+def register_hotkeys():
+    """Bind the dictation keys. Shared by both entry points."""
     # Record modes (F5–F10). suppress=True consumes the key so it never reaches the
     # focused app (e.g. F5 = browser refresh). The lambda captures each mode name.
     for mode in MODES:
@@ -517,6 +520,15 @@ def main():
     keyboard.add_hotkey(HOTKEYS["maintenance"], _run_async(run_memory_maintenance), suppress=True)
     keyboard.add_hotkey(HOTKEYS["purge"],       _run_async(purge_diagnostic_files), suppress=True)
     keyboard.add_hotkey(HOTKEYS["panic"],       on_cancel_hotkey)
+
+
+def main():
+    boot()
+    ui.print_boot_sequence(get_ollama_model(), HOTKEYS)
+    ui.show_toast("🚀 Zero- Flow Online", "Background engine is active and listening.", ENABLE_TOASTS)
+    ui.setup_system_tray()
+    ui.set_window_icon()
+    register_hotkeys()
     keyboard.wait()
 
 if __name__ == "__main__":

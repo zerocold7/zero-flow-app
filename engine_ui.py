@@ -4,7 +4,6 @@ import time
 import winsound
 import ctypes
 import threading
-from win11toast import toast
 from colorama import init, Fore, Style
 import pystray
 from PIL import Image, ImageDraw
@@ -43,6 +42,12 @@ def show_toast(title, body="", enable_toasts=True):
     if enable_toasts:
         def _fire():
             try:
+                # Imported here, not at module scope, and this is load-bearing:
+                # win11toast pulls in WinRT native libraries, and if that happens
+                # before faster-whisper claims its CUDA DLLs, CTranslate2 segfaults
+                # the entire process when it later loads the model on the GPU. By the
+                # time a toast fires, Whisper is long since loaded and it is safe.
+                from win11toast import toast
                 # win11toast defaults on_click/on_dismissed/on_failed to `print`,
                 # so when a toast times out it leaks "(<ToastDismissalReason..>,)"
                 # to the console. Pass no-op handlers to keep the console clean.

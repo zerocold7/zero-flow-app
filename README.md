@@ -22,27 +22,44 @@
 - **Background-friendly** — system-tray icon, optional toast notifications and audio chimes. Nothing ever leaves your machine.
 
 ## 🧱 Two halves, one engine
-| Half | Direction | Run it with | Entry point |
-|------|-----------|-------------|-------------|
-| **Flow** | speech → text | `Launch_Flow.bat` | `local_flow.py` |
-| **Reader** | text → speech | `Launch_Reader.bat` | `reader/` (`python -m reader`) |
+| Half | Direction | Entry point |
+|------|-----------|-------------|
+| **Flow** | speech → text | `local_flow.py` |
+| **Reader** | text → speech | `reader/` (`python -m reader`) |
 
-**You do not need both.** Each half is a complete program: run Flow alone for
-dictation, Reader alone for reading aloud, or both together with **`Launch_All.bat`**
-(`Launch_All_Silent.vbs` to start them hidden). Running both gives you two console
-windows and two tray icons.
+**Three ways to run them:**
+
+| Launcher | What you get |
+|----------|--------------|
+| **`Launch_Zero.bat`** | **Both halves, one window, one tray icon** — recommended |
+| `Launch_Flow.bat` / `Launch_Reader.bat` | One half only |
+| `Launch_All.bat` | Both halves as two separate processes (two windows, two tray icons) |
+
+Each has a `_Silent.vbs` twin that starts it hidden.
+
+**You do not need both.** Each half is a complete program — run whichever you want.
+
+**One window or two?** `Launch_Zero.bat` runs both halves in a single process, so
+there is one console and one tray icon, and the two coordinate directly. The only
+difference from running them separately: the voice model uses the **CPU** instead of
+the GPU, because Whisper and Kokoro cannot both hold CUDA in one process (see
+[ARCHITECTURE.md §12](ARCHITECTURE.md)). Kokoro-82M is small enough that this costs
+nothing you can hear — it synthesises at ~2.7x realtime and loads *faster* on CPU.
+Prefer `Launch_All.bat` if you want the voice model on the GPU and don't mind two
+windows.
 
 They share `flow_core.py` (config, the Ollama client, the learned vocabulary),
 `personas.py` (prompts and word lists) and `engine_ui.py` (console, chimes, toasts,
 tray) — so there is one `.env` and one vocabulary for both.
 
-**Running both is safe.** Their hotkeys don't overlap, and the two coordinate over
-the one resource they'd otherwise fight for — the microphone:
+**Running both is safe**, merged or separate. Their hotkeys don't overlap, and the
+two coordinate over the one resource they'd otherwise fight for — the microphone:
 - Starting a dictation **silences the reader immediately**.
 - The reader **refuses to speak while the mic is open**, so Whisper can never
   transcribe the synthetic voice back at you.
-- Each half keeps its own debug log, so neither corrupts the other's.
 - `Esc` does the right thing in whichever half is busy.
+- Merged, they also share one clipboard lock and one debug log; run separately, each
+  half keeps its own log so neither corrupts the other's.
 
 ## 🧩 Requirements
 - Windows 11
@@ -73,7 +90,9 @@ the one resource they'd otherwise fight for — the microphone:
    - **`Launch_Silent.vbs`** — dictation, invisible background process
    - **`Launch_Reader.bat`** / **`Launch_Reader_Silent.vbs`** — the read-aloud half
      (start it as well as, or instead of, dictation)
-   - **`Launch_All.bat`** / **`Launch_All_Silent.vbs`** — both halves at once
+   - **`Launch_All.bat`** / **`Launch_All_Silent.vbs`** — both halves, two processes
+   - **`Launch_Zero.bat`** / **`Launch_Zero_Silent.vbs`** — both halves, one process
+     and one window (recommended)
 
 > **Windows 11 tray tip:** new tray icons are hidden by default. Click the `^` arrow next to the clock to find the Zero- Flow icon, or pin it permanently via *Settings → Personalization → Taskbar → Other system tray icons*.
 

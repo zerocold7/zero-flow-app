@@ -31,6 +31,7 @@ only set what you want to change.
 | `READER_SMART_MODE` | `False` | LLM-clean captured text before speaking (see §10) |
 | `READER_SMART_MAX_CHARS` | `1000` | Selections longer than this skip the LLM pass |
 | `READER_LLM_TIMEOUT` | `10` | Seconds to wait for the LLM before speaking anyway |
+| `READER_DEVICE` | `auto` | `auto` / `cpu` / `cuda` for the voice model (see §10) |
 
 ---
 
@@ -267,8 +268,9 @@ it rotates itself and only writes a few lines per read.
 ---
 
 ## 10. The reader (text → speech)
-Start it with **`Launch_Reader.bat`** (or `python -m reader`). It is a separate
-process from dictation: run either, or both at once.
+Start it with **`Launch_Reader.bat`** (or `python -m reader`) on its own, alongside
+dictation with **`Launch_All.bat`**, or in the same process and window as dictation
+with **`Launch_Zero.bat`**.
 
 ```ini
 HOTKEY_READ="f4"            # read the highlighted text aloud
@@ -312,5 +314,12 @@ PRONUNCIATION_MAP = {
 Keep these out of `BASE_VOCABULARY` — that list is a *spelling* hint for Whisper and
 the casing pass, so a phonetic spelling there would corrupt your dictation.
 
-**GPU.** Kokoro-82M uses CUDA when `torch` sees a GPU and CPU otherwise, decided
-automatically on the first read. It is a small model — CPU is perfectly usable.
+**GPU.** `READER_DEVICE` picks the device for the voice model: `auto` (default — GPU
+when available), `cpu`, or `cuda`.
+
+> ⚠️ **Ignored in the merged engine.** `zero_flow.py` forces the voice model onto the
+> CPU whatever this is set to. Whisper and Kokoro cannot both hold CUDA in one process
+> — the process **segfaults**, in either load order, with nothing to catch. This is
+> not tunable; see [ARCHITECTURE.md §12](ARCHITECTURE.md). Kokoro-82M runs at ~2.7x
+> realtime on CPU and loads faster there, so the setting is worth little anyway.
+> Run `Launch_All.bat` (two processes) if you specifically want the voice on the GPU.

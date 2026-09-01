@@ -21,18 +21,24 @@ a local LLM to clean up or translate text.
 | `flow_core.py`  | **Shared:** paths, `.env` config, rotating debug log, learned vocabulary, the single Ollama client |
 | `personas.py`   | **Shared:** static data — LLM prompts, base vocabulary, voice macros, punctuation, pronunciation |
 | `engine_ui.py`  | **Shared:** console UI, beeps, Windows toasts, system-tray + window icon |
+| `flow_signals.py` | **Shared:** Windows named events that keep the two halves off each other's toes |
 | `local_flow.py` | Flow: hotkeys, audio capture, transcription, refinement, injection |
-| `reader/`       | Reader: `__main__.py` (hotkey + tray), `clipboard_tool.py`, `text_cleaner.py`, `voice_engine.py` |
+| `reader/`       | Reader: `app.py` (the half itself), `clipboard_tool.py`, `text_cleaner.py`, `voice_engine.py` |
+| `zero_flow.py`  | The merged engine: hosts both halves in one process, one console, one tray icon |
 
-**Why two processes, not one.** They are deliberately separate today. `torch` (Kokoro)
-and CTranslate2 (Whisper) ship DLLs with the same base names, and Windows loads only
-one DLL per name per process — separate processes means each half gets its own set,
-and a crash in one can never take the other down. Either half runs standalone;
-`Launch_All.bat` starts both.
+**One process or two.** Both are supported, and both halves also run standalone:
 
-Being separate processes, they cannot share Python state, so the one resource they
-would fight over — the microphone — is coordinated with Windows named events in
-`flow_signals.py`:
+| Entry point | Processes | Voice model | Notes |
+|-------------|-----------|-------------|-------|
+| `zero_flow.py` | 1 | **CPU** | One window, one tray, one log, one clipboard lock |
+| `local_flow.py` + `reader/` | 2 | GPU | Full isolation: a crash in one cannot touch the other |
+
+The single-process build must run Kokoro on the CPU. That is a hard constraint, not a
+preference — see §12. Everything else about the halves is identical either way.
+
+The one resource they would fight over — the microphone — is coordinated with Windows
+named events in `flow_signals.py`. Named events work within a single process as well
+as across two, so the merged engine uses exactly the same code path:
 
 | Signal | Set by | Effect |
 |--------|--------|--------|
@@ -224,14 +230,45 @@ re-decodes / skips / fallbacks are all logged. Both halves write to the same log
 
 ---
 
-## 11. Known gaps (the single-process merge)
-Because the halves are separate processes, three things are currently the user's
-responsibility rather than the engine's. All three need solving before the two can be
-merged into one process:
+## 11. Known gaps
+Running the halves as **two processes** leaves one thing unsolved:
 
-1. **Clipboard broker** — both halves drive the clipboard. Each restores what it
-   found, but a capture and an injection overlapping within the same ~150 ms window
-   can still race. (The mic/speaker interlock this needed is already done — see §1.)
-2. **One tray icon, one console** — today each half owns its own.
-3. **One log** — merging the processes would let both halves share `flow_debug.log`
-   again, since a single process has a single handler.
+- **Clipboard races.** Both halves drive the clipboard. Each restores what it found,
+  but a capture and an injection overlapping within the same ~150 ms window can still
+  collide. `flow_core.CLIPBOARD_LOCK` serialises them — which only works inside one
+  process, so this is fixed in `zero_flow.py` and remains a (rare) hazard when running
+  split.
+
+Running as **one process** costs:
+
+- **Kokoro on the CPU** (§12), and a fault in either half takes the whole engine down.
+
+---
+
+## 12. The CUDA constraint (read before touching device selection)
+**Whisper and Kokoro cannot both use CUDA in one process. The result is a segfault,
+not an exception — nothing can catch it and no fallback runs.**
+
+- `torch 2.5.1+cu121` bundles cuDNN **9.1** in `torch/lib`.
+- CTranslate2 4.8 (behind faster-whisper) uses the pip `nvidia-cudnn-cu12` **9.23**.
+- Windows loads exactly **one DLL per base name per process**. Whichever initialises
+  CUDA second gets the other's `cudnn64_9.dll`, its symbols don't match, and the
+  process dies. Verified in **both** load orders: Whisper-then-Kokoro fails with
+  `Could not load symbol cudnnGetLibConfig` (error 127), Kokoro-then-Whisper segfaults.
+
+So `zero_flow.py` calls `voice_engine.force_cpu()` before anything can load a voice
+model, deliberately overriding `READER_DEVICE`. Whisper keeps the GPU because that is
+where the seconds are; Kokoro-82M measures ~2.7x realtime on CPU and loads faster
+there than on GPU, so nothing audible is lost.
+
+**A second, related trap: import order.** `win11toast` (reached through `engine_ui`)
+loads WinRT native libraries. If that happens *before* faster-whisper claims its CUDA
+DLLs, CTranslate2 segfaults when it later loads the model on the GPU. Two defences:
+
+1. `engine_ui.show_toast` imports `win11toast` **lazily**, inside the worker thread,
+   so simply importing the UI module is harmless.
+2. `zero_flow.py` imports `local_flow` **first**, before anything that reaches
+   `engine_ui`.
+
+Keep both. If you reorder these imports, re-test by launching `zero_flow.py` and
+confirming `flow_debug.log` still says `Whisper model active on CUDA (float16)`.
