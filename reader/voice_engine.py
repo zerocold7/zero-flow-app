@@ -1,9 +1,14 @@
 """
 Kokoro text-to-speech playback.
 
-Audio is generated chunk by chunk and handed to a single playback worker thread, so
-speech starts before the whole passage has been synthesised and can be cut off
-instantly (`interrupt_audio`) without waiting for the generator to finish.
+Text is synthesised a batch of sentences at a time and handed to a single playback
+worker thread, so speech starts after the first sentence rather than after the whole
+passage, and can be cut off instantly (`interrupt_audio`) mid-way through.
+
+The batching is not cosmetic. Kokoro renders one request into exactly one chunk, so
+passing it a whole paragraph means silence until every word of it is rendered — a
+measured 3.4-5.0 s on CPU. Per sentence, that wait becomes ~0.8 s and the remainder
+renders while the first plays.
 
 The pipeline — and the `torch` import behind it — is loaded lazily on the first
 spoken word, not at import time, so startup stays instant.
@@ -13,12 +18,14 @@ when it shares one with Whisper. That is not a preference, it is a hard requirem
 torch 2.5.1+cu121 bundles cuDNN 9.1 while CTranslate2 (Whisper) needs the pip-installed
 cuDNN 9.23, Windows loads only one DLL per base name per process, and the loser
 **segfaults the whole process** — in either load order, with no exception to catch.
-Kokoro-82M on CPU synthesises at roughly 2.7x realtime and loads faster than it does
-on GPU, so the merged engine gives up nothing measurable by forcing it there.
+CPU synthesis measures 3.6-5.2x realtime against 52-82x on GPU, so it stays ahead of
+playback but has far less headroom; sentence batching plus `preload()` is what keeps
+it feeling immediate. Run the halves as two processes if you want the voice on GPU.
 """
 import logging
 import os
 import queue
+import re
 import threading
 import warnings
 
@@ -48,6 +55,13 @@ DEFAULT_VOICE = os.getenv("READER_VOICE", "af_heart")
 # "cpu" via force_cpu() before the first read — see the module docstring.
 DEVICE_POLICY = os.getenv("READER_DEVICE", "auto").strip().lower()
 _forced_cpu_reason = None
+
+# Sentence-aligned batching, so speech starts after the first sentence instead of
+# after the whole passage. Latin and Arabic sentence enders, plus a hard line break.
+SENTENCE_SPLIT = re.compile(r'(?<=[.!?؟۔…])\s+|\n+')
+# The first batch is kept short: it is the only one the listener waits on.
+FIRST_BATCH_CHARS = int(os.getenv("READER_FIRST_BATCH_CHARS", 120))
+BATCH_CHARS = int(os.getenv("READER_BATCH_CHARS", 300))
 
 current_voice = DEFAULT_VOICE
 audio_queue = queue.Queue()
@@ -116,17 +130,58 @@ def set_voice(new_voice):
     print(f"\n{ui.C_ACCENT}🔵 [TTS]{ui.C_RESET} Voice switched to {current_voice}")
 
 
+def preload():
+    """Load the model and warm its kernels ahead of the first read.
+
+    Called on a background thread at startup so the first press of the read key
+    does not pay the ~13 s model load, plus a first-inference cost on top."""
+    try:
+        pipeline = get_pipeline()
+        for _ in pipeline("Ready.", voice=current_voice, speed=1.0):
+            pass                                 # discard: this is a warm-up only
+        logging.info("Kokoro pipeline preloaded and warmed.")
+    except Exception as e:
+        logging.error(f"Kokoro preload failed (the first read will load it): {e}")
+
+
+def _iter_batches(text, first_max=FIRST_BATCH_CHARS, batch_max=BATCH_CHARS):
+    """Split text into sentence-aligned batches, the first one deliberately small.
+
+    Kokoro renders a whole request as a single chunk, so a long passage produces no
+    audio at all until the entire thing is synthesised — seconds of silence on CPU.
+    Feeding it a sentence at a time means playback starts after the *first* sentence
+    and the rest renders while that plays (CPU manages 3-5x realtime, comfortably
+    ahead of playback). Later batches are larger, since per-call overhead matters
+    more than latency once the audio is already flowing.
+    """
+    sentences = [s for s in SENTENCE_SPLIT.split(text.strip()) if s.strip()]
+    if not sentences:
+        return
+    buffer, limit = "", first_max
+    for sentence in sentences:
+        if buffer and len(buffer) + len(sentence) + 1 > limit:
+            yield buffer
+            buffer, limit = sentence, batch_max
+        else:
+            buffer = f"{buffer} {sentence}".strip()
+    if buffer:
+        yield buffer
+
+
 def stream_audio(text):
-    """Synthesise `text` and queue it for playback, chunk by chunk."""
+    """Synthesise `text` and queue it for playback, a batch of sentences at a time."""
     global stop_playback
     stop_playback = False
 
-    generator = get_pipeline()(text, voice=current_voice, speed=1.0)
-    for _, _, audio in generator:
+    pipeline = get_pipeline()
+    for batch in _iter_batches(text):
         if stop_playback:
             break
-        if audio is not None:
-            audio_queue.put(audio)
+        for _, _, audio in pipeline(batch, voice=current_voice, speed=1.0):
+            if stop_playback:
+                break
+            if audio is not None:
+                audio_queue.put(audio)
 
 
 def interrupt_audio():

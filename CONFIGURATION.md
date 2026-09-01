@@ -320,6 +320,13 @@ when available), `cpu`, or `cuda`.
 > ⚠️ **Ignored in the merged engine.** `zero_flow.py` forces the voice model onto the
 > CPU whatever this is set to. Whisper and Kokoro cannot both hold CUDA in one process
 > — the process **segfaults**, in either load order, with nothing to catch. This is
-> not tunable; see [ARCHITECTURE.md §12](ARCHITECTURE.md). Kokoro-82M runs at ~2.7x
-> realtime on CPU and loads faster there, so the setting is worth little anyway.
-> Run `Launch_All.bat` (two processes) if you specifically want the voice on the GPU.
+> not tunable; see [ARCHITECTURE.md §12](ARCHITECTURE.md). It costs about **2 seconds**
+> before the first spoken word instead of 0.2. Run `Launch_All.bat` (two processes) if
+> you want the voice on the GPU.
+
+Two knobs affect how quickly speech starts, both rarely worth changing:
+
+| Variable | Default | What it does |
+|----------|---------|--------------|
+| `READER_FIRST_BATCH_CHARS` | `120` | Size of the first batch sent to the voice model. Smaller = speech starts sooner, but more calls |
+| `READER_BATCH_CHARS` | `300` | Size of every batch after the first, once audio is already playing |

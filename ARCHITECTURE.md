@@ -187,17 +187,24 @@ Hallucination originates in Whisper, not the app code. Mitigations in `transcrib
  2. CLEAN        clean_text_instant()  (regex: URLs,        — or clean_text_smart(), one LLM
         │                markdown, whitespace)                pass, falling back to the regex
         ▼                                                     clean on timeout/long input
- 3. SPEAK        stream_audio()  →  playback worker         — Kokoro-82M, 24 kHz, chunk by
-        │                                                     chunk so speech starts early
+ 3. SPEAK        stream_audio() → _iter_batches()           — Kokoro-82M, 24 kHz, one batch
+        │                       → playback worker             of sentences at a time
         ▼
  [Esc  →  interrupt_audio(): sd.stop() + flush the queue]
 ```
 
 Design notes:
-- **The voice model loads lazily**, on the first `F4` of a session — startup stays
-  instant, and `torch` stays out of the process until it is genuinely needed.
-- **Audio is queued in chunks**, so playback begins before the whole passage is
-  synthesised and `Esc` can cut it off mid-sentence.
+- **The voice model loads lazily** — `torch` stays out of the process until it is
+  genuinely needed — but `preload()` warms it on a background thread at startup, so
+  the first `F4` does not pay the ~13 s load.
+- **Text is batched by sentence** (`_iter_batches`). This matters more than it looks:
+  Kokoro renders one request into exactly **one** chunk, so handing it a whole
+  paragraph means silence until every word is rendered. Splitting on sentence
+  boundaries — with a deliberately small *first* batch, since that is the only one
+  anybody waits for — cut paragraph latency on CPU from 5.05 s to 1.97 s. The rest
+  renders while the first plays.
+- **`Esc` cuts in mid-passage**: `stream_audio` re-checks `stop_playback` between
+  batches and between chunks, so it stops without finishing the render.
 - **Pronunciation** fixes live in `personas.PRONUNCIATION_MAP`, deliberately *not* in
   `BASE_VOCABULARY` — that list feeds Whisper's decoder hint and the casing pass,
   where a phonetic spelling would do damage.
@@ -258,8 +265,16 @@ not an exception — nothing can catch it and no fallback runs.**
 
 So `zero_flow.py` calls `voice_engine.force_cpu()` before anything can load a voice
 model, deliberately overriding `READER_DEVICE`. Whisper keeps the GPU because that is
-where the seconds are; Kokoro-82M measures ~2.7x realtime on CPU and loads faster
-there than on GPU, so nothing audible is lost.
+where the seconds are — but the reader does pay for it. Measured, warm:
+
+| | short sentence | paragraph | throughput |
+|---|---|---|---|
+| GPU | 0.07 s | 0.22 s | 52-82x realtime |
+| CPU, whole passage in one call | 0.82 s | **5.05 s** | 3.6-5.2x realtime |
+| CPU, sentence-batched (current) | 0.82 s | **1.97 s** | same |
+
+Both devices stay ahead of playback once speech starts; what differs is the wait
+before the first word. `Launch_All.bat` (two processes) buys back the GPU number.
 
 **A second, related trap: import order.** `win11toast` (reached through `engine_ui`)
 loads WinRT native libraries. If that happens *before* faster-whisper claims its CUDA

@@ -40,13 +40,17 @@ Each has a `_Silent.vbs` twin that starts it hidden.
 **You do not need both.** Each half is a complete program — run whichever you want.
 
 **One window or two?** `Launch_Zero.bat` runs both halves in a single process, so
-there is one console and one tray icon, and the two coordinate directly. The only
-difference from running them separately: the voice model uses the **CPU** instead of
-the GPU, because Whisper and Kokoro cannot both hold CUDA in one process (see
-[ARCHITECTURE.md §12](ARCHITECTURE.md)). Kokoro-82M is small enough that this costs
-nothing you can hear — it synthesises at ~2.7x realtime and loads *faster* on CPU.
-Prefer `Launch_All.bat` if you want the voice model on the GPU and don't mind two
-windows.
+there is one console and one tray icon, and the two coordinate directly. The cost is
+that the voice model runs on the **CPU**, because Whisper and Kokoro cannot both hold
+CUDA in one process (see [ARCHITECTURE.md §12](ARCHITECTURE.md)):
+
+| | time to first spoken word |
+|---|---|
+| `Launch_All.bat` — two windows, voice on GPU | ~0.2 s |
+| `Launch_Zero.bat` — one window, voice on CPU | ~2 s |
+
+Both keep speaking smoothly once started; the difference is the pause before the
+first word. Pick whichever trade you prefer — nothing else differs.
 
 They share `flow_core.py` (config, the Ollama client, the learned vocabulary),
 `personas.py` (prompts and word lists) and `engine_ui.py` (console, chimes, toasts,

@@ -16,8 +16,11 @@ torch 2.5.1+cu121 bundles cuDNN 9.1. CTranslate2 (Whisper) needs the pip-install
 cuDNN 9.23. Windows loads exactly one DLL per base name per process, so whichever
 CUDA library loads second gets the wrong one and the process dies — a hard segfault
 in either load order, not an exception anything can catch. Whisper keeps the GPU
-because that is where the seconds are; Kokoro-82M runs at roughly 2.7x realtime on
-CPU and actually loads faster there, so the trade costs nothing you can hear.
+because that is where the seconds are.
+
+The cost is real but bounded: measured time-to-first-word for a paragraph is ~2.0 s
+on CPU against ~0.2 s on GPU. Sentence batching and a background preload get it
+there; run the halves as two processes (Launch_All.bat) if you want the 0.2 s.
 
 `voice_engine.force_cpu()` enforces this and overrides `READER_DEVICE` on purpose.
 Do not remove it without re-testing both models on CUDA in one process.
@@ -105,6 +108,8 @@ def main():
     threading.Thread(target=tray_icon.run, daemon=True).start()
 
     local_flow.register_hotkeys()
+    # After Whisper is up: the preload it starts imports torch, and that must not
+    # race the CUDA load above even though Kokoro itself is pinned to the CPU.
     reader_app.register_hotkeys()
     keyboard.wait()
 

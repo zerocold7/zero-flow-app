@@ -172,6 +172,8 @@ def register_hotkeys():
     # The dictation half binds it too; the keyboard library runs both callbacks.
     keyboard.add_hotkey(HOTKEY_PANIC, voice_engine.interrupt_audio)
     threading.Thread(target=watch_for_silence_requests, daemon=True).start()
+    # Warm the voice model in the background so the first read is not the slow one.
+    threading.Thread(target=voice_engine.preload, daemon=True).start()
 
 # =====================================================================
 # CONSOLE
@@ -181,7 +183,7 @@ def print_boot_sequence():
     llm = flow_core.OLLAMA_MODEL_NAME or "auto-discovered on first use"
     print(f"{ui.C_ACCENT}┌────────────────────────────────────────────────────────┐{ui.C_RESET}")
     print(f"{ui.C_ACCENT}│ {ui.Fore.MAGENTA}     Z E R O -   F L O W   ·   R E A D E R           {ui.C_ACCENT}│{ui.C_RESET}")
-    print(f"{ui.C_ACCENT}│ {ui.C_RESET}🔗 Voice model: {ui.C_GOOD}[Kokoro-82M · loads on first read]{ui.C_ACCENT}      │{ui.C_RESET}")
+    print(f"{ui.C_ACCENT}│ {ui.C_RESET}🔗 Voice model: {ui.C_GOOD}[Kokoro-82M · warming in background]{ui.C_ACCENT}    │{ui.C_RESET}")
     print(f"{ui.C_ACCENT}│ {ui.C_RESET}🔗 Smart clean: {ui.C_GOOD}[{llm}]{ui.C_RESET}")
     print(f"{ui.C_ACCENT}└────────────────────────────────────────────────────────┘{ui.C_RESET}")
     print(f"  {ui.C_ACCENT}ACTIONS{ui.C_RESET}")

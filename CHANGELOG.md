@@ -4,6 +4,31 @@ All notable work on the **Zero- Flow Engine**. Newest first.
 
 ---
 
+## [1.2.1] — 2026-09-01 — Faster reading on CPU
+
+The merged engine's reading was noticeably slower to start, and the 1.2.0 notes
+understated it. Corrected, with measurements.
+
+### 🐛 Fixed
+- **Speech now starts after the first sentence, not the whole passage.** Kokoro
+  renders a request into exactly one chunk, so the previous "chunked playback" was a
+  single chunk: nothing played until the entire selection had been synthesised.
+  `stream_audio` now feeds the model sentence-aligned batches with a deliberately
+  small first one. Time to first spoken word for a paragraph on CPU: **5.05 s → 1.97 s**.
+- **The voice model is warmed at startup** on a background thread, so the first read
+  of a session no longer pays the ~13 s model load.
+
+### 📝 Corrected
+1.2.0 claimed CPU synthesis cost "nothing you can hear". That was throughput
+(3.6-5.2x realtime), not latency, and latency is what you feel. Measured
+time-to-first-word: **GPU 0.22 s, CPU 1.97 s** for a paragraph. The docs now carry the
+real numbers, and `Launch_All.bat` remains the way to keep the voice on the GPU.
+
+### ✨ Added
+- `READER_FIRST_BATCH_CHARS` (120) and `READER_BATCH_CHARS` (300).
+
+---
+
 ## [1.2.0] — 2026-09-01 — One process, one window
 
 `Launch_Zero.bat` runs both halves in a single process: one console, one tray icon,
