@@ -1,23 +1,35 @@
 # Zero- Flow — Architecture & Behaviour Guide
 
 A practical map of what the engine does, how it should behave, and where each piece
-lives in the code. Read this before changing `local_flow.py`.
+lives in the code. Read this before changing `local_flow.py` or `reader/`.
 
 ---
 
 ## 1. What it is
-A background Windows process that turns speech into typed text in whatever app has
-focus. You hold a hotkey, talk, release — the words appear at your cursor. It is
-**bilingual (Arabic / English)**, runs **fully locally** (no cloud), and can optionally
-clean up or translate the text with a local LLM.
+Two background Windows processes that move text and speech in opposite directions:
 
-Three source files:
+- **Flow** (`local_flow.py`) turns speech into typed text in whatever app has focus.
+  You press a hotkey, talk, press again — the words appear at your cursor.
+- **Reader** (`reader/`) turns highlighted text into speech. You press `F4` and a
+  local voice reads the selection aloud.
+
+Both are **bilingual-aware**, run **fully locally** (no cloud), and can optionally use
+a local LLM to clean up or translate text.
 
 | File | Responsibility |
 |------|----------------|
-| `local_flow.py` | The engine: config, hotkeys, audio, transcription, refinement, injection |
-| `personas.py`   | Static data: LLM prompts, base vocabulary, voice macros, punctuation map |
-| `engine_ui.py`  | Console UI, beeps, Windows toasts, system-tray + window icon |
+| `flow_core.py`  | **Shared:** paths, `.env` config, rotating debug log, learned vocabulary, the single Ollama client |
+| `personas.py`   | **Shared:** static data — LLM prompts, base vocabulary, voice macros, punctuation, pronunciation |
+| `engine_ui.py`  | **Shared:** console UI, beeps, Windows toasts, system-tray + window icon |
+| `local_flow.py` | Flow: hotkeys, audio capture, transcription, refinement, injection |
+| `reader/`       | Reader: `__main__.py` (hotkey + tray), `clipboard_tool.py`, `text_cleaner.py`, `voice_engine.py` |
+
+**Why two processes, not one.** They are deliberately separate today. `torch` (Kokoro)
+and CTranslate2 (Whisper) ship DLLs with the same base names, and Windows loads only
+one DLL per name per process — separate processes means each half gets its own set,
+and a crash in one can never take the other down. Merging them into a single process
+is a considered future step, not an oversight; it needs a mic/speaker interlock and a
+shared clipboard broker first (see §10).
 
 ---
 
@@ -66,6 +78,10 @@ table in `local_flow.py` as `{lang, op}` pairs.
 | `Shift+F2` | purge       | — | Clears the debug log + dictation history |
 | `Shift+F3` | line fix    | — | Select the current line, fix it via the LLM, paste back |
 | `Esc` | cancel | — | Cancels an in-progress recording **only** (does nothing when idle) |
+
+The reader adds `F4` (read the selection) and reuses `Esc` (silence). It registers
+them in its own process, so the two halves never contend for a hotkey — `Esc` simply
+does the right thing in whichever half is busy.
 
 All record keys are registered with `suppress=True` so they never leak into the
 focused app (otherwise `F5` would refresh the browser, etc.). `Esc` is intentionally
@@ -141,7 +157,39 @@ Hallucination originates in Whisper, not the app code. Mitigations in `transcrib
 
 ---
 
-## 9. Files written at runtime (git-ignored)
+## 9. The reader (text → speech)
+```
+ [F4 pressed]                 trigger_read()                — worker thread, never the listener
+        │
+        ▼
+ 1. CAPTURE      capture_highlighted_text()                 — synthetic Ctrl+C, clipboard
+        │                                                     saved and restored afterwards
+        ▼
+ 2. CLEAN        clean_text_instant()  (regex: URLs,        — or clean_text_smart(), one LLM
+        │                markdown, whitespace)                pass, falling back to the regex
+        ▼                                                     clean on timeout/long input
+ 3. SPEAK        stream_audio()  →  playback worker         — Kokoro-82M, 24 kHz, chunk by
+        │                                                     chunk so speech starts early
+        ▼
+ [Esc  →  interrupt_audio(): sd.stop() + flush the queue]
+```
+
+Design notes:
+- **The voice model loads lazily**, on the first `F4` of a session — startup stays
+  instant, and `torch` stays out of the process until it is genuinely needed.
+- **Audio is queued in chunks**, so playback begins before the whole passage is
+  synthesised and `Esc` can cut it off mid-sentence.
+- **Pronunciation** fixes live in `personas.PRONUNCIATION_MAP`, deliberately *not* in
+  `BASE_VOCABULARY` — that list feeds Whisper's decoder hint and the casing pass,
+  where a phonetic spelling would do damage.
+- **Smart mode** (tray menu / `READER_SMART_MODE`) sends the capture through
+  `flow_core.query_ollama` with `personas.READER_CLEANUP_PROMPT`. It is off by
+  default, skipped for long selections, and always falls back to the regex clean —
+  the reader never stays silent because the LLM was slow.
+
+---
+
+## 10. Files written at runtime (git-ignored)
 | File | Purpose |
 |------|---------|
 | `flow_capture.wav` | Temporary audio buffer (deleted after each decode) |
@@ -152,4 +200,18 @@ Hallucination originates in Whisper, not the app code. Mitigations in `transcrib
 **None of these grow without bound:** the debug log rotates, history is trimmed at boot,
 and `Shift+F2` clears both on demand. The debug log is the first place to look when
 something misbehaves — every transcription records `mode=…` and `lang=…`, and
-re-decodes / skips / fallbacks are all logged.
+re-decodes / skips / fallbacks are all logged. Both halves write to the same log.
+
+---
+
+## 11. Known gaps (the single-process merge)
+Because the halves are separate processes, three things are currently the user's
+responsibility rather than the engine's. All three need solving before the two can be
+merged into one process:
+
+1. **Mic / speaker interlock** — nothing stops you starting a dictation while the
+   reader is speaking; Whisper would happily transcribe the synthetic voice.
+2. **Clipboard broker** — both halves drive the clipboard. Each restores what it
+   found, but a capture and an injection overlapping within the same ~150 ms window
+   can still race.
+3. **One tray icon** — today each half owns its own.

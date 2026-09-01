@@ -3,6 +3,9 @@
 How to tweak Zero- Flow. Most things are changed in **`.env`** (no code). The deeper
 ones (LLM provider, prompts, voice macros) are small, clearly-marked edits in the code.
 
+One `.env` configures **both halves** — dictation (`local_flow.py`) and the reader
+(`reader/`). Reader-only settings are in §10.
+
 > After changing **`.env`** you must **restart** the engine. Changes to `personas.py`
 > or `local_flow.py` also require a restart.
 
@@ -23,6 +26,11 @@ only set what you want to change.
 | `ENABLE_AUDIO_CHIMES` | `True` | Beeps on start/stop/success |
 | `ENABLE_TOAST_NOTIFICATIONS` | `True` | Windows toast pop-ups |
 | `HOTKEY_*` | see §2 | Key bindings |
+| `HOTKEY_READ` | `f4` | Read the highlighted text aloud (see §10) |
+| `READER_VOICE` | `af_heart` | Which Kokoro voice speaks (see §10) |
+| `READER_SMART_MODE` | `False` | LLM-clean captured text before speaking (see §10) |
+| `READER_SMART_MAX_CHARS` | `1000` | Selections longer than this skip the LLM pass |
+| `READER_LLM_TIMEOUT` | `10` | Seconds to wait for the LLM before speaking anyway |
 
 ---
 
@@ -252,3 +260,55 @@ Also in **`personas.py`**:
 | `flow_capture.wav` | temp audio | deleted after each decode |
 
 `Shift+F2` clears the log + history instantly. None of these grow without bound.
+The reader writes nothing of its own — it logs to the same `flow_debug.log`.
+
+---
+
+## 10. The reader (text → speech)
+Start it with **`Launch_Reader.bat`** (or `python -m reader`). It is a separate
+process from dictation: run either, or both at once.
+
+```ini
+HOTKEY_READ="f4"            # read the highlighted text aloud
+READER_VOICE="af_heart"     # af_heart | af_bella | bf_emma
+READER_SMART_MODE="False"   # True = LLM-clean the capture before speaking
+READER_SMART_MAX_CHARS=1000 # longer selections skip the LLM pass
+READER_LLM_TIMEOUT=10       # seconds to wait before speaking anyway
+```
+
+`HOTKEY_PANIC` (default `Esc`) silences the reader as well as cancelling a recording.
+
+**Tray menu.** Voice, **Smart LLM Cleaning** and **Suspend Listener** are all
+switchable at runtime from the reader's tray icon; `.env` only sets the startup
+defaults.
+
+**Smart mode.** Off by default. When on, the capture goes through the same local LLM
+as Polish/Translate using `personas.READER_CLEANUP_PROMPT`, which strips navigation,
+cookie notices and footnote markers. It never summarises, and if the LLM is slow,
+unreachable, or the selection is longer than `READER_SMART_MAX_CHARS`, the reader
+falls back to the instant regex clean — it never goes silent waiting for the model.
+
+> **Cold-model note:** Ollama unloads an idle model after a few minutes. The first
+> smart read after that spends its whole timeout waiting for the model to load and
+> falls back to the regex clean; the next one is warm and works. Raise
+> `READER_LLM_TIMEOUT` if you would rather wait than fall back.
+
+**Voices.** The three in the tray menu are the tested ones; `READER_VOICE` accepts any
+voice id that Kokoro-82M ships. To change the menu itself, edit `VOICES` in
+`reader/voice_engine.py`.
+
+**Pronunciation.** Words the voice mangles are rewritten phonetically just before
+speaking, from `PRONUNCIATION_MAP` in `personas.py`:
+
+```python
+PRONUNCIATION_MAP = {
+    "Yuki": "Yoo-kee",
+    "Tsukihime": "Soo-kee-hee-may",
+}
+```
+
+Keep these out of `BASE_VOCABULARY` — that list is a *spelling* hint for Whisper and
+the casing pass, so a phonetic spelling there would corrupt your dictation.
+
+**GPU.** Kokoro-82M uses CUDA when `torch` sees a GPU and CPU otherwise, decided
+automatically on the first read. It is a small model — CPU is perfectly usable.

@@ -1,12 +1,12 @@
 faster-whisper==1.0.3
 sounddevice==0.4.6
-soundfile==0.12.1
+soundfile==0.14.0
 keyboard==0.13.5
 pyperclip==1.8.2
 requests==2.31.0
 numpy==1.26.4
 python-dotenv==1.0.1
-win11toast==0.35
+win11toast==0.36.3
 colorama==0.4.6
 pystray==0.19.5
 Pillow==10.2.0
@@ -18,3 +18,10 @@ Pillow==10.2.0
 # Pinned: cuDNN 9.x requires ctranslate2 >= 4.5 (pulled in by faster-whisper).
 nvidia-cublas-cu12~=12.4
 nvidia-cudnn-cu12~=9.1
+
+# --- Reader: text-to-speech (Kokoro) ---
+# kokoro pulls in torch. For GPU speech synthesis install the CUDA build of torch
+# FIRST, otherwise pip resolves the CPU-only wheel:
+#   pip install torch==2.5.1+cu121 --index-url https://download.pytorch.org/whl/cu121
+# The reader runs fine on CPU too — Kokoro-82M is small.
+kokoro==0.9.4

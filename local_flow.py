@@ -12,6 +12,9 @@ Action keys:
     Shift+F1  vocabulary maintenance   Shift+F2  clear log & history
     Shift+F3  fix the current line     Esc       cancel an in-progress recording
 
+The text-to-speech half of the engine lives in `reader/` (F4 reads the highlighted
+selection aloud). Both halves share `flow_core.py`, `personas.py` and `engine_ui.py`.
+
 See ARCHITECTURE.md for the full design rationale.
 """
 import os
@@ -21,7 +24,6 @@ import queue
 import threading
 import re
 import logging
-from logging.handlers import RotatingFileHandler
 import traceback
 from datetime import datetime
 
@@ -30,43 +32,28 @@ import sounddevice as sd
 import soundfile as sf
 import keyboard
 import pyperclip
-import requests
 from faster_whisper import WhisperModel
-from dotenv import load_dotenv
 
 try:
     import personas
     import engine_ui as ui
+    from flow_core import (
+        VOCAB_CACHE_FILE, TEMP_AUDIO_FILE, HISTORY_FILE, LOG_FILE, LOG_HANDLER,
+        ENABLE_AUDIO_CHIMES, ENABLE_TOASTS,
+        get_ollama_model, load_vocabulary, query_ollama,
+    )
 except ImportError as e:
     print(f"❌ Critical error: Missing local module: {e}")
     sys.exit(1)
 
-# =====================================================================
-# PATHS & LOGGING
-# =====================================================================
-BASE_DIR = os.path.dirname(os.path.abspath(__file__))
-VOCAB_CACHE_FILE = os.path.join(BASE_DIR, "flow_vocabulary.txt")
-TEMP_AUDIO_FILE = os.path.join(BASE_DIR, "flow_capture.wav")
-HISTORY_FILE = os.path.join(BASE_DIR, "flow_history.md")
-LOG_FILE = os.path.join(BASE_DIR, "flow_debug.log")
-
-# Rotate the debug log so it can never grow without bound: a ~1 MB live file plus
-# two ~1 MB backups (≈3 MB cap total), oldest discarded automatically.
-_log_handler = RotatingFileHandler(LOG_FILE, maxBytes=1_000_000, backupCount=2, encoding="utf-8")
-logging.basicConfig(level=logging.INFO,
-                    format='%(asctime)s - %(levelname)s - %(message)s',
-                    handlers=[_log_handler])
 logging.info("=== Zero- Core Application Boot Sequence Initiated ===")
-
-load_dotenv()
 
 # =====================================================================
 # CONFIGURATION
 # =====================================================================
+# Dictation-only settings live here; everything shared with the reader (paths, the
+# debug log, the LLM client, vocabulary, chimes/toasts) comes from flow_core.
 WHISPER_MODEL_NAME = os.getenv("WHISPER_MODEL_NAME", "large-v3")
-OLLAMA_HOST_URL    = os.getenv("OLLAMA_HOST_URL", "http://127.0.0.1:11434/api/generate")
-OLLAMA_MODEL_NAME  = os.getenv("OLLAMA_MODEL_NAME", "").strip()  # pin an exact model (e.g. qwen2.5:7b); blank = auto-discover
-FALLBACK_LLM       = os.getenv("FALLBACK_LLM", "gemma2:27b")
 SAMPLE_RATE        = int(os.getenv("SAMPLE_RATE", 16000))
 CHANNELS           = int(os.getenv("CHANNELS", 1))
 
@@ -97,9 +84,6 @@ HOTKEYS = {
     "panic":       os.getenv("HOTKEY_PANIC", "esc"),
 }
 
-ENABLE_AUDIO_CHIMES = os.getenv("ENABLE_AUDIO_CHIMES", "True").lower() in ('true', '1', 't')
-ENABLE_TOASTS       = os.getenv("ENABLE_TOAST_NOTIFICATIONS", "True").lower() in ('true', '1', 't')
-
 # This engine only ever speaks Arabic or English; anything else is a misdetection.
 SUPPORTED_LANGS = ("ar", "en")
 # Clips shorter than this (after capture) are dropped — they only ever produce
@@ -108,14 +92,12 @@ MIN_CLIP_SECONDS = 0.4
 # flow_history.md is trimmed back to its newest content once it grows past this.
 HISTORY_MAX_BYTES = 500_000
 
-LEARN_PATTERN = re.compile(r'\[LEARN:\s*(.*?)\]')
 URL_PATTERN = re.compile(r'https?://\S+|www\.\S+')
 
 # =====================================================================
 # RUNTIME STATE (set in main / mutated by the hotkey + worker threads)
 # =====================================================================
 model = None              # faster-whisper model, loaded in main()
-OLLAMA_MODEL = None       # discovered LLM name, set in main()
 recording = False         # True while the mic stream is open
 cancel_flag = False       # set by Esc to discard the current capture
 active_mode = "en_raw"    # which mode the in-flight recording belongs to
@@ -149,39 +131,9 @@ def load_whisper_model():
         logging.info("Whisper model active on CPU (int8).")
         return m
 
-def discover_ollama_model():
-    """Choose the LLM to use, in priority order:
-      1. OLLAMA_MODEL_NAME from .env, if set — pins an exact model (e.g. qwen2.5:7b).
-      2. Otherwise the first model Ollama is currently serving.
-      3. Otherwise FALLBACK_LLM (used when Ollama is unreachable).
-    """
-    if OLLAMA_MODEL_NAME:
-        return OLLAMA_MODEL_NAME
-    try:
-        tags_url = OLLAMA_HOST_URL.replace("/api/generate", "/api/tags")
-        response = requests.get(tags_url, timeout=2)
-        if response.status_code == 200 and response.json().get("models"):
-            return response.json()["models"][0]["name"]
-    except Exception:
-        pass
-    return FALLBACK_LLM
-
 # =====================================================================
-# VOCABULARY, HISTORY & LLM
+# HISTORY
 # =====================================================================
-def load_vocabulary():
-    """Base vocabulary plus any words the LLM has learned over time."""
-    vocab = set(personas.BASE_VOCABULARY)
-    if os.path.exists(VOCAB_CACHE_FILE):
-        try:
-            with open(VOCAB_CACHE_FILE, "r", encoding="utf-8") as f:
-                for line in f:
-                    if line.strip():
-                        vocab.add(line.strip())
-        except Exception:
-            pass
-    return list(vocab)
-
 def log_to_history(text, mode):
     if not text:
         return
@@ -203,43 +155,6 @@ def cap_history_file():
             logging.info("flow_history.md trimmed (exceeded size cap).")
     except Exception as e:
         logging.error(f"History cap failed: {e}")
-
-def query_ollama(raw_text, context_text, instruction):
-    """Send text to the local LLM with a task instruction; return its output (or
-    the original text on failure). Honours an inline `[LEARN: word]` request."""
-    prompt = f"{instruction}\n\n"
-    if context_text:
-        prompt += f"Context Window Data:\n{context_text}\n\n"
-    prompt += f"Input Raw String: {raw_text}\nOutput String:"
-
-    ui.start_processing_spinner("AI Processing")
-    try:
-        response = requests.post(
-            OLLAMA_HOST_URL,
-            json={"model": OLLAMA_MODEL, "prompt": prompt, "stream": False,
-                  "options": {"temperature": 0.2}},
-            timeout=15.0,
-        )
-        ui.stop_processing_spinner()
-        if response.status_code == 200:
-            output = response.json().get("response", raw_text).strip()
-            return _absorb_learned_word(output)
-    except Exception:
-        ui.stop_processing_spinner()
-        ui.show_toast("⚠️ LLM Offline", "Ollama API failed to respond.", ENABLE_TOASTS)
-    return raw_text
-
-def _absorb_learned_word(output):
-    """If the LLM tagged a new term as `[LEARN: word]`, persist it and strip the tag."""
-    match = LEARN_PATTERN.search(output)
-    if not match:
-        return output
-    word = match.group(1).strip()
-    if word and word not in load_vocabulary():
-        with open(VOCAB_CACHE_FILE, "a", encoding="utf-8") as f:
-            f.write(f"{word}\n")
-        ui.show_toast("🧠 Learned New Word", f"Added '{word}'", ENABLE_TOASTS)
-    return LEARN_PATTERN.sub('', output).strip()
 
 def run_memory_maintenance():
     """Shift+F1 — let the LLM dedupe / clean the learned-vocabulary file."""
@@ -272,10 +187,10 @@ def purge_diagnostic_files():
     except Exception as e:
         logging.error(f"History purge failed: {e}")
     try:
-        _log_handler.acquire()
-        _log_handler.stream.seek(0)
-        _log_handler.stream.truncate()
-        _log_handler.release()
+        LOG_HANDLER.acquire()
+        LOG_HANDLER.stream.seek(0)
+        LOG_HANDLER.stream.truncate()
+        LOG_HANDLER.release()
     except Exception:
         pass
     for suffix in (".1", ".2"):                  # also drop the rotated backups
@@ -562,15 +477,14 @@ def _run_async(fn):
 # ENTRY POINT
 # =====================================================================
 def main():
-    global model, OLLAMA_MODEL
+    global model
 
     ui.update_console_title("INITIALIZING HARDWARE")
-    OLLAMA_MODEL = discover_ollama_model()
     model = load_whisper_model()
     cap_history_file()
 
     ui.update_console_title("ONLINE")
-    ui.print_boot_sequence(OLLAMA_MODEL, HOTKEYS)
+    ui.print_boot_sequence(get_ollama_model(), HOTKEYS)
     ui.show_toast("🚀 Zero- Flow Online", "Background engine is active and listening.", ENABLE_TOASTS)
     ui.setup_system_tray()
     ui.set_window_icon()

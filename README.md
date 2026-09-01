@@ -5,8 +5,8 @@
 <h1 align="center">Zero- Flow Engine</h1>
 
 <p align="center">
-  A high-performance, fully local, bilingual (Arabic / English) voice-dictation
-  and text-injection engine for Windows 11.
+  A high-performance, fully local, bilingual (Arabic / English) voice engine for
+  Windows 11 — speech into any app in one half, the screen read back aloud in the other.
 </p>
 
 ---
@@ -18,7 +18,19 @@
 - **Dynamic local LLM** — auto-discovers and binds to whatever model your local **Ollama** instance is serving (no hardcoded model). Powers Polish, Translate, and line-correction.
 - **Self-evolving vocabulary** — learns proper nouns and technical terms on the fly via `[LEARN: …]` and remembers them across sessions.
 - **Voice macros** — spoken tokens like *“new line”*, *“bullet”*, *“format code”*, *“and send”* become real keystrokes and formatting.
+- **Reads text back to you** — highlight anything, press `F4`, and a local **Kokoro** voice speaks it. An optional LLM pass strips web-page junk first, and `Esc` silences it instantly.
 - **Background-friendly** — system-tray icon, optional toast notifications and audio chimes. Nothing ever leaves your machine.
+
+## 🧱 Two halves, one engine
+| Half | Direction | Run it with | Entry point |
+|------|-----------|-------------|-------------|
+| **Flow** | speech → text | `Launch_Flow.bat` | `local_flow.py` |
+| **Reader** | text → speech | `Launch_Reader.bat` | `reader/` (`python -m reader`) |
+
+They are separate processes and either one runs happily on its own. They share
+`flow_core.py` (config, logging, the Ollama client, the learned vocabulary),
+`personas.py` (prompts and word lists) and `engine_ui.py` (console, chimes, toasts,
+tray) — so there is one `.env`, one debug log and one vocabulary for both.
 
 ## 🧩 Requirements
 - Windows 11
@@ -45,8 +57,10 @@
 3. Copy `.env.example` to `.env` and adjust to taste.
 4. Make sure Ollama is running.
 5. Launch:
-   - **`Launch_Flow.bat`** — visible console (recommended for the first run)
-   - **`Launch_Silent.vbs`** — runs invisibly in the background
+   - **`Launch_Flow.bat`** — dictation, visible console (recommended for the first run)
+   - **`Launch_Silent.vbs`** — dictation, invisible background process
+   - **`Launch_Reader.bat`** / **`Launch_Reader_Silent.vbs`** — the read-aloud half
+     (start it as well as, or instead of, dictation)
 
 > **Windows 11 tray tip:** new tray icons are hidden by default. Click the `^` arrow next to the clock to find the Zero- Flow icon, or pin it permanently via *Settings → Personalization → Taskbar → Other system tray icons*.
 
@@ -63,6 +77,17 @@
 | `Shift + F2` | Clear the debug log & dictation history |
 | `Shift + F3` | Rewrite & correct the current line |
 | `Esc` | Cancel the current recording (does nothing when idle) |
+
+**Reader** (`Launch_Reader.bat`, separate process):
+
+| Key | Action |
+|-----|--------|
+| `F4` | Read the **highlighted text** aloud |
+| `Esc` | Silence the reader immediately |
+
+Voice selection, the optional LLM clean-up, and suspending the listener live in the
+reader's tray menu. The first `F4` of a session loads the voice model, so it takes a
+few seconds; every press after that is instant.
 
 ## 🛠️ Customizing
 Almost everything is tweakable. See **[CONFIGURATION.md](CONFIGURATION.md)** for:

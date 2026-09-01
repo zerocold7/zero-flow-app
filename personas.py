@@ -36,6 +36,19 @@ LINE_CORRECTION_PROMPT = (
     "Output ONLY the corrected finalized line string with no explanations or chat tags."
 )
 
+# Used by the reader (text -> speech): strips page furniture so the TTS voice reads
+# prose instead of navigation junk. Deliberately conservative — the reader falls back
+# to the regex-only clean-up whenever the LLM is slow or unreachable.
+READER_CLEANUP_PROMPT = (
+    "You are a text-to-speech pre-processor. Strip web page junk (navigation, cookie "
+    "notices, share buttons, timestamps, footnote markers) from the user's input and "
+    "return the remaining prose so it can be read aloud.\n\n"
+    "Rules:\n"
+    "1. Do NOT summarize, translate, rephrase or shorten the actual prose — keep every word.\n"
+    "2. Do NOT add titles, notes or commentary.\n"
+    "3. Output ONLY the text to be spoken."
+)
+
 MEMORY_MAINTENANCE_PROMPT = (
     "You are a memory maintenance AI. The following is a raw list of technical vocabulary terms "
     "collected over time by a voice dictation engine. Your job is to format and clean this list.\n\n"
@@ -56,6 +69,18 @@ VOICE_MACROS = {
     "bullet": ["bullet", "point", "نقطة", "قائمة"],
     "code_block": ["format code", "كود"],
     "press_enter": ["and send", "انتر"]
+}
+
+# Words the TTS voice mispronounces, rewritten phonetically just before speaking.
+# Reader-only: this never touches dictation output, and these spellings are
+# deliberately NOT in BASE_VOCABULARY (that list feeds Whisper's decoder hint and
+# the casing pass, where a phonetic spelling would do damage).
+PRONUNCIATION_MAP = {
+    "Yuki": "Yoo-kee",
+    "aqeeq": "ah-keek",
+    "Type-Moon": "Type Moon",
+    "Nasu": "Nah-soo",
+    "Tsukihime": "Soo-kee-hee-may",
 }
 
 PUNCTUATION_MAP = {

@@ -4,6 +4,43 @@ All notable work on the **Zero- Flow Engine**. Newest first.
 
 ---
 
+## [1.1.0] — 2026-09-01 — The reader: text → speech
+
+The engine gained its second half. Highlight text anywhere, press `F4`, and a local
+**Kokoro-82M** voice reads it aloud. Dictation is unchanged in behaviour.
+
+### ✨ Added
+- **`reader/`** — the text-to-speech half, run with `Launch_Reader.bat` /
+  `Launch_Reader_Silent.vbs` / `python -m reader`. `F4` reads the selection, `Esc`
+  silences it, and the tray menu switches voice, smart cleaning and suspend.
+- **Lazy voice-model loading** — Kokoro (and `torch` with it) is imported on the first
+  read, not at startup, so the reader launches instantly.
+- **Chunked playback** — speech starts before the passage finishes synthesising and
+  can be cut off mid-sentence.
+- **`READER_*` settings** in `.env` (hotkey, voice, smart mode, limits) — see
+  CONFIGURATION.md §10.
+
+### 🔧 Changed
+- **New `flow_core.py`** — paths, `.env` config, the rotating debug log, the learned
+  vocabulary and the Ollama client moved out of `local_flow.py` into one shared
+  module. Both halves now use **one** LLM client, **one** vocabulary and **one** log.
+- **The LLM name is resolved lazily and cached**, instead of at dictation startup.
+- **The reader honours your `.env`** — it previously hardcoded `qwen2.5:7b`, the
+  Ollama URL, and a 3-second timeout that made its LLM pass fail silently almost every
+  time. It now uses the engine's model discovery, `OLLAMA_MODEL_NAME` pin and fallback.
+- **The reader restores your clipboard** after reading a selection, matching what the
+  dictation half already did.
+- **`F4` is suppressed** while the reader runs, so it never leaks into the focused app
+  (the same rule the dictation record keys follow).
+- **`requirements.txt`** — added `kokoro`; corrected the stale `soundfile` and
+  `win11toast` pins to the versions actually in use.
+
+### 🗑️ Removed
+- The reader's duplicate Ollama client, duplicate console theme, and hardcoded
+  "RTX 4070 / qwen2.5:7b" banner (it reported those regardless of the real hardware).
+
+---
+
 ## [1.0.0] — 2026-06-08 — First complete, documented release
 
 A local, private, bilingual (Arabic / English) voice-dictation and text-injection
