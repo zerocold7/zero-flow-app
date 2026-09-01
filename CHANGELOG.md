@@ -4,6 +4,36 @@ All notable work on the **Zero- Flow Engine**. Newest first.
 
 ---
 
+## [1.3.1] — 2026-09-01 — Correctness pass
+
+### 🐛 Fixed
+- **Pronunciation fixes were case-sensitive.** `aqeeq` was corrected while `Aqeeq`
+  went through untouched. Matching is now case-insensitive and anchored to word
+  boundaries, so `Nasu` is still fixed but `Nasuverse` is left alone.
+- **Footnote markers were read aloud as numbers.** The clean-up stripped `[` and `]`
+  but kept the digits, so `[1]` became a spoken "one". Reference markers are now
+  dropped whole, and the space they used to strand before punctuation goes with them.
+- **`Launch_Silent.vbs` depended on the working directory**, so it failed whenever it
+  was started from anywhere but its own folder (a shortcut, Startup, Task Scheduler).
+- **A CPU-only torch install failed silently.** `requirements.txt` cannot express the
+  `+cu121` index, so a plain `pip install -r` can fetch the CPU wheel and halve speech
+  speed with no error anywhere. The engine now logs exactly that, with the fix.
+
+### ✨ Added
+- **`tests/`** — 38 standard-library unit tests over the text logic that breaks
+  quietly: voice macros and spoken punctuation, sentence batching, reader clean-up,
+  and `[LEARN: …]` vocabulary absorption. `python -m unittest discover -s tests`.
+- `local_flow.apply_macros()`, split out of `inject_text()` so that logic is testable
+  without a keyboard or a clipboard.
+
+### 📝 Docs
+- The beginner setup guides (English and Arabic) now cover the reader, `F4`, and
+  `Launch_Zero.bat`, and are honest about the wait on a laptop with no GPU.
+- The two setup **PDFs** are stale — they predate the reader — and are flagged as such
+  in the README. They are generated artifacts and need rebuilding from source.
+
+---
+
 ## [1.3.0] — 2026-09-01 — One window and the GPU, at the same time
 
 `Launch_Zero.bat` no longer trades speech speed for a single window. It gets both.

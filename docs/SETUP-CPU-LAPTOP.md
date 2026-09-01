@@ -174,17 +174,37 @@ Hold the key, speak, release. The key **forces** the language, so it's never mis
 | `Shift + F1` | Tidy up the learned-vocabulary file |
 | `Shift + F2` | Clear the debug log and dictation history |
 | `Shift + F3` | Rewrite and fix the current line |
-| `Esc` | Cancel the recording in progress |
+| `F4` | **Read the highlighted text aloud** (see Step 12) |
+| `Esc` | Cancel the recording, or silence the reading |
 
 ---
 
 ## Step 11 — Everyday use: starting and stopping
-- **Start:** double-click `Launch_Flow.bat` and minimize the window.
+- **Start:** double-click `Launch_Zero.bat` (dictation **and** reading aloud) or
+  `Launch_Flow.bat` (dictation only) and minimize the window.
 - **Stop:** close that console window (click the **X**).
 - **Find the tray icon:** click the small **^** arrow next to the clock; the Zero- Flow icon lives there.
 - **Ollama** starts automatically with Windows, so the AI features just work.
 
 > 💡 **Run it invisibly:** double-click `Launch_Silent.vbs` to start with no window. To stop it then, open **Task Manager** (Ctrl+Shift+Esc), find **python**, and click **End task**. Stick with the visible `.bat` until you're comfortable.
+
+---
+
+## Step 12 — Reading text aloud (`F4`)
+The engine also reads to you. Highlight any text — a web page, a PDF, a chat message —
+and press **`F4`**. A local voice reads it out. Press **`Esc`** to stop it.
+
+To get this key you must start the engine with **`Launch_Zero.bat`** rather than
+`Launch_Flow.bat`. Everything else works exactly the same; you just get `F4` as well.
+
+Right-click the tray icon to switch voice, or to turn on **Smart LLM Cleaning**, which
+asks the local AI to strip page clutter (menus, cookie notices) before reading.
+
+> 🐢 **On a laptop with no NVIDIA card, expect a pause before the voice starts.** The
+> first `F4` of a session also has to load the voice model, which takes a few seconds
+> more. It speaks smoothly once it begins — it's the start-up that's slow, and it is
+> noticeably slower without a graphics card. Reading a paragraph at a time rather than
+> a whole page keeps that wait short.
 
 ---
 

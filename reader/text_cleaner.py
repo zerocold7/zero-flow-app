@@ -24,23 +24,41 @@ SMART_MODE_MAX_CHARS = int(os.getenv("READER_SMART_MAX_CHARS", 1000))
 READER_LLM_TIMEOUT = float(os.getenv("READER_LLM_TIMEOUT", 10.0))
 
 URL_PATTERN = re.compile(r'http[s]?://\S+')
+# Footnote/reference markers, dropped whole. Stripping the brackets alone would leave
+# the digits behind, and the voice would read "[1]" aloud as "one".
+FOOTNOTE_PATTERN = re.compile(r'\[\s*\d+(?:\s*[,–-]\s*\d+)*\s*\]')
 MARKUP_PATTERN = re.compile(r'[*#_~\[\]`|]')
 WHITESPACE_PATTERN = re.compile(r'\s+')
+# Removing a marker mid-sentence strands a space in front of the punctuation
+# ("disputed ."), which the voice reads as a stumble.
+ORPHAN_SPACE_PATTERN = re.compile(r'\s+([.,;:!?،؛؟])')
+
+# Built once from personas.PRONUNCIATION_MAP. Case-insensitive with word boundaries,
+# because the map is written in one casing and real text is not: "aqeeq" was being
+# fixed while "Aqeeq" sailed through untouched.
+_PRONUNCIATION_RE = re.compile(
+    r'\b(?:%s)\b' % "|".join(sorted((re.escape(w) for w in personas.PRONUNCIATION_MAP),
+                                     key=len, reverse=True)),
+    re.IGNORECASE) if personas.PRONUNCIATION_MAP else None
+_PRONUNCIATION_LOOKUP = {w.lower(): p for w, p in personas.PRONUNCIATION_MAP.items()}
 
 
 def fix_pronunciation(text):
     """Rewrite words the TTS voice mangles into their phonetic spelling."""
-    for word, phonetic in personas.PRONUNCIATION_MAP.items():
-        text = text.replace(word, phonetic)
-    return text
+    if _PRONUNCIATION_RE is None:
+        return text
+    return _PRONUNCIATION_RE.sub(
+        lambda m: _PRONUNCIATION_LOOKUP[m.group(0).lower()], text)
 
 
 def clean_text_instant(raw_text):
     """Strip URLs, markdown furniture and runs of whitespace. Never fails."""
     text = fix_pronunciation(raw_text)
     text = URL_PATTERN.sub('', text)
-    text = MARKUP_PATTERN.sub('', text)
+    text = FOOTNOTE_PATTERN.sub('', text)        # before the markup pass, which would
+    text = MARKUP_PATTERN.sub('', text)          # leave the bare digits behind
     text = WHITESPACE_PATTERN.sub(' ', text)
+    text = ORPHAN_SPACE_PATTERN.sub(r'\1', text)
     return text.strip()
 
 

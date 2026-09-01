@@ -66,6 +66,9 @@ two coordinate over the one resource they'd otherwise fight for — the micropho
 
 ## 🚀 Setup
 
+> 📄 **Note:** the two setup **PDFs** below predate the read-aloud half and still
+> describe a dictation-only engine. The Markdown guides beside them are current.
+
 > 🟢 **New here? Never installed something like this before?**
 > Follow the **[Beginner Setup Guide — step by step, no GPU needed](docs/SETUP-CPU-LAPTOP.md)**
 > (also available as a **[printable PDF](docs/Zero-Flow-Setup-Guide.pdf)**, or the
@@ -126,6 +129,16 @@ Almost everything is tweakable. See **[CONFIGURATION.md](CONFIGURATION.md)** for
 
 And **[ARCHITECTURE.md](ARCHITECTURE.md)** for how the engine works internally, or
 **[CHANGELOG.md](CHANGELOG.md)** for the full feature/fix list.
+
+## 🧪 Tests
+The text-handling logic — voice macros, spoken punctuation, sentence batching,
+vocabulary learning — is covered by a small suite using only the standard library:
+
+```bash
+python -m unittest discover -s tests
+```
+
+No extra dependencies, no model loading; it runs in well under a second.
 
 ## 🔒 Privacy
 Everything runs locally by default — audio never leaves the machine, transcription is

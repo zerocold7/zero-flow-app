@@ -24,7 +24,8 @@ a local LLM to clean up or translate text.
 | `flow_signals.py` | **Shared:** Windows named events that keep the two halves off each other's toes |
 | `local_flow.py` | Flow: hotkeys, audio capture, transcription, refinement, injection |
 | `reader/`       | Reader: `app.py` (the half itself), `clipboard_tool.py`, `text_cleaner.py`, `voice_engine.py` |
-| `zero_flow.py`  | The merged engine: hosts both halves in one process, one console, one tray icon |
+| `zero_flow.py`  | The supervisor: runs dictation and hosts the reader as a child sharing its console |
+| `tests/`        | Standard-library unit tests for the pure text logic (`python -m unittest discover -s tests`) |
 
 **How they are hosted.** `zero_flow.py` is a supervisor, not a merge: it runs the
 dictation half in its own process and launches the reader as a **child process**,
@@ -176,6 +177,8 @@ Hallucination originates in Whisper, not the app code. Mitigations in `transcrib
 - **Voice macros** (`personas.VOICE_MACROS`): a leading "new line" / "bullet" /
   "format code" or a trailing "and send" is detected, stripped from the text, and
   turned into the matching keystroke/format (`shift+enter`, `• `, `` `code` ``, `enter`).
+  All of this lives in `apply_macros()`, kept separate from `inject_text()` so it can
+  be tested without driving the keyboard — see `tests/test_macros.py`.
 - **Punctuation map**: trailing spoken punctuation ("period", "comma", Arabic
   equivalents) becomes real punctuation.
 - **Vocabulary casing**: known terms are re-cased to their canonical form.
@@ -250,7 +253,8 @@ re-decodes / skips / fallbacks are all logged. Both halves write to the same log
   tray), the reader survives as a tray app. Its own Exit still works. A Windows Job
   Object with `JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE` would close this properly; worth
   adding only if orphans actually turn up in practice.
-- **Console interleaving.** Dictation redraws a live level meter with `` while
+- **Console interleaving.** Dictation redraws a live level meter with `
+` while
   recording. The mic interlock stops reading and recording overlapping, so the two
   rarely print at once, but nothing enforces it.
 

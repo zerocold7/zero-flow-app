@@ -13,14 +13,17 @@ renders while the first plays.
 The pipeline — and the `torch` import behind it — is loaded lazily on the first
 spoken word, not at import time, so startup stays instant.
 
-**Device policy.** Kokoro uses the GPU when it has the process to itself, and the CPU
-when it shares one with Whisper. That is not a preference, it is a hard requirement:
-torch 2.5.1+cu121 bundles cuDNN 9.1 while CTranslate2 (Whisper) needs the pip-installed
-cuDNN 9.23, Windows loads only one DLL per base name per process, and the loser
-**segfaults the whole process** — in either load order, with no exception to catch.
-CPU synthesis measures 3.6-5.2x realtime against 52-82x on GPU, so it stays ahead of
-playback but has far less headroom; sentence batching plus `preload()` is what keeps
-it feeling immediate. Run the halves as two processes if you want the voice on GPU.
+**Device policy.** The reader always runs in its own process — standalone, or as the
+child `zero_flow.py` spawns — so it can hold CUDA freely and `READER_DEVICE` is
+honoured as written.
+
+That isolation is deliberate. Hosting this half and Whisper as threads in *one*
+process forces the voice onto the CPU: torch 2.5.1+cu121 bundles cuDNN 9.1 while
+CTranslate2 (Whisper) needs the pip-installed cuDNN 9.23, Windows loads only one DLL
+per base name per process, and the loser **segfaults the whole process** — in either
+load order, with no exception to catch. `force_cpu()` exists for that layout and is
+unused by the shipped one. CPU synthesis measures 3.6-5.2x realtime against 52-82x on
+GPU, so it stays ahead of playback but with far less headroom.
 """
 import logging
 import os
@@ -51,8 +54,8 @@ VOICES = {
 }
 DEFAULT_VOICE = os.getenv("READER_VOICE", "af_heart")
 
-# "auto" (GPU when available), "cpu", or "cuda". The merged engine overrides this to
-# "cpu" via force_cpu() before the first read — see the module docstring.
+# "auto" (GPU when available), "cpu", or "cuda". Honoured under every launcher; only
+# an in-process merge would override it, via force_cpu() — see the module docstring.
 DEVICE_POLICY = os.getenv("READER_DEVICE", "auto").strip().lower()
 _forced_cpu_reason = None
 
@@ -88,6 +91,14 @@ def resolve_device():
     if DEVICE_POLICY == "cpu":
         return "cpu"
     import torch
+    if torch.version.cuda is None:
+        # A CPU-only torch wheel. requirements.txt cannot express the +cu121 index, so
+        # a plain `pip install -r` can quietly fetch this one and speech silently
+        # halves in speed with no error anywhere. Say so.
+        logging.warning("This is a CPU-only build of torch, so the voice model cannot "
+                        "use the GPU. Reinstall with: pip install torch==2.5.1+cu121 "
+                        "--index-url https://download.pytorch.org/whl/cu121")
+        return "cpu"
     if DEVICE_POLICY == "cuda":
         return "cuda"
     return "cuda" if torch.cuda.is_available() else "cpu"

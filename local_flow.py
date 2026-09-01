@@ -294,10 +294,17 @@ def refine_text(text):
     ui.play_tone("success_raw", ENABLE_AUDIO_CHIMES)
     return text
 
-def inject_text(text):
-    """Apply spoken macros/punctuation, then paste the text at the cursor."""
-    if not text:
-        return
+def apply_macros(text):
+    """Turn a raw transcription into the exact string to paste.
+
+    Spoken macros ("new line", "bullet", "format code", "and send") are detected,
+    stripped, and turned into formatting; spoken punctuation becomes real punctuation;
+    known vocabulary is re-cased. Returns `(text, lead_newline, end_enter)` — the two
+    flags being keystrokes the caller has to send, since they cannot live in a string.
+
+    Kept separate from `inject_text` so this logic is testable without driving the
+    keyboard and clipboard. See tests/test_macros.py.
+    """
     macros = personas.VOICE_MACROS
     text = text.strip()                          # match the same string the flags use
     lowered = text.lower()
@@ -326,12 +333,21 @@ def inject_text(text):
         text = f"`{text}`"
     if lead_bullet:
         text = "• " + text
+    elif not lead_newline and text and not wrap_code:
+        text = " " + text                        # keep spacing against the previous word
+
+    return text, lead_newline, end_enter
+
+
+def inject_text(text):
+    """Apply spoken macros/punctuation, then paste the text at the cursor."""
+    if not text:
+        return
+    text, lead_newline, end_enter = apply_macros(text)
 
     if lead_newline:
         keyboard.send('shift+enter')
         time.sleep(0.02)
-    elif text and not text.startswith(" ") and not lead_bullet and not wrap_code:
-        text = " " + text
 
     logging.info(f"Injecting text via clipboard paste: {text!r}")
     # Hold the clipboard for the whole save/paste/restore cycle so the reader cannot
