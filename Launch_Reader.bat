@@ -1,31 +1,26 @@
 @echo off
-title ZERO- FLOW READER RUNNER
+setlocal
+title ZERO- FLOW READER
 cls
 
 echo =========================================================
-echo 🔊 STARTING ZERO- FLOW READER (text to speech)
+echo  STARTING ZERO- FLOW READER (text to speech)
 echo =========================================================
 echo.
 
 cd /d "%~dp0"
 
-:: 1. Portable Python
-if exist ".\python_env\python.exe" (
-    echo 📦 Portable Python environment detected.
-    ".\python_env\python.exe" -m reader
-    goto :end
-)
+rem Keep this file pure ASCII with no labels: cmd re-reads a batch file by byte
+rem offset, and non-ASCII characters can desync that on some console codepages,
+rem which silently eats the first word of later lines.
+set "PY=python"
+if exist "python_env\python.exe" set "PY=python_env\python.exe"
+if exist "venv\Scripts\python.exe" set "PY=venv\Scripts\python.exe"
 
-:: 2. Virtual Env
-if exist "venv\Scripts\activate.bat" (
-    call venv\Scripts\activate.bat
-    python -m reader
-    goto :end
-)
+echo Using interpreter: %PY%
+echo.
+"%PY%" -m reader
 
-:: 3. Global System Python
-echo ⚠️ Running global system Python.
-python -m reader
-
-:end
+echo.
+echo Reader stopped. Press any key to close this window.
 pause > nul

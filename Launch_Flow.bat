@@ -1,31 +1,24 @@
 @echo off
+setlocal
 title ZERO- FLOW ENGINE RUNNER
 cls
 
 echo =========================================================
-echo 🎙️ STARTING LOCAL VOICE FLOW PIPELINE
+echo  STARTING LOCAL VOICE FLOW PIPELINE
 echo =========================================================
 echo.
 
 cd /d "%~dp0"
 
-:: 1. Portable Python
-if exist ".\python_env\python.exe" (
-    echo 📦 Portable Python environment detected.
-    ".\python_env\python.exe" local_flow.py
-    goto :end
-)
+rem Keep this file pure ASCII with no labels - see the note in Launch_Zero.bat.
+set "PY=python"
+if exist "python_env\python.exe" set "PY=python_env\python.exe"
+if exist "venv\Scripts\python.exe" set "PY=venv\Scripts\python.exe"
 
-:: 2. Virtual Env
-if exist "venv\Scripts\activate.bat" (
-    call venv\Scripts\activate.bat
-    python local_flow.py
-    goto :end
-)
+echo Using interpreter: %PY%
+echo.
+"%PY%" local_flow.py
 
-:: 3. Global System Python
-echo ⚠️ Running global system Python.
-python local_flow.py
-
-:end
+echo.
+echo Engine stopped. Press any key to close this window.
 pause > nul
