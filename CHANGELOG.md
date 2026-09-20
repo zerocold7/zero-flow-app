@@ -31,6 +31,8 @@ All notable work on the **Zero- Flow Engine**. Newest first.
   symptom → fix table, laptop heat), **docs/FAQ.md**, and Arabic versions of the
   install and hardware guides.
 - 19 tests for the tiers, the presets, the `.env` merge and the device setting (80 in all).
+- **`tools/`** — the scripts that rebuild the printable PDF and the Arabic Word file
+  from the Markdown guides, so those two generated files cannot drift again.
 
 ### 📝 Docs
 - CONFIGURATION.md's Whisper table overstated large-v3's memory (it said 5–6 GB; it

@@ -7,6 +7,11 @@ flow_history.md
 flow_debug.log*
 reader_debug.log*
 
+# Doc-tool dependencies (tools/README.md)
+node_modules/
+package-lock.json
+package.json
+
 # Python cache
 __pycache__/
 *.py[cod]
