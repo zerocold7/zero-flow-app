@@ -4,7 +4,7 @@ title ZERO- FLOW ENGINE
 cls
 
 echo =========================================================
-echo  STARTING THE ZERO- FLOW ENGINE (single process)
+echo  STARTING THE ZERO- FLOW ENGINE (one window)
 echo =========================================================
 echo.
 echo    Dictation and read-aloud in one window, one tray icon.

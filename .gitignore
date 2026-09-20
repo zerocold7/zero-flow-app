@@ -2,7 +2,7 @@
 flow_capture.wav
 
 # Local user memory & logs
-flow_vocabulary.txt
+flow_vocabulary.txt*
 flow_history.md
 flow_debug.log*
 reader_debug.log*
@@ -17,3 +17,4 @@ venv/
 env/
 python_env/
 .env
+.env.bak

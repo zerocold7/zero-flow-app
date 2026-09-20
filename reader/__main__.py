@@ -2,7 +2,7 @@
 Run the reader on its own:  python -m reader   (or Launch_Reader.bat)
 
 The engine's other half runs separately via `local_flow.py`. To run both in one
-process and one console window, use `zero_flow.py` instead.
+console window with one tray icon, use `zero_flow.py` instead.
 """
 import logging
 import traceback

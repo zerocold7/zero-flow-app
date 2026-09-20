@@ -6,8 +6,8 @@ ones (LLM provider, prompts, voice macros) are small, clearly-marked edits in th
 One `.env` configures **both halves** — dictation (`local_flow.py`) and the reader
 (`reader/`). Reader-only settings are in §10.
 
-> After changing **`.env`** you must **restart** the engine. Changes to `personas.py`
-> or `local_flow.py` also require a restart.
+> After changing **`.env`** you must **restart** the engine. Changes to `personas.py`,
+> `flow_core.py`, `local_flow.py` or `reader/` also require a restart.
 
 ---
 
@@ -15,9 +15,16 @@ One `.env` configures **both halves** — dictation (`local_flow.py`) and the re
 Copy `.env.example` to `.env` and edit. Everything here has a sensible default, so you
 only set what you want to change.
 
+> **The hardware-dependent settings have a shortcut.** `python check_hardware.py
+> --apply` detects your PC and writes the model and device settings for it; `presets/`
+> holds the same values as one file per kind of hardware. What each tier means, with
+> measured speeds: [docs/HARDWARE.md](docs/HARDWARE.md).
+
 | Variable | Default | What it does |
 |----------|---------|--------------|
 | `WHISPER_MODEL_NAME` | `large-v3` | Speech model — accuracy vs. speed/VRAM (see §3) |
+| `WHISPER_DEVICE` | `auto` | `auto` = NVIDIA GPU, falling back to CPU · `cpu` = skip the GPU (see §5) |
+| `WHISPER_COMPUTE_TYPE` | `float16` | GPU precision; `int8_float16` halves graphics memory (see §5) |
 | `OLLAMA_HOST_URL` | `http://127.0.0.1:11434/api/generate` | Where the LLM lives (see §6) |
 | `OLLAMA_MODEL_NAME` | *(blank)* | Pin an exact model, e.g. `qwen2.5:7b`. Blank = auto-pick the first model Ollama serves |
 | `FALLBACK_LLM` | `gemma2:27b` | Model name used only if Ollama is unreachable |
@@ -32,6 +39,8 @@ only set what you want to change.
 | `READER_SMART_MAX_CHARS` | `1000` | Selections longer than this skip the LLM pass |
 | `READER_LLM_TIMEOUT` | `10` | Seconds to wait for the LLM before speaking anyway |
 | `READER_DEVICE` | `auto` | `auto` / `cpu` / `cuda` for the voice model (see §10) |
+| `READER_FIRST_BATCH_CHARS` | `120` | Size of the first chunk of text sent to the voice (see §10) |
+| `READER_BATCH_CHARS` | `300` | Size of every chunk after the first (see §10) |
 
 ---
 
@@ -50,8 +59,12 @@ HOTKEY_AR2EN="f10"          # Translate Arabic -> English
 HOTKEY_FIX="shift+f3"          # fix the current line
 HOTKEY_MAINTENANCE="shift+f1"  # vocabulary maintenance
 HOTKEY_PURGE="shift+f2"        # clear debug log & history
-HOTKEY_PANIC="esc"             # cancel the current recording
+HOTKEY_PANIC="esc"             # cancel the current recording / silence the reader
+HOTKEY_READ="f4"               # read the highlighted text aloud (reader)
 ```
+
+The six record keys **toggle** — press once to start, press any record key again to
+stop — so pick keys you can tap, not ones you hold.
 
 Tips:
 - **Avoid keys with strong OS defaults** when possible (`F5` = browser refresh,
@@ -64,16 +77,25 @@ Tips:
 ---
 
 ## 3. Choosing a Whisper model
-Set `WHISPER_MODEL_NAME`. Larger = more accurate but slower and more VRAM.
+Set `WHISPER_MODEL_NAME`. Larger = more accurate (Arabic gains the most) but slower
+and more memory.
 
-| Model | Rel. speed | ~VRAM (GPU) | Notes |
-|-------|-----------|-------------|-------|
-| `tiny` / `base` | fastest | ~1 GB | low accuracy, fine for quick English |
-| `small` / `medium` | medium | ~2–5 GB | good balance |
-| `large-v3` | slowest | ~5–6 GB | **default** — best accuracy, best Arabic |
-| `distil-large-v3` | ~2× large | ~5 GB | near-large accuracy, faster (English-leaning) |
+| Model | Download | GPU memory (`float16` / `int8_float16`) | Notes |
+|-------|----------|------------------------------------------|-------|
+| `tiny` / `base` | 75 / 145 MB | ≈0.2–0.3 GB / less | fastest, low accuracy, weak Arabic |
+| `small` | 480 MB | ≈0.7 / 0.35 GB | the CPU default — good English, fair Arabic |
+| `medium` | 1.5 GB | ≈2 / 1 GB | good balance; the NVIDIA-laptop default |
+| `large-v3` | 3 GB | **3.9 / 2.0 GB** | **default** — best accuracy, best Arabic |
+| `distil-large-v3` | 1.5 GB | ≈2 / 1 GB | faster large-quality — **English only**, useless for the Arabic keys |
 
-On CPU, prefer `small` or `medium` — `large-v3` is heavy without a GPU.
+Bold figures were measured on an RTX 4070; the rest are estimates from model size. On
+a CPU, `large-v3` took 12.8 s for a 14 s clip — prefer `small`. The full per-hardware
+picture, with measured speeds: [docs/HARDWARE.md](docs/HARDWARE.md).
+
+A model you have not used before is downloaded from Hugging Face the next time the
+engine starts (the console says so); after that it loads from the local cache with no
+network call. No Hugging Face account or `HF_TOKEN` is needed. `WHISPER_MODEL_NAME`
+also accepts the path to a local model folder.
 
 ---
 
@@ -119,96 +141,140 @@ to `MODES` + `HOTKEYS` + `.env`).
 ---
 
 ## 5. GPU vs CPU
-The engine tries CUDA (`float16`) first and **falls back to CPU (`int8`) automatically**
-if the CUDA libraries are missing (`load_whisper_model` in `local_flow.py`).
+By default (`WHISPER_DEVICE="auto"`) the engine tries CUDA first and **falls back to
+the CPU (`int8`) automatically** if the CUDA libraries or the NVIDIA driver are missing
+(`load_whisper_model` in `local_flow.py`).
 
+```ini
+WHISPER_DEVICE="auto"             # auto = NVIDIA GPU, falling back to CPU | cpu = skip the GPU
+WHISPER_COMPUTE_TYPE="float16"    # GPU precision: float16 | int8_float16 | int8
+```
+
+- **`WHISPER_DEVICE="cpu"`** skips the GPU attempt — the right setting when there is no
+  NVIDIA card (AMD, Intel, built-in graphics), or to leave all the graphics memory to a
+  big AI model.
+- **`WHISPER_COMPUTE_TYPE="int8_float16"`** halves the speech model's graphics memory
+  (large-v3 measured 3.9 GB → 2.0 GB) for about 0.2 s more per clip. Use it on cards
+  under 11 GB. It only affects the GPU; the CPU always uses `int8`.
 - **GPU (NVIDIA):** keep `nvidia-cublas-cu12` and `nvidia-cudnn-cu12` in
   `requirements.txt` (installed by default).
-- **CPU-only:** remove those two lines to save ~1.2 GB. The engine will log
-  `Whisper model active on CPU (int8)` at boot.
+- **CPU-only:** remove those two lines to save ~1.2 GB.
 
-The chosen device is written to `flow_debug.log` at startup.
+Where the model ended up is shown in the start-up banner — e.g. `Speech to text:
+[Whisper small · CPU · int8]` — and written to `flow_debug.log`. Every dictation also
+logs how long it took (`1.21s for 14.2s of audio`), which is the number to watch when
+tuning.
+
+The **voice model** (reader) needs the CUDA build of `torch` for the GPU, and
+`pip install -r requirements.txt` alone fetches the CPU-only build. On an NVIDIA
+machine, install it first:
+
+```bash
+pip install torch==2.5.1+cu121 --index-url https://download.pytorch.org/whl/cu121
+```
+
+If the CPU build is installed anyway, the reader still works — on the CPU — and says so
+in `reader_debug.log`. `READER_DEVICE` (§10) chooses the device explicitly.
 
 ---
 
 ## 6. Using a different LLM provider (instead of Ollama)
-The LLM is only used for **Polish**, **Translate**, and the **line-fix / maintenance**
-actions — transcription itself is always local Whisper. The LLM integration is two
-small functions in `local_flow.py`:
+The LLM is only used for **Polish**, **Translate**, the **line-fix / maintenance**
+actions and the reader's optional **Smart LLM Cleaning** — transcription itself is
+always local Whisper. Both halves reach the LLM through two functions in
+**`flow_core.py`**:
 
-- `discover_ollama_model()` — asks Ollama which model is loaded (Ollama-specific).
-- `query_ollama(raw_text, context_text, instruction)` — sends the request and returns
-  the text.
+- `discover_ollama_model()` — picks the model: `OLLAMA_MODEL_NAME` if set, otherwise
+  whatever Ollama serves first. **Setting `OLLAMA_MODEL_NAME` skips the Ollama-only
+  discovery entirely**, which is all another provider needs here.
+- `query_ollama(raw_text, context_text, instruction, timeout=15.0)` — sends the request
+  and returns the text (or the input unchanged if anything fails).
 
-To switch providers you edit `query_ollama` (and skip discovery). Below are drop-in
-replacements.
+To switch providers you replace the body of `query_ollama`. The function keeps its
+name, so nothing else changes.
 
 ### A) Any OpenAI-compatible server (LM Studio, llama.cpp, vLLM, OpenAI, Groq, Together…)
-Most servers — local or cloud — speak the OpenAI `chat/completions` format. Add to `.env`:
+Most servers — local or cloud — speak the OpenAI `chat/completions` format. In `.env`:
 
 ```ini
 OLLAMA_HOST_URL="http://localhost:1234/v1/chat/completions"   # your server's URL
-FALLBACK_LLM="your-model-name"                                # exact model id
+OLLAMA_MODEL_NAME="your-model-id"                             # exact model id
 LLM_API_KEY=""                                                # required for cloud; blank for local
 ```
 
-Then in `local_flow.py`, read the key near the other config:
+In `flow_core.py`, read the key next to the other configuration:
 
 ```python
 LLM_API_KEY = os.getenv("LLM_API_KEY", "")
 ```
 
-…and replace the request block inside `query_ollama` with:
+…and replace `query_ollama` with:
 
 ```python
-    headers = {"Authorization": f"Bearer {LLM_API_KEY}"} if LLM_API_KEY else {}
-    response = requests.post(
-        OLLAMA_HOST_URL,
-        headers=headers,
-        json={
-            "model": OLLAMA_MODEL,
-            "messages": [
-                {"role": "system", "content": instruction},
-                {"role": "user", "content": prompt},
-            ],
-            "temperature": 0.2,
-        },
-        timeout=30.0,
-    )
-    ui.stop_processing_spinner()
-    if response.status_code == 200:
-        output = response.json()["choices"][0]["message"]["content"].strip()
-        return _absorb_learned_word(output)
+def query_ollama(raw_text, context_text, instruction, timeout=15.0):
+    user = f"Context Window Data:\n{context_text}\n\n" if context_text else ""
+    user += f"Input Raw String: {raw_text}\nOutput String:"
+
+    ui.start_processing_spinner("AI Processing")
+    try:
+        headers = {"Authorization": f"Bearer {LLM_API_KEY}"} if LLM_API_KEY else {}
+        response = requests.post(
+            OLLAMA_HOST_URL,
+            headers=headers,
+            json={
+                "model": get_ollama_model(),
+                "messages": [
+                    {"role": "system", "content": instruction},
+                    {"role": "user", "content": user},
+                ],
+                "temperature": 0.2,
+            },
+            timeout=timeout,
+        )
+        ui.stop_processing_spinner()
+        if response.status_code == 200:
+            output = response.json()["choices"][0]["message"]["content"].strip()
+            return _absorb_learned_word(output)
+        logging.warning(f"LLM returned HTTP {response.status_code}: {response.text[:200]}")
+        ui.show_toast("⚠️ LLM Error", f"HTTP {response.status_code}.", ENABLE_TOASTS)
+    except Exception as e:
+        ui.stop_processing_spinner()
+        logging.warning(f"LLM request failed: {e}")
+        ui.show_toast("⚠️ LLM Offline", "The LLM API failed to respond.", ENABLE_TOASTS)
+    return raw_text
 ```
 
-Finally, in `main()`, replace `OLLAMA_MODEL = discover_ollama_model()` with
-`OLLAMA_MODEL = FALLBACK_LLM` (other providers don't have Ollama's `/api/tags`).
+Cloud round-trips are slower than a local model; if replies time out, raise the
+`timeout=15.0` default (the reader passes its own `READER_LLM_TIMEOUT`).
 
 ### B) Anthropic / Claude API
-Same idea, different schema:
+Same shape, different request and response. In `.env`:
 
 ```ini
 OLLAMA_HOST_URL="https://api.anthropic.com/v1/messages"
-FALLBACK_LLM="claude-3-5-haiku-latest"
+OLLAMA_MODEL_NAME="claude-haiku-4-5-20251001"   # fast and inexpensive, suits clean-up work
 LLM_API_KEY="sk-ant-..."
 ```
+
+In the function above, replace the `requests.post(...)` call and the success branch:
+
 ```python
-    response = requests.post(
-        OLLAMA_HOST_URL,
-        headers={"x-api-key": LLM_API_KEY, "anthropic-version": "2023-06-01"},
-        json={
-            "model": OLLAMA_MODEL,
-            "max_tokens": 1024,
-            "system": instruction,
-            "messages": [{"role": "user", "content": prompt}],
-            "temperature": 0.2,
-        },
-        timeout=30.0,
-    )
-    ui.stop_processing_spinner()
-    if response.status_code == 200:
-        output = response.json()["content"][0]["text"].strip()
-        return _absorb_learned_word(output)
+        response = requests.post(
+            OLLAMA_HOST_URL,
+            headers={"x-api-key": LLM_API_KEY, "anthropic-version": "2023-06-01"},
+            json={
+                "model": get_ollama_model(),
+                "max_tokens": 1024,
+                "system": instruction,
+                "messages": [{"role": "user", "content": user}],
+                "temperature": 0.2,
+            },
+            timeout=timeout,
+        )
+        ui.stop_processing_spinner()
+        if response.status_code == 200:
+            output = response.json()["content"][0]["text"].strip()
+            return _absorb_learned_word(output)
 ```
 
 > ⚠️ **Privacy:** with a **cloud** provider, the text you dictate (and clipboard
@@ -227,6 +293,7 @@ All prompts live in **`personas.py`** — edit the strings to change how the LLM
 | `TRANSLATE_TO_EN_PROMPT` / `TRANSLATE_TO_AR_PROMPT` | the two **Translate** directions |
 | `LINE_CORRECTION_PROMPT` | the **fix line** action (Shift+F3) |
 | `MEMORY_MAINTENANCE_PROMPT` | the **vocabulary janitor** (Shift+F1) |
+| `READER_CLEANUP_PROMPT` | the reader's **Smart LLM Cleaning** before it speaks |
 
 Example: to make Polish more aggressive, add a rule to `STANDARD_SYSTEM_PROMPT` like
 "Rewrite run-on sentences into shorter ones."
@@ -242,13 +309,25 @@ Also in **`personas.py`**:
   list of trigger phrases (English **and** Arabic). Add your own:
   ```python
   VOICE_MACROS = {
-      "new_line":   ["new line", "سطر جديد"],
-      "bullet":     ["bullet", "point", "نقطة", "قائمة"],
-      "code_block": ["format code", "كود"],
-      "press_enter":["and send", "انتر"],
+      "new_line":   ["new line", "سطر جديد"],        # said first → Shift+Enter
+      "bullet":     ["bullet", "point", "نقطة", "قائمة"],  # said first → "• " prefix
+      "code_block": ["format code", "كود"],          # said first → wrapped in `backticks`
+      "press_enter":["and send", "انتر"],            # said last  → Enter after pasting
   }
   ```
-- **`PUNCTUATION_MAP`** — trailing spoken punctuation → real punctuation (regex → char).
+  The first three only count at the **start** of a dictation and `press_enter` only
+  at the **end**. Triggers match **whole words**, case-insensitively, and see past the
+  punctuation Whisper adds ("New line. Hello" and "…see you then, and send." both
+  work). Because a trigger is a whole word, "Pointless" never becomes a bullet — but a
+  sentence that really starts with "Point…" does, so drop `"point"` if that gets in
+  your way.
+- **`PUNCTUATION_MAP`** — trailing spoken punctuation → real punctuation (regex → mark).
+  Each pattern is `_SPOKEN` (the spaces and marks Whisper puts in front of the word)
+  plus the spoken word anchored at the end; Whisper's own closing mark is removed
+  before matching. To add one:
+  ```python
+  r'(?i)' + _SPOKEN + r'exclamation (mark|point)$': '!',
+  ```
 
 ---
 
@@ -256,6 +335,7 @@ Also in **`personas.py`**:
 | File | What | Managed |
 |------|------|---------|
 | `flow_vocabulary.txt` | learned terms | deduped on write; `Shift+F1` prunes it |
+| `flow_vocabulary.txt.bak` | the list before the last `Shift+F1` | replaced each run — copy it back to undo |
 | `flow_history.md` | history of injected text | trimmed at boot past ~500 KB |
 | `flow_debug.log` | dictation diagnostics | auto-rotates (~3 MB cap) |
 | `reader_debug.log` | reader diagnostics | auto-rotates (~3 MB cap) |
@@ -269,8 +349,8 @@ it rotates itself and only writes a few lines per read.
 
 ## 10. The reader (text → speech)
 Start it with **`Launch_Reader.bat`** (or `python -m reader`) on its own, alongside
-dictation with **`Launch_All.bat`**, or in the same process and window as dictation
-with **`Launch_Zero.bat`**.
+dictation in a second window with **`Launch_All.bat`**, or in the same window as
+dictation with **`Launch_Zero.bat`** (recommended).
 
 ```ini
 HOTKEY_READ="f4"            # read the highlighted text aloud
@@ -282,9 +362,10 @@ READER_LLM_TIMEOUT=10       # seconds to wait before speaking anyway
 
 `HOTKEY_PANIC` (default `Esc`) silences the reader as well as cancelling a recording.
 
-**Tray menu.** Voice, **Smart LLM Cleaning** and **Suspend Listener** are all
+**Tray menu.** Voice, **Smart LLM Cleaning** and **Suspend Reader** are all
 switchable at runtime from the reader's tray icon; `.env` only sets the startup
-defaults.
+defaults. The same menu holds **Exit Engine** (under `Launch_Zero.bat`, it stops both
+halves) or **Exit Reader** (when the reader runs on its own).
 
 **Smart mode.** Off by default. When on, the capture goes through the same local LLM
 as Polish/Translate using `personas.READER_CLEANUP_PROMPT`, which strips navigation,
@@ -298,8 +379,9 @@ falls back to the instant regex clean — it never goes silent waiting for the m
 > `READER_LLM_TIMEOUT` if you would rather wait than fall back.
 
 **Voices.** The three in the tray menu are the tested ones; `READER_VOICE` accepts any
-voice id that Kokoro-82M ships. To change the menu itself, edit `VOICES` in
-`reader/voice_engine.py`.
+voice id that Kokoro-82M ships. Each voice is a small file downloaded the first time it
+is used and read from the local cache after that. To change the menu itself, edit
+`VOICES` in `reader/voice_engine.py`.
 
 **Pronunciation.** Words the voice mangles are rewritten phonetically just before
 speaking, from `PRONUNCIATION_MAP` in `personas.py`:

@@ -7,10 +7,12 @@ import os
 import sys
 import tempfile
 import unittest
+from unittest import mock
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 import flow_core
+import local_flow
 import personas
 
 
@@ -80,6 +82,47 @@ class TestLoadVocabulary(VocabularyTestCase):
     def test_survives_a_missing_file(self):
         os.unlink(self.vocab_path)
         self.assertTrue(flow_core.load_vocabulary())        # base list still returned
+
+
+class TestMemoryMaintenance(VocabularyTestCase):
+    """Shift+F1 lets the LLM rewrite the whole learned-vocabulary file."""
+
+    def setUp(self):
+        super().setUp()
+        with open(self.vocab_path, "w", encoding="utf-8") as f:
+            f.write("Manhwa\n")
+        for patcher in (mock.patch.object(local_flow, "VOCAB_CACHE_FILE", self.vocab_path),
+                        mock.patch.object(local_flow, "ENABLE_TOASTS", False),
+                        mock.patch.object(local_flow, "ENABLE_AUDIO_CHIMES", False),
+                        mock.patch.object(local_flow.ui, "update_console_title")):
+            patcher.start()
+            self.addCleanup(patcher.stop)
+        self.addCleanup(lambda: os.path.exists(self.backup) and os.unlink(self.backup))
+
+    @property
+    def backup(self):
+        return self.vocab_path + ".bak"
+
+    def run_maintenance(self, llm_output):
+        with mock.patch.object(local_flow, "query_ollama", return_value=llm_output):
+            local_flow.run_memory_maintenance()
+
+    def test_list_markers_are_stripped(self):
+        """Models answer "list the words" with "- word" / "1. word"."""
+        self.run_maintenance("- Docker\n2. Python\n3.5-turbo\n\n* Kokoro")
+        self.assertEqual(self.read_vocab_file(), ["Docker", "Python", "3.5-turbo", "Kokoro"])
+
+    def test_previous_list_is_backed_up(self):
+        self.run_maintenance("Docker")
+        with open(self.backup, encoding="utf-8") as f:
+            self.assertEqual(f.read(), "Manhwa\n")
+
+    def test_unchanged_output_writes_nothing(self):
+        """query_ollama returns its input when Ollama is down — that is not a success."""
+        current = "\n".join(sorted(flow_core.load_vocabulary()))
+        self.run_maintenance(current)
+        self.assertEqual(self.read_vocab_file(), ["Manhwa"])
+        self.assertFalse(os.path.exists(self.backup))
 
 
 if __name__ == "__main__":

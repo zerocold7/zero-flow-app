@@ -4,6 +4,146 @@ All notable work on the **Zero- Flow Engine**. Newest first.
 
 ---
 
+## [1.4.0] — 2026-09-19 — Every kind of PC, explained and tuned
+
+### ✨ Added
+- **`check_hardware.py`** — detects the graphics card (exact memory, from the registry
+  and `nvidia-smi`; WMI stops at 4 GB), RAM and CPU; picks one of four tiers; prints the
+  settings to use and what is still missing (packages, the torch build, Ollama and its
+  model, model downloads). `--apply` merges the settings into `.env`, keeping
+  everything else and saving the old file as `.env.bak`. Standard library only, so it
+  runs straight after cloning; it inspects the engine's `venv`, not the Python that
+  runs it.
+- **`presets/`** — `nvidia-desktop`, `nvidia-laptop`, `cpu-only`, `amd-intel-gpu`: the
+  model and device settings for each tier, usable on their own as a `.env`.
+- **`WHISPER_DEVICE`** (`auto` | `cpu`) — skip the GPU attempt on machines without an
+  NVIDIA card, or to leave the card to the AI model.
+- **`WHISPER_COMPUTE_TYPE`** — GPU precision. `int8_float16` halves the speech model's
+  graphics memory: large-v3 **3.9 GB → 2.0 GB**, 0.9 s → 1.1 s per 14 s clip, measured
+  on an RTX 4070 with no loss on the test clip.
+- **Decode timing** — the console (`📝 Raw (1.2s): …`) and `flow_debug.log`
+  (`1.21s for 14.2s of audio`) show how long each clip took, and the banner shows
+  where the model loaded (`Whisper large-v3 · GPU · float16`) instead of the old
+  fixed "NVIDIA / CPU ALLOCATED" placeholder.
+- **Docs:** a new README front page (what it is, how it works, which PC you need, a
+  docs index), **docs/INSTALL.md** (one path, with the per-hardware fork),
+  **docs/HARDWARE.md** (the four tiers, measured numbers, every tuning setting, a
+  symptom → fix table, laptop heat), **docs/FAQ.md**, and Arabic versions of the
+  install and hardware guides.
+- 19 tests for the tiers, the presets, the `.env` merge and the device setting (80 in all).
+
+### 📝 Docs
+- CONFIGURATION.md's Whisper table overstated large-v3's memory (it said 5–6 GB; it
+  measures 3.9 GB) and called `distil-large-v3` "English-leaning" — it is English
+  only, so it cannot serve the Arabic keys.
+
+---
+
+## [1.3.2] — 2026-09-19 — The reader stops crashing; macros work on real speech
+
+### 🐛 Fixed
+- **The reader crashed on `Esc`, on a second `F4`, or when dictation started
+  mid-read** (`0xC0000005` / `0xC0000374` in `flow_debug.log`). `interrupt_audio()`
+  called `sd.stop()` from another thread while the playback worker sat in `sd.wait()`,
+  and both closed the same PortAudio stream — a double free. Reproduced outside the
+  app (2 of 6 stress runs segfaulted). The playback worker is now the only thread
+  that touches `sounddevice`; `interrupt_audio()` just marks queued audio stale, and
+  the worker aborts within ~10 ms. The same stress on the fix: 8 of 8 runs clean.
+  The worker also survives a failed chunk instead of dying and leaving the reader mute.
+- **Voice macros and spoken punctuation almost never fired.** Whisper punctuates what
+  it hears — most real transcripts end in `.` or `?` — so "… and send." never matched
+  `endswith("and send")`, "That is all, period." kept its "period", and "New line.
+  Hello" pasted ". Hello". Macros now match through Whisper's punctuation.
+- **Macro triggers matched inside words:** "Pointless" pasted as "• less",
+  "Bulletproof" as "• proof", "New lines of code" as a newline plus "s of code".
+  Triggers are whole words now.
+- **A learned word containing a backslash lost every dictation** it appeared in: it
+  was used as a `re.sub` template and raised "bad escape".
+- **Starting a dictation while the previous one was still transcribing** could polish
+  or translate the earlier clip with the new mode, and paste the two out of order.
+  The mode now travels with its clip, and clips are processed one at a time.
+- **A failure after capture killed the worker silently** (a clipboard held by another
+  app, say): nothing in the log, and the title stuck on `DECODING`. Now logged, and
+  the engine carries on. The same goes for the `Shift+F1..F3` action keys.
+- **`Shift+F2` could freeze the whole engine**: an error while truncating the log
+  left the log handler's lock held, blocking every later log call.
+- **`Shift+F3` skipped the clipboard lock** the rest of the engine uses, restored the
+  clipboard after 30 ms (slow apps then paste the *old* contents), and could mistake a
+  failed copy for the line when the clipboard ended in a newline.
+- **Closing the console window was logged as a reader crash** (`0xC000013A`, 13 times
+  in the current log). It is the user stopping the engine, and is logged as such.
+- **A mic that will not open** (unplugged, blocked in privacy settings) now says so in
+  the console and resets the tray, instead of failing silently in the log.
+- **Ollama errors were invisible.** A wrong model name (HTTP 404) returned the text
+  unpolished with no toast and no log line. Both are now reported.
+- **Every start contacted Hugging Face** — four requests from the reader, one from
+  dictation — even with every model already on disk. That was the source of *"You are
+  sending unauthenticated requests to the HF Hub. Please set a HF_TOKEN…"* in
+  `reader_debug.log` (the Hub's reply to an anonymous request), stalled start-up with
+  no internet, and contradicted the README's "nothing leaves your machine". Both
+  halves now read their models straight from the local cache and download only what
+  is missing, once. No token is needed: the models are public. Verified: zero
+  requests on a normal start, and a clean start with the Hub forced offline.
+- The voice module's attempt to quiet `huggingface_hub` never worked — the library
+  resets its log level when it is first imported, which happened later. The level is
+  now set after the import.
+- **`reader_debug.log` was mostly noise:** 137 of its 167 warnings were espeak's
+  harmless "words count mismatch". Held at ERROR now, so real problems stand out.
+
+### 🗑️ Removed
+- `docs/Zero-Flow-Laptop-Setup-Guide.pdf` — a byte-identical copy of
+  `Zero-Flow-Setup-Guide.pdf` that nothing links to any more.
+- `voice_engine.force_cpu()` — a guard for the single-process layout that 1.3.0
+  retired; nothing called it, and `READER_DEVICE=cpu` does the same job.
+- The unused `flow_core.LOG_COMPONENTS` constant and the unused `mode_shift` chime.
+
+### 🔧 Changed
+- **`Shift+F1` keeps a backup** (`flow_vocabulary.txt.bak`) before letting the LLM
+  rewrite the vocabulary, strips the `- ` / `1. ` list markers models like to add, and
+  no longer reports success (or rewrites the file) when nothing changed — which is
+  also what an unreachable LLM looks like.
+
+### ✨ Added
+- 23 tests (61 in all): Whisper-punctuated macros, whole-word triggers, the backslash
+  case, playback thread ownership and interrupts, and vocabulary maintenance. 19 of
+  them fail against 1.3.1.
+
+### 📝 Docs
+A full pass over every document against the code as it now stands.
+- **The beginner guides taught push-to-talk; the engine toggles.** "Hold F5, speak,
+  release" starts *and* stops a recording on the key's auto-repeat. Both guides — and
+  the README, which never said — now read: press once, speak, press again.
+- **The English guide's GPU edit deleted the voice.** "Delete the last two lines of
+  `requirements.txt`" removed `kokoro` since the reader was added, and left the NVIDIA
+  lines in. It now names the two `nvidia-` lines.
+- **The Arabic guide installed no voice at all:** its hand-copied `pip install` list
+  predated the reader and pinned an old `soundfile`. It now reads `requirements.txt`
+  itself and skips only the `nvidia-` lines, so it cannot drift again.
+- Both guides pick the LLM with `OLLAMA_MODEL_NAME` rather than `FALLBACK_LLM` (which
+  only applies when Ollama is unreachable), set `READER_DEVICE="cpu"`, start with
+  `Launch_Zero.bat`, say what "ready" actually looks like (the console never printed
+  the log line they quoted), stop from the tray's **Exit Engine** rather than Task
+  Manager, list the spoken commands, and troubleshoot `F4`, a wrong model name and
+  the debug logs.
+- **The printable PDF and the Arabic Word file are regenerated** from the current
+  guides. The PDF predated the reader and still installed into Documents, the
+  OneDrive trap the guide warns about.
+- **CONFIGURATION.md's "other LLM provider" recipe could not work:** it pointed at
+  `local_flow.py` (the client is in `flow_core.py`) and at an `OLLAMA_MODEL` variable
+  and a `main()` step that no longer exist. Rewritten against the current code, with
+  a current Claude model id; both snippets are executed against a mock server.
+- README: a voice-macro and spoken-punctuation summary, the CUDA `torch` step for the
+  GPU voice, the reader's warm-up, a "when something goes wrong" section, and no more
+  "merged" layout or shared debug log — both gone since 1.3.0.
+- ARCHITECTURE.md: all four cross-process signals (it listed two), the per-clip mode
+  and processing lock, failure logging, `paste_text`, vocabulary maintenance and its
+  backup, and new known gaps (the ambiguous "point" trigger, images on the clipboard).
+- `.env.example` no longer claims `READER_DEVICE` is ignored by `Launch_Zero.bat`,
+  and nothing calls that launcher "single process" any more — both stopped being true
+  in 1.3.0. `engine_ui.py` gains the module docstring every other module has.
+
+---
+
 ## [1.3.1] — 2026-09-01 — Correctness pass
 
 ### 🐛 Fixed

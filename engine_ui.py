@@ -1,3 +1,16 @@
+"""
+Zero- Flow Engine — shared console and desktop UI.
+
+Everything the user sees or hears that is not the dictated text or the spoken voice:
+console colours and the boot banner, the console title and window icon, the "AI
+Processing" spinner, audio chimes, Windows toast notifications, and the standalone
+dictation half's tray icon. (Under `zero_flow.py` the tray icon belongs to the reader
+child instead — see reader/app.py.)
+
+Chimes and toasts run on their own threads: a blocking call on a keyboard-hook thread
+freezes the whole keyboard. `win11toast` is imported lazily for a load-order reason
+explained in show_toast().
+"""
 import os
 import sys
 import time
@@ -61,7 +74,7 @@ def show_toast(title, body="", enable_toasts=True):
 def play_tone(tone_type, enable_chimes=True):
     if not enable_chimes: return
     tones = {
-        "start": [(1000, 120)], "stop": [(700, 120)], "mode_shift": [(1300, 100)],
+        "start": [(1000, 120)], "stop": [(700, 120)],
         "cancel": [(500, 150), (400, 150)], "success_raw": [(1100, 80)],
         "success_polish": [(900, 60), (1200, 60)], "success_translate": [(1100, 60), (1500, 90)],
         "correction": [(1400, 50), (1800, 60)], "empty": [(440, 250)], "clean": [(1200, 80), (1400, 80)]
@@ -76,12 +89,14 @@ def play_tone(tone_type, enable_chimes=True):
             winsound.Beep(f, d)
     threading.Thread(target=_beep, daemon=True).start()
 
-def print_boot_sequence(ollama_model, hotkeys):
+def print_boot_sequence(ollama_model, hotkeys, speech="Whisper"):
+    """The standalone dictation banner. `speech` names the model and where it loaded
+    (e.g. "Whisper large-v3 · GPU · float16"), so a tuning change is visible at a glance."""
     os.system('cls' if os.name == 'nt' else 'clear')
     lines = [
         f"{C_ACCENT}┌────────────────────────────────────────────────────────┐{C_RESET}",
         f"{C_ACCENT}│ {Fore.MAGENTA}          Z E R O -   F L O W   E N G I N E          {C_ACCENT}│{C_RESET}",
-        f"{C_ACCENT}│ {C_RESET}🔗 Hardware Target: {C_GOOD}[NVIDIA / CPU ALLOCATED]{C_ACCENT}         │{C_RESET}",
+        f"{C_ACCENT}│ {C_RESET}🔗 Speech to text: {C_GOOD}[{speech}]{C_RESET}",
         f"{C_ACCENT}│ {C_RESET}🔗 Neural Pipeline: {C_GOOD}[{ollama_model}]{C_ACCENT}" + (" " * max(0, 25 - len(ollama_model))) + f"│{C_RESET}",
         f"{C_ACCENT}└────────────────────────────────────────────────────────┘{C_RESET}",
         f"  {C_ACCENT}DICTATE{C_RESET}   (the key forces the language)",

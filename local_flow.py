@@ -21,6 +21,7 @@ import os
 import sys
 import time
 import queue
+import shutil
 import threading
 import re
 import logging
@@ -33,6 +34,8 @@ import soundfile as sf
 import keyboard
 import pyperclip
 from faster_whisper import WhisperModel
+from faster_whisper.utils import download_model
+from huggingface_hub.utils import logging as hf_logging
 
 try:
     import personas
@@ -50,6 +53,10 @@ except ImportError as e:
 LOG_HANDLER = init_logging("flow")
 LOG_FILE = log_path("flow")
 logging.info("=== Zero- Core Application Boot Sequence Initiated ===")
+# A first-run model download is an anonymous Hub request, which the Hub answers with a
+# "set a HF_TOKEN" notice about rate limits. The models are public and fetched once;
+# the notice is noise. (Every later boot reads the cache and asks the Hub nothing.)
+hf_logging.set_verbosity_error()
 
 # =====================================================================
 # CONFIGURATION
@@ -57,6 +64,13 @@ logging.info("=== Zero- Core Application Boot Sequence Initiated ===")
 # Dictation-only settings live here; everything shared with the reader (paths, the
 # debug log, the LLM client, vocabulary, chimes/toasts) comes from flow_core.
 WHISPER_MODEL_NAME = os.getenv("WHISPER_MODEL_NAME", "large-v3")
+# "auto" tries the NVIDIA GPU and falls back to the CPU; "cpu" skips the GPU attempt
+# (no NVIDIA card, or to leave the card's memory to the local LLM).
+WHISPER_DEVICE     = os.getenv("WHISPER_DEVICE", "auto").strip().lower()
+# GPU precision. "int8_float16" halves the speech model's graphics memory — large-v3
+# measured 3.9 GB -> 2.0 GB on an RTX 4070, 0.9 s -> 1.1 s per 14 s clip. The CPU
+# fallback always uses int8, the only precision that is fast there.
+WHISPER_COMPUTE_TYPE = os.getenv("WHISPER_COMPUTE_TYPE", "float16").strip().lower()
 SAMPLE_RATE        = int(os.getenv("SAMPLE_RATE", 16000))
 CHANNELS           = int(os.getenv("CHANNELS", 1))
 
@@ -97,42 +111,76 @@ HISTORY_MAX_BYTES = 500_000
 
 URL_PATTERN = re.compile(r'https?://\S+|www\.\S+')
 
+# Whisper punctuates what it hears, so a spoken macro rarely arrives bare: "New line.
+# Hello." / "See you then, and send." Macros are matched through this punctuation.
+MACRO_PUNCT = r'[\s,.;:!?،؛؟…]'
+TRAILING_PUNCT = re.compile(MACRO_PUNCT + r'+$')
+# LLMs like to answer "list the words" with "- word" or "1. word"; keep only the word.
+LIST_MARKER = re.compile(r'^\s*(?:[-*•]|\d+[.)])\s+')
+
 # =====================================================================
 # RUNTIME STATE (set in main / mutated by the hotkey + worker threads)
 # =====================================================================
 model = None              # faster-whisper model, loaded in main()
+model_runtime = ""        # where it runs, e.g. "GPU · float16" — shown in the banner
 recording = False         # True while the mic stream is open
 cancel_flag = False       # set by Esc to discard the current capture
-active_mode = "en_raw"    # which mode the in-flight recording belongs to
-clipboard_context = ""    # clipboard snapshot, fed to the LLM in Polish mode
 audio_queue = queue.Queue()
+# One clip is transcribed → refined → pasted at a time. The next capture can start
+# while the last is still being processed; this keeps them from sharing the temp WAV
+# and makes them land in the order they were spoken.
+processing_lock = threading.Lock()
 
 # =====================================================================
 # HARDWARE / SERVICE DISCOVERY
 # =====================================================================
-def load_whisper_model():
-    """Load faster-whisper on the GPU, verifying with a real inference so a missing
-    CUDA library falls back to CPU at boot instead of crashing mid-dictation."""
-    # Make any pip-installed CUDA DLLs (nvidia-cublas-cu12 / nvidia-cudnn-cu12) findable.
-    for entry in sys.path:
-        for lib in ("cublas", "cudnn"):
-            bin_dir = os.path.join(entry, "nvidia", lib, "bin")
-            if os.path.isdir(bin_dir):
-                os.environ["PATH"] = bin_dir + os.pathsep + os.environ.get("PATH", "")
-                if hasattr(os, "add_dll_directory"):
-                    os.add_dll_directory(bin_dir)
+def resolve_whisper_model():
+    """The Whisper model's folder on disk: straight from the local cache when it is
+    there, downloaded only when it is not (the first run, or a new WHISPER_MODEL_NAME).
+
+    Handing WhisperModel the bare name instead makes it ask the Hugging Face Hub for
+    the latest revision on every boot, cached or not — a network call a local engine
+    has no need for, and a stall at start-up whenever there is no internet."""
+    if os.path.isdir(WHISPER_MODEL_NAME):
+        return WHISPER_MODEL_NAME                # a local model folder was configured
     try:
-        m = WhisperModel(WHISPER_MODEL_NAME, device="cuda", compute_type="float16")
-        # CTranslate2 loads the CUDA libs lazily on first inference, so force a tiny
-        # real decode now — any GPU failure surfaces here and falls back cleanly.
-        list(m.transcribe(np.zeros(SAMPLE_RATE, dtype=np.float32), vad_filter=False)[0])
-        logging.info("Whisper model active on CUDA (float16).")
-        return m
-    except Exception as e:
-        logging.warning(f"CUDA unavailable ({e}); falling back to CPU (int8).")
-        m = WhisperModel(WHISPER_MODEL_NAME, device="cpu", compute_type="int8")
-        logging.info("Whisper model active on CPU (int8).")
-        return m
+        return download_model(WHISPER_MODEL_NAME, local_files_only=True)
+    except FileNotFoundError:                    # huggingface_hub's LocalEntryNotFoundError
+        logging.info(f"Whisper model '{WHISPER_MODEL_NAME}' is not cached yet; downloading it.")
+        print(f"{ui.C_ACCENT}⬇️  Downloading the speech model '{WHISPER_MODEL_NAME}' "
+              f"(first run only)...{ui.C_RESET}")
+        return download_model(WHISPER_MODEL_NAME)
+
+
+def load_whisper_model():
+    """Load faster-whisper on the GPU (unless WHISPER_DEVICE=cpu), verifying with a real
+    inference so a missing CUDA library falls back to CPU at boot instead of crashing
+    mid-dictation. Records where it ended up in `model_runtime`."""
+    global model_runtime
+    model_path = resolve_whisper_model()
+    if WHISPER_DEVICE != "cpu":
+        # Make any pip-installed CUDA DLLs (nvidia-cublas-cu12 / nvidia-cudnn-cu12) findable.
+        for entry in sys.path:
+            for lib in ("cublas", "cudnn"):
+                bin_dir = os.path.join(entry, "nvidia", lib, "bin")
+                if os.path.isdir(bin_dir):
+                    os.environ["PATH"] = bin_dir + os.pathsep + os.environ.get("PATH", "")
+                    if hasattr(os, "add_dll_directory"):
+                        os.add_dll_directory(bin_dir)
+        try:
+            m = WhisperModel(model_path, device="cuda", compute_type=WHISPER_COMPUTE_TYPE)
+            # CTranslate2 loads the CUDA libs lazily on first inference, so force a tiny
+            # real decode now — any GPU failure surfaces here and falls back cleanly.
+            list(m.transcribe(np.zeros(SAMPLE_RATE, dtype=np.float32), vad_filter=False)[0])
+            model_runtime = f"GPU · {WHISPER_COMPUTE_TYPE}"
+            logging.info(f"Whisper model active on CUDA ({WHISPER_COMPUTE_TYPE}).")
+            return m
+        except Exception as e:
+            logging.warning(f"CUDA unavailable ({e}); falling back to CPU (int8).")
+    m = WhisperModel(model_path, device="cpu", compute_type="int8")
+    model_runtime = "CPU · int8"
+    logging.info("Whisper model active on CPU (int8).")
+    return m
 
 # =====================================================================
 # HISTORY
@@ -167,16 +215,27 @@ def run_memory_maintenance():
     ui.show_toast("🧹 Memory Maintenance", "AI is optimizing your vocabulary files.", ENABLE_TOASTS)
     ui.update_console_title("MAINTENANCE RUNNING")
 
-    current_vocab = "\n".join(load_vocabulary())
+    current_vocab = "\n".join(sorted(load_vocabulary()))
     cleaned = query_ollama(current_vocab, None, personas.MEMORY_MAINTENANCE_PROMPT)
-    if cleaned:
+    terms = [LIST_MARKER.sub('', line).strip() for line in (cleaned or "").splitlines()]
+    cleaned = "\n".join(t for t in terms if t)
+    if not cleaned or cleaned == current_vocab:
+        # query_ollama hands back its input when the LLM is unreachable, so an
+        # unchanged list is not a success worth rewriting the file for.
+        print(f"{ui.C_WARN}🧹 Vocabulary unchanged — nothing written.{ui.C_RESET}")
+    else:
         try:
+            # The LLM rewrites a list you built up over time; keep the last version.
+            if os.path.exists(VOCAB_CACHE_FILE):
+                shutil.copyfile(VOCAB_CACHE_FILE, VOCAB_CACHE_FILE + ".bak")
             with open(VOCAB_CACHE_FILE, "w", encoding="utf-8") as f:
                 f.write(cleaned + "\n")
-            print(f"{ui.C_GOOD}✅ Vocabulary successfully compressed and organized.{ui.C_RESET}")
+            print(f"{ui.C_GOOD}✅ Vocabulary successfully compressed and organized "
+                  f"(previous list saved as flow_vocabulary.txt.bak).{ui.C_RESET}")
             ui.show_toast("✅ Maintenance Complete", "Memory files pruned successfully.", ENABLE_TOASTS)
             ui.play_tone("clean", ENABLE_AUDIO_CHIMES)
-        except Exception:
+        except Exception as e:
+            logging.error(f"Vocabulary maintenance write failed: {e}")
             print(f"{ui.C_ERR}❌ Failed to write cleaned memory.{ui.C_RESET}")
     ui.update_console_title("ONLINE")
 
@@ -192,13 +251,16 @@ def purge_diagnostic_files():
         open(HISTORY_FILE, "w", encoding="utf-8").close()
     except Exception as e:
         logging.error(f"History purge failed: {e}")
+    # Released in `finally`: a handler lock left held would block every later log
+    # call, freezing whichever thread logs next — which is most of them.
+    LOG_HANDLER.acquire()
     try:
-        LOG_HANDLER.acquire()
         LOG_HANDLER.stream.seek(0)
         LOG_HANDLER.stream.truncate()
-        LOG_HANDLER.release()
     except Exception:
         pass
+    finally:
+        LOG_HANDLER.release()
     for suffix in (".1", ".2"):                  # also drop the rotated backups
         try:
             os.remove(LOG_FILE + suffix)
@@ -266,13 +328,14 @@ def transcribe_clip(force_lang):
 # =====================================================================
 # TEXT REFINEMENT & INJECTION
 # =====================================================================
-def refine_text(text):
-    """Apply the active mode's operation. Raw modes pass straight through."""
-    cfg = MODES[active_mode]
+def refine_text(text, mode, context=""):
+    """Apply the recording mode's operation. Raw modes pass straight through.
+    `context` is the clipboard snapshot Polish mode hands the LLM."""
+    cfg = MODES[mode]
 
     if cfg["op"] == "polish":
         ui.update_console_title("OLLAMA PROCESSING")
-        out = query_ollama(text, clipboard_context, personas.STANDARD_SYSTEM_PROMPT)
+        out = query_ollama(text, context, personas.STANDARD_SYSTEM_PROMPT)
         print(f"✨ Polished: {ui.C_GOOD}{out}{ui.C_RESET}")
         ui.show_toast("✨ Polish Complete", "Cleaned prose injected.", ENABLE_TOASTS)
         ui.play_tone("success_polish", ENABLE_AUDIO_CHIMES)
@@ -294,6 +357,28 @@ def refine_text(text):
     ui.play_tone("success_raw", ENABLE_AUDIO_CHIMES)
     return text
 
+def _phrases(tokens):
+    """Trigger phrases as one regex alternation, longest first."""
+    return "|".join(re.escape(t) for t in sorted(tokens, key=len, reverse=True))
+
+
+def _strip_leading(text, tokens):
+    """Remove a leading trigger phrase and the punctuation Whisper put after it.
+    Whole words only: "Pointless" is not the "point" macro. Returns (text, matched)."""
+    pattern = r'(?i)^(?:%s)(?!\w)%s*' % (_phrases(tokens), MACRO_PUNCT)
+    stripped = re.sub(pattern, '', text, count=1)
+    return stripped, stripped != text
+
+
+def _strip_trailing(text, tokens):
+    """Remove a trailing trigger phrase, the comma Whisper puts before it and the mark
+    after it — but not the speaker's own "!" or "?" in front. Whole words only: "a
+    thousand send" is not the "and send" macro. Returns (text, matched)."""
+    pattern = r'(?i)[\s,،]*(?<!\w)(?:%s)%s*$' % (_phrases(tokens), MACRO_PUNCT)
+    stripped = re.sub(pattern, '', text, count=1)
+    return stripped, stripped != text
+
+
 def apply_macros(text):
     """Turn a raw transcription into the exact string to paste.
 
@@ -306,27 +391,31 @@ def apply_macros(text):
     keyboard and clipboard. See tests/test_macros.py.
     """
     macros = personas.VOICE_MACROS
-    text = text.strip()                          # match the same string the flags use
-    lowered = text.lower()
-    lead_newline = any(lowered.startswith(t) for t in macros["new_line"])
-    lead_bullet  = any(lowered.startswith(t) for t in macros["bullet"])
-    wrap_code    = any(lowered.startswith(t) for t in macros["code_block"])
-    end_enter    = any(lowered.endswith(t) for t in macros["press_enter"])
+    text = text.strip()
 
-    # Strip a leading macro keyword ("new line", "bullet", "format code", …) —
-    # only for the leading-macro groups; press_enter is a trailing macro.
+    # At most one leading macro; press_enter is the trailing one.
+    lead = None
     for name in ("new_line", "bullet", "code_block"):
-        for token in macros[name]:
-            text = re.sub(r'(?i)^' + re.escape(token), '', text, count=1)
-    if end_enter:
-        # Strip the full trailing trigger phrase (may be multi-word, e.g. "and send").
-        for token in macros["press_enter"]:
-            text = re.sub(r'(?i)' + re.escape(token) + r'\s*$', '', text, count=1)
+        text, matched = _strip_leading(text, macros[name])
+        if matched:
+            lead = name
+            break
+    lead_newline = lead == "new_line"
+    lead_bullet = lead == "bullet"
+    wrap_code = lead == "code_block"
+    text, end_enter = _strip_trailing(text, macros["press_enter"])
 
-    for pattern, replacement in personas.PUNCTUATION_MAP.items():
-        text = re.sub(pattern, replacement, text)
+    # Spoken punctuation is matched without Whisper's own closing mark, which would
+    # otherwise hide it: "That is all, period." → "That is all."
+    bare = TRAILING_PUNCT.sub('', text)
+    if any(re.search(pattern, bare) for pattern in personas.PUNCTUATION_MAP):
+        text = bare
+        for pattern, replacement in personas.PUNCTUATION_MAP.items():
+            text = re.sub(pattern, replacement, text)
     for word in load_vocabulary():               # normalise known-term casing
-        text = re.sub(r'(?i)\b' + re.escape(word) + r'\b', word, text)
+        # A function replacement, so a learned word is inserted literally: as a
+        # template string, a backslash in it would raise and lose the dictation.
+        text = re.sub(r'(?i)\b' + re.escape(word) + r'\b', lambda _: word, text)
 
     text = text.strip()
     if wrap_code:
@@ -337,6 +426,23 @@ def apply_macros(text):
         text = " " + text                        # keep spacing against the previous word
 
     return text, lead_newline, end_enter
+
+
+def paste_text(text, press_enter=False):
+    """Paste `text` at the cursor through the clipboard, then restore the clipboard."""
+    # Hold the clipboard for the whole save/paste/restore cycle so the reader cannot
+    # copy a selection into the middle of it, in either process layout.
+    with clipboard_lock():
+        saved_clipboard = pyperclip.paste()
+        pyperclip.copy(text)
+        time.sleep(0.04)
+        keyboard.send('ctrl+v')
+        # Give slow apps time to read the clipboard before we restore it — restoring
+        # too early makes them paste the *old* clipboard contents instead.
+        time.sleep(0.15)
+        if press_enter:
+            keyboard.send('enter')
+        pyperclip.copy(saved_clipboard)          # restore the user's clipboard
 
 
 def inject_text(text):
@@ -350,25 +456,26 @@ def inject_text(text):
         time.sleep(0.02)
 
     logging.info(f"Injecting text via clipboard paste: {text!r}")
-    # Hold the clipboard for the whole save/paste/restore cycle so the reader cannot
-    # copy a selection into the middle of it, in either process layout.
-    with clipboard_lock():
-        saved_clipboard = pyperclip.paste()
-        pyperclip.copy(text)
-        time.sleep(0.04)
-        keyboard.send('ctrl+v')
-        # Give slow apps time to read the clipboard before we restore it — restoring
-        # too early makes them paste the *old* clipboard contents instead.
-        time.sleep(0.15)
-        if end_enter:
-            keyboard.send('enter')
-        pyperclip.copy(saved_clipboard)          # restore the user's clipboard
+    paste_text(text, press_enter=end_enter)
 
 # =====================================================================
 # RECORDING WORKER (one per capture, runs off the hotkey thread)
 # =====================================================================
-def process_recording():
-    """Open the mic, capture until stopped, then transcribe → refine → inject."""
+def read_clipboard_context():
+    """The clipboard, minus URLs and capped, as background for the Polish prompt."""
+    try:
+        # Under the lock, so an injection still in flight is not mistaken for context.
+        with clipboard_lock():
+            return re.sub(URL_PATTERN, '', pyperclip.paste())[:500]
+    except Exception:
+        return ""
+
+
+def process_recording(mode):
+    """Open the mic, capture until stopped, then transcribe → refine → inject.
+
+    `mode` is an argument rather than a global because the next capture can start
+    while this one is still transcribing, and must not change what this one does."""
     global recording, cancel_flag
     audio_queue.queue.clear()
 
@@ -379,7 +486,11 @@ def process_recording():
                 sd.sleep(40)
     except Exception as e:
         logging.error(f"Audio InputStream failed to open: {e}")
+        print(f"\n{ui.C_ERR}🎙️ Could not open the microphone: {e}{ui.C_RESET}")
         recording = False
+        ui.set_tray_state(False)
+        ui.play_tone("cancel", ENABLE_AUDIO_CHIMES)
+        ui.update_console_title("ONLINE")
         return
     finally:
         # The mic closes the moment the `with` block exits — release the reader here
@@ -404,35 +515,57 @@ def process_recording():
         ui.update_console_title("ONLINE")
         return
 
+    # Read now, with the mic already closed: pyperclip can block for up to half a
+    # second while another app holds the clipboard. On the keyboard hook that froze
+    # the keyboard; before the mic opened it would cut off your first words.
+    context = read_clipboard_context() if MODES[mode]["op"] == "polish" else ""
+
+    with processing_lock:
+        try:
+            transcribe_and_inject(audio, mode, context)
+        except Exception:
+            # A clipboard held by another app, say. Without this the thread would die
+            # silently, leaving the title stuck on DECODING and nothing in the log.
+            logging.error(f"Processing the recording failed: {traceback.format_exc()}")
+            print(f"{ui.C_ERR}❌ Processing failed — details in flow_debug.log.{ui.C_RESET}")
+            ui.play_tone("empty", ENABLE_AUDIO_CHIMES)
+        finally:
+            ui.update_console_title("ONLINE")
+
+
+def transcribe_and_inject(audio, mode, context):
+    """Stages 2-4 for one captured clip: transcribe, refine, paste."""
     peak = np.max(np.abs(audio))
     if peak > 0:
         audio = audio / peak                     # normalise to full scale
     sf.write(TEMP_AUDIO_FILE, audio, SAMPLE_RATE)
 
     ui.update_console_title("DECODING")
-    text, lang = transcribe_clip(MODES[active_mode]["lang"])
-    logging.info(f"Transcription result (mode={active_mode}, lang={lang}): {text!r}")
+    started = time.time()
+    text, lang = transcribe_clip(MODES[mode]["lang"])
+    # The speed figure docs/HARDWARE.md tunes against: seconds spent per clip.
+    took = time.time() - started
+    logging.info(f"Transcription result (mode={mode}, lang={lang}, "
+                 f"{took:.2f}s for {len(audio) / SAMPLE_RATE:.1f}s of audio): {text!r}")
     if os.path.exists(TEMP_AUDIO_FILE):
         os.remove(TEMP_AUDIO_FILE)
 
     if not text:
         logging.info("Empty transcription — nothing injected (silence / VAD dropped all audio).")
         ui.play_tone("empty", ENABLE_AUDIO_CHIMES)
-        ui.update_console_title("ONLINE")
         return
 
-    print(f"📝 Raw: {text}")
-    text = refine_text(text)
+    print(f"📝 Raw ({took:.1f}s): {text}")
+    text = refine_text(text, mode, context)
     inject_text(text)
-    log_to_history(text, active_mode)
-    ui.update_console_title("ONLINE")
+    log_to_history(text, mode)
 
 # =====================================================================
 # HOTKEY HANDLERS
 # =====================================================================
 def on_record_hotkey(mode_name):
     """A record key (F5–F10) was pressed: start a capture in that mode, or stop it."""
-    global recording, active_mode, clipboard_context, cancel_flag
+    global recording, cancel_flag
 
     if recording:
         # Any record key stops the capture. The mode is locked in at the start — we
@@ -443,12 +576,6 @@ def on_record_hotkey(mode_name):
         return
 
     cancel_flag = False
-    try:
-        clipboard_context = re.sub(URL_PATTERN, '', pyperclip.paste())[:500]
-    except Exception:
-        clipboard_context = ""
-
-    active_mode = mode_name
     recording = True
     # Tell the reader to stop talking and stay quiet: a live mic would otherwise pick
     # up the synthetic voice and Whisper would transcribe the engine reading to itself.
@@ -457,7 +584,7 @@ def on_record_hotkey(mode_name):
     ui.set_tray_state(True)
     print(f"\n{ui.C_ACCENT}🔴 [{MODES[mode_name]['label']}] Capturing audio...{ui.C_RESET}")
     ui.play_tone("start", ENABLE_AUDIO_CHIMES)
-    threading.Thread(target=process_recording).start()
+    threading.Thread(target=process_recording, args=(mode_name,)).start()
 
 def on_cancel_hotkey():
     """Esc — cancel an in-progress recording. (Does nothing when idle, so Esc keeps
@@ -477,41 +604,51 @@ def correct_current_line():
     print(f"\n{ui.C_ACCENT}⚡ Running contextual line refinement...{ui.C_RESET}")
     ui.play_tone("start", ENABLE_AUDIO_CHIMES)
 
-    saved_clipboard = pyperclip.paste()
-    keyboard.send('shift+home'); time.sleep(0.05)
-    keyboard.send('ctrl+c');     time.sleep(0.05)
+    # Copy the line under the clipboard lock, like every other clipboard sequence,
+    # so the reader cannot copy a selection in between. The lock is not held across
+    # the LLM call below, which can take seconds.
+    with clipboard_lock():
+        saved_clipboard = pyperclip.paste()
+        pyperclip.copy("")                       # so a failed copy reads as empty, not as stale text
+        keyboard.send('shift+home'); time.sleep(0.05)
+        keyboard.send('ctrl+c');     time.sleep(0.05)
+        target_text = pyperclip.paste().strip()
+        pyperclip.copy(saved_clipboard)
 
-    target_text = pyperclip.paste().strip()
-    if not target_text or target_text == saved_clipboard:
+    if not target_text:
         ui.play_tone("empty", ENABLE_AUDIO_CHIMES)
         return
 
     fixed = query_ollama(target_text, None, personas.LINE_CORRECTION_PROMPT)
     if fixed and fixed != target_text:
         print(f"✨ Optimized: '{ui.C_GOOD}{fixed}{ui.C_RESET}'")
-        pyperclip.copy(fixed); time.sleep(0.03)
-        keyboard.send('ctrl+v'); time.sleep(0.03)
+        paste_text(fixed)                        # replaces the still-selected line
         ui.play_tone("correction", ENABLE_AUDIO_CHIMES)
         log_to_history(fixed, "line_fix")
     else:
         keyboard.send('right')                   # deselect, leave the line untouched
         ui.play_tone("stop", ENABLE_AUDIO_CHIMES)
 
-    pyperclip.copy(saved_clipboard)
-
 def _run_async(fn):
     """Wrap a hotkey handler so it runs on its own daemon thread. Heavy handlers
     (LLM calls, key-sending) must never run on the keyboard listener thread —
     blocking it freezes the whole keyboard until they return, which is what forced
-    the app restarts on Ctrl+F10/F11."""
-    return lambda: threading.Thread(target=fn, daemon=True).start()
+    the app restarts on Ctrl+F10/F11. Failures are logged, not just printed."""
+    def run():
+        try:
+            fn()
+        except Exception:
+            logging.error(f"{fn.__name__} failed: {traceback.format_exc()}")
+            print(f"{ui.C_ERR}❌ {fn.__name__} failed — details in flow_debug.log.{ui.C_RESET}")
+            ui.update_console_title("ONLINE")
+    return lambda: threading.Thread(target=run, daemon=True).start()
 
 # =====================================================================
 # ENTRY POINT
 # =====================================================================
 def boot():
     """Load the model and get the dictation half ready. Shared by both entry points
-    (this file standalone, and the merged engine in zero_flow.py)."""
+    (this file standalone, and the supervisor in zero_flow.py)."""
     global model
 
     ui.update_console_title("INITIALIZING HARDWARE")
@@ -540,7 +677,8 @@ def register_hotkeys():
 
 def main():
     boot()
-    ui.print_boot_sequence(get_ollama_model(), HOTKEYS)
+    ui.print_boot_sequence(get_ollama_model(), HOTKEYS,
+                           speech=f"Whisper {WHISPER_MODEL_NAME} · {model_runtime}")
     ui.show_toast("🚀 Zero- Flow Online", "Background engine is active and listening.", ENABLE_TOASTS)
     ui.setup_system_tray()
     ui.set_window_icon()

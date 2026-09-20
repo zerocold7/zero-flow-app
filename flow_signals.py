@@ -21,9 +21,10 @@ Three signals and one lock:
                     sequence has to be atomic against the other. A threading lock
                     cannot do this across two processes.
 
-Both are best-effort: if the signalling layer is unavailable the helpers degrade to
-"nothing is recording, nobody is listening", which is exactly how the two halves
-behaved before this module existed.
+All of them are best-effort: if the signalling layer is unavailable the helpers
+degrade to "nothing is recording, nobody is listening", and the clipboard lock to an
+in-process lock — which is exactly how the two halves behaved before this module
+existed.
 """
 import ctypes
 import logging
@@ -143,7 +144,13 @@ def _clipboard_primitive():
     if _kernel32 is not None:
         try:
             _clipboard_handle = _kernel32.CreateMutexW(None, False, _CLIPBOARD_MUTEX_NAME)
-            return
+            if _clipboard_handle:
+                return
+            # NULL, not an exception, is how CreateMutexW fails. Left as-is, every
+            # wait on it would fail at once and be reported as a timeout.
+            _clipboard_handle = None
+            logging.warning("Cross-process clipboard lock unavailable (CreateMutexW failed); "
+                            "falling back to an in-process lock.")
         except Exception as e:
             logging.warning(f"Cross-process clipboard lock unavailable ({e}); "
                             f"falling back to an in-process lock.")

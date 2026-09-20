@@ -157,8 +157,7 @@ def exit_application(icon, item):
 
 
 def tray_items():
-    """The reader's menu entries, without an Exit item — so the merged engine can
-    splice them into its single tray menu and own the exit itself."""
+    """The reader's menu entries, without the Exit item build_tray_menu() adds."""
     voice_items = [
         MenuItem(label, change_voice, radio=True,
                  checked=(lambda lbl: lambda item: voice_engine.current_voice

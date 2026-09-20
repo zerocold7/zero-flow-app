@@ -7,8 +7,9 @@ debug log, the learned-vocabulary store, and the single client for the local LLM
     local_flow.py  — speech → text (dictation, translation, line fixes)
     reader/        — text → speech (reads the highlighted selection aloud)
 
-Both import this module, so there is exactly one Ollama client, one vocabulary file
-and one debug log for the whole product. See ARCHITECTURE.md.
+Both import this module, so there is exactly one Ollama client and one vocabulary file
+for the whole product. Each half keeps its own debug log (see `init_logging`), because
+the two always run as separate processes. See ARCHITECTURE.md.
 """
 import os
 import re
@@ -36,7 +37,6 @@ HISTORY_FILE = os.path.join(BASE_DIR, "flow_history.md")
 # Windows the rename fails outright while the other process holds the file open, and
 # the log then grows without bound, which is exactly what the rotation is there to
 # prevent. Each file rotates independently (~1 MB live + two backups, ~3 MB cap).
-LOG_COMPONENTS = ("flow", "reader")
 _log_handlers = {}
 
 
@@ -48,9 +48,8 @@ def init_logging(component):
     """Attach this process's rotating debug log.
 
     One log per process: the first caller names the file and every later call gets
-    that same handler back. Split across two processes that means flow_debug.log and
-    reader_debug.log; in the merged single-process engine both halves land in
-    flow_debug.log, which is the whole point of merging them.
+    that same handler back. The two halves always run as separate processes, so that
+    means flow_debug.log and reader_debug.log.
     """
     if _log_handlers:
         return next(iter(_log_handlers.values()))
@@ -144,8 +143,13 @@ def query_ollama(raw_text, context_text, instruction, timeout=15.0):
         if response.status_code == 200:
             output = response.json().get("response", raw_text).strip()
             return _absorb_learned_word(output)
-    except Exception:
+        # Typically a model name Ollama does not have (404). Without this the text
+        # just comes back unpolished and nothing anywhere says why.
+        logging.warning(f"Ollama returned HTTP {response.status_code}: {response.text[:200]}")
+        ui.show_toast("⚠️ LLM Error", f"Ollama returned HTTP {response.status_code}.", ENABLE_TOASTS)
+    except Exception as e:
         ui.stop_processing_spinner()
+        logging.warning(f"Ollama request failed: {e}")
         ui.show_toast("⚠️ LLM Offline", "Ollama API failed to respond.", ENABLE_TOASTS)
     return raw_text
 

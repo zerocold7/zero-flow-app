@@ -83,11 +83,15 @@ PRONUNCIATION_MAP = {
     "Tsukihime": "Soo-kee-hee-may",
 }
 
+# Trailing spoken punctuation → the real mark. Whisper punctuates what it hears, so
+# "that is all period" usually arrives as "That is all, period." — apply_macros drops
+# Whisper's closing mark before matching, and _SPOKEN swallows the one in front.
+_SPOKEN = r'[\s,.;:!?،؛؟]+'
 PUNCTUATION_MAP = {
-    r'(?i)\s+(period|full stop)$': '.',
-    r'\s+نقطة$': '.',
-    r'(?i)\s+comma$': ',',
-    r'\s+فاصلة$': '،',
-    r'(?i)\s+(question mark)$': '?',
-    r'\s+علامة استفهام$': '؟'
+    r'(?i)' + _SPOKEN + r'(period|full stop)$': '.',
+    _SPOKEN + r'نقطة$': '.',
+    r'(?i)' + _SPOKEN + r'comma$': ',',
+    _SPOKEN + r'فاصلة$': '،',
+    r'(?i)' + _SPOKEN + r'(question mark)$': '?',
+    _SPOKEN + r'علامة استفهام$': '؟'
 }

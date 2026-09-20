@@ -54,6 +54,9 @@ except ImportError as e:
     sys.exit(1)
 
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+# What the reader exits with when the shared console window is closed or gets Ctrl+C:
+# the user stopping the engine, not a crash.
+STATUS_CONTROL_C_EXIT = 0xC000013A
 reader_process = None
 
 
@@ -91,6 +94,9 @@ def watch_reader():
     code = reader_process.wait()
     if code == 0:
         return                                   # a clean exit is handled by watch_for_exit
+    if code == STATUS_CONTROL_C_EXIT:
+        logging.info("The reader half stopped with the console (window closed or Ctrl+C).")
+        return
     logging.error(f"The reader half exited unexpectedly (code {code}).")
     print(f"\n{ui.C_ERR}[engine]{ui.C_RESET} The reader half stopped (exit code {code}). "
           f"Dictation is unaffected; restart the engine to get F4 back.")
@@ -117,7 +123,8 @@ def print_boot_sequence(llm_model):
     lines = [
         f"{ui.C_ACCENT}┌────────────────────────────────────────────────────────┐{ui.C_RESET}",
         f"{ui.C_ACCENT}│ {ui.Fore.MAGENTA}       Z E R O -   F L O W   E N G I N E             {ui.C_ACCENT}│{ui.C_RESET}",
-        f"{ui.C_ACCENT}│ {ui.C_RESET}🔗 Speech to text: {ui.C_GOOD}[Whisper]{ui.C_ACCENT}                           │{ui.C_RESET}",
+        f"{ui.C_ACCENT}│ {ui.C_RESET}🔗 Speech to text: {ui.C_GOOD}[Whisper {local_flow.WHISPER_MODEL_NAME} · "
+        f"{local_flow.model_runtime}]{ui.C_RESET}",
         f"{ui.C_ACCENT}│ {ui.C_RESET}🔗 Text to speech: {ui.C_GOOD}[Kokoro-82M]{ui.C_ACCENT}                        │{ui.C_RESET}",
         f"{ui.C_ACCENT}│ {ui.C_RESET}🔗 Neural pipeline: {ui.C_GOOD}[{llm_model}]{ui.C_RESET}",
         f"{ui.C_ACCENT}└────────────────────────────────────────────────────────┘{ui.C_RESET}",
