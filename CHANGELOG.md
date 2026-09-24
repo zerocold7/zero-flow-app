@@ -4,7 +4,7 @@ All notable work on the **Zero- Flow Engine**. Newest first.
 
 ---
 
-## [Unreleased]
+## [1.5.0] — 2026-09-24 — Arabic that stays Arabic, and a faster start
 
 ### ⚡ Faster
 - **The engine is ready ~5 s sooner** (10.2 s → 5.0–5.3 s to a loaded model on an
@@ -41,8 +41,9 @@ All notable work on the **Zero- Flow Engine**. Newest first.
   character errors **49.8% → 39.7–40.2%**, and sentences ending in `.`/`؟`
   **1 → 14 of 16**.
 - **The vocabulary taught itself junk.** Words are now learned only if they appear in
-  what was said, never in CJK script, and only from English Polish. The three misheard
-  words (مادرانتي، ظانيم، هوكوري) were removed; the old list is in `flow_vocabulary.txt.bak`.
+  what was said, never in CJK script, and only from English Polish. Words learned
+  before this are kept: open `flow_vocabulary.txt` and delete any you never said (the
+  reference PC had three — مادرانتي، ظانيم، هوكوري), since Arabic ones go into the hint.
 - **Arabic spoken commands fired on ordinary sentences** — "نقطة البداية…" became a
   bullet, "كود الخصم…" code. Bullets now need **قائمة**, code **تنسيق كود**. "نقطة" at
   the end still types a full stop.
