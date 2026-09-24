@@ -66,6 +66,26 @@ class TestAbsorbLearnedWord(VocabularyTestCase):
         self.assertNotIn(known, self.read_vocab_file())
 
 
+class TestLearnOnlyWhatWasSaid(VocabularyTestCase):
+    """A learned word becomes part of Whisper's hint on every later dictation, so the
+    LLM may only teach words that were actually said. Arabic Polish once taught three
+    misheard words; a model answering in Chinese tagged a Chinese one."""
+
+    def test_a_word_nobody_said_is_not_learned(self):
+        out = flow_core._absorb_learned_word("Polished text [LEARN: Kubernetes]",
+                                             heard="please restart the server")
+        self.assertEqual(out, "Polished text")
+        self.assertNotIn("Kubernetes", self.read_vocab_file())
+
+    def test_a_word_that_was_said_is_learned_despite_spacing(self):
+        flow_core._absorb_learned_word("x [LEARN: KokoroTTS]", heard="the kokoro tts voice")
+        self.assertIn("KokoroTTS", self.read_vocab_file())
+
+    def test_chinese_is_never_learned(self):
+        flow_core._absorb_learned_word("x [LEARN: 会议]", heard="会议")
+        self.assertEqual(self.read_vocab_file(), [])
+
+
 class TestLoadVocabulary(VocabularyTestCase):
     def test_includes_the_base_list(self):
         vocab = flow_core.load_vocabulary()

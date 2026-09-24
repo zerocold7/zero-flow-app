@@ -153,11 +153,29 @@ never block the keyboard listener — a blocked listener freezes the whole keybo
 - It still keeps an auto-detect path (`force_lang=None`): if Whisper ever drifts to a
   language outside `SUPPORTED_LANGS` (`ar`/`en`), it re-decodes as the closer of the two.
   No current mode uses this path, but it's there for safety.
-- The Whisper hint (`initial_prompt`) is **only the vocabulary term list** — never an
-  English sentence, which would bias the decoder toward English.
+- **The Whisper hint (`initial_prompt`) is per language** (`whisper_hint`). Whisper
+  reads it as the text that came just before, so its language and style carry over:
+  - **Arabic** gets `personas.ARABIC_WHISPER_HINT` — one short, punctuated Arabic
+    sentence — plus any Arabic-script vocabulary.
+  - **English** gets the Latin-script vocabulary terms.
+
+  One shared list used to prime both. For Arabic that meant a dozen English tech words,
+  and on 16 synthetic Arabic clips (fixed decoding, repeated) it measured **~49%
+  character errors against ~40%** with the Arabic sentence. Its sentences also came
+  out unpunctuated: **1 of 16** ended in `.`/`؟`, against **14 of 16**. The hint is
+  sorted, so it no longer changes between runs.
 
 Translate direction is fixed by the mode (`en2ar` / `ar2en`), not detected, so it is
 always correct: `to == "en" → TRANSLATE_TO_EN_PROMPT`, else `TRANSLATE_TO_AR_PROMPT`.
+Polish picks its prompt the same way: `ARABIC_POLISH_PROMPT` (Modern Standard Arabic)
+for `F8`, `STANDARD_SYSTEM_PROMPT` for `F6`.
+
+**Every AI answer is checked against the language the key asked for**
+(`checked_ai_output`): an Arabic answer must contain Arabic, an English one English, and
+neither may contain Chinese, Japanese or Korean. Otherwise the original words are pasted
+and the answer is logged. `qwen2.5:7b` answered the old Arabic Polish prompt in Chinese
+5 times out of 5; with this guard the worst case is your unpolished words. Arabic
+answers are also stripped of vowel marks and shadda (tanween on alif stays: *جدًا*).
 
 ---
 
@@ -205,8 +223,21 @@ start makes no request at all, and the one-time download notice is silenced
   returns the original text unchanged, so a dead LLM never loses your dictation — and
   says why: an unreachable server or a non-200 reply (typically HTTP 404, a model name
   Ollama does not have) is logged as a warning and shown as a toast.
+- Every request carries **`think: false`**. Reasoning models (Gemma 4) otherwise write
+  ~800 hidden tokens before a one-line answer — 5–9 s instead of ~1 s, for the same
+  text. Models without reasoning accept and ignore it (checked on qwen2.5 and ALLaM).
+- Every request carries **`keep_alive`** (`OLLAMA_KEEP_ALIVE`, default 30 min), and
+  `boot()` loads the model on a background thread while Whisper loads
+  (`warm_up_llm`). Ollama's own default unloads after 5 idle minutes, and reloading
+  made the next Polish wait 3–12 s. Measured: the AI is ready 6.5–8 s after start-up,
+  and dictation is ready ≤0.7 s later than without the warm-up. Loading the AI *after*
+  Whisper instead left it ready at 10–11 s.
 - If the LLM tags a term as `[LEARN: word]`, `_absorb_learned_word` saves it to
-  `flow_vocabulary.txt` and strips the tag.
+  `flow_vocabulary.txt` and strips the tag — **but only if the term appears in what was
+  said** (ignoring case and spacing), and never in Chinese, Japanese or Korean script.
+  Learned words prime Whisper on every dictation. Before this rule, Arabic Polish had
+  taught three misheard words (removed), and a model answering in Chinese tagged a
+  Chinese one. Only the English Polish prompt asks for tags at all.
 - **Vocabulary maintenance** (`Shift+F1`, `run_memory_maintenance`) hands the whole
   list to the LLM and writes back what it returns, minus any `- ` / `1. ` list markers.
   The previous file is kept as `flow_vocabulary.txt.bak`, and an unchanged result —
@@ -334,8 +365,12 @@ recorded as such, anything else as an error with its exit code.
   recording. The mic interlock stops reading and recording overlapping, so the two
   rarely print at once, but nothing enforces it.
 - **"point" is an ambiguous trigger.** The bullet macro matches whole words only, so
-  "Pointless" is safe, but a sentence that genuinely begins with the word "Point" (or
-  "نقطة") still becomes a bullet. Remove it from `VOICE_MACROS["bullet"]` if that bites.
+  "Pointless" is safe, but a sentence that genuinely begins with the word "Point" still
+  becomes a bullet. Remove it from `VOICE_MACROS["bullet"]` if that bites. (The Arabic
+  equivalents were fixed: bare "نقطة" and "كود" started everyday sentences, so bullets
+  now need "قائمة" and code "تنسيق كود".)
+- **The reader speaks English only.** Kokoro has no Arabic voice, so highlighted Arabic
+  is not read aloud properly.
 - **Images on the clipboard are lost** by dictation, `F4` and `Shift+F3` (see §8).
 
 The clipboard race listed here previously is **fixed**: `flow_signals.clipboard_lock()`
@@ -369,6 +404,17 @@ and these are the numbers that cost, measured warm:
 
 Both devices stay ahead of playback once speech starts; what differs is the wait
 before the first word. The supervisor layout gets the 0.22 s figure back.
+
+**CTranslate2 would import torch, too.** Its `converters` package — for turning other
+model formats into its own, never used here — tries `import torch, transformers` on
+import. Both are installed (the reader's voice needs them), so the attempt succeeds and
+costs ~6 s on every start, loading torch into the dictation process for nothing.
+`local_flow.py` marks the two as unavailable for that one import (CTranslate2 already
+treats them as optional) and removes the marker straight after. Measured: engine ready
+in 5.0–5.3 s instead of ~10.2 s, test suite ~2 s instead of ~8 s, and no torch in the
+dictation process at all. `tests/test_startup.py` fails if a CTranslate2 upgrade
+undoes it. If CTranslate2 ever *needs* torch, the engine fails at start-up with an
+ImportError — loudly, not subtly — and the fix is to remove the skip.
 
 **A second, related trap: import order.** `win11toast` (reached through `engine_ui`)
 loads WinRT native libraries. If that happens *before* faster-whisper claims its CUDA

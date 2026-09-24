@@ -96,10 +96,14 @@ each symptom) and [§6](HARDWARE.md#6-laptops-heat-battery-and-noise) (heat). Th
 win: use the raw modes `F5`/`F7`, which never run the AI model.
 
 ### Polish or Translate gives me my words back unchanged
-The AI model did not answer. Check that Ollama is running (its icon by the clock) and
-that the name in `OLLAMA_MODEL_NAME` appears in `ollama list` exactly. `flow_debug.log`
-says which: `Ollama request failed` (not running) or `Ollama returned HTTP 404` (no
-such model — `ollama pull` it).
+Either the AI model did not answer, or it answered in the wrong language and the
+engine pasted your own words rather than, say, Chinese. `flow_debug.log` says which:
+- `Ollama request failed` — Ollama is not running (start it; its icon sits by the clock).
+- `Ollama returned HTTP 404` — no model by the name in `OLLAMA_MODEL_NAME`; check
+  `ollama list`, or `ollama pull` it.
+- `The AI did not answer in 'ar'` — the model drifted out of Arabic. Some small models
+  do this often; [HARDWARE.md](HARDWARE.md#ai-model--ollama_model_name) lists which
+  ones stay in Arabic.
 
 ### Where are my settings, logs and learned words?
 All in the project folder, and none of it is uploaded anywhere:

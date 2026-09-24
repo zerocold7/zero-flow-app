@@ -4,6 +4,67 @@ All notable work on the **Zero- Flow Engine**. Newest first.
 
 ---
 
+## [Unreleased]
+
+### ⚡ Faster
+- **The engine is ready ~5 s sooner** (10.2 s → 5.0–5.3 s to a loaded model on an
+  RTX 4070). CTranslate2 imported torch and transformers on every start — about 6 s —
+  for model converters this engine never uses. `local_flow.py` now skips that optional
+  import, so torch never loads in the dictation process at all. Transcription is
+  unchanged; the reader, a separate process, still loads torch for its voice.
+- **The test suite runs in ~2 s instead of ~8 s** (36 s on a cold disk), for the same
+  reason: three test files import `local_flow`.
+- **The playback tests no longer sleep.** Each ended with a fixed 50 ms pause, guessing
+  when the playback worker had finished with the fake audio device. They now send a
+  marker through the worker and wait for it to come out the other side — exact rather
+  than a guess, and 13 ms per test instead of 58. Both versions passed 600 runs with
+  every CPU thread saturated, so the old guess held on this machine; the new one does
+  not depend on it.
+
+### 🌍 Arabic
+- **Arabic Polish and English → Arabic often answered in Chinese.** The engine used
+  `qwen2.5:7b`, which answered the old Arabic Polish prompt in Chinese 5 times out of 5
+  (10 of 15 Arabic tasks in all). Three fixes:
+  - **Arabic-specific prompts.** `ARABIC_POLISH_PROMPT` writes Modern Standard Arabic,
+    removes fillers and fixes hamza, ة/ه and ى/ي. The English → Arabic prompt says
+    "Arabic script only" and names the dual.
+  - **A language guard.** Every AI answer must be in the language the key asked for,
+    with no Chinese, Japanese or Korean script — otherwise your own words are pasted.
+    Checked against real qwen: 5 Arabic Polishes, zero Chinese pasted.
+  - **Gemma 4 E4B instead of qwen** on the reference PC. It writes the best Arabic of
+    the three installed models (MSA, correct dual, no drift), uses 2.3 GB less graphics
+    memory, and is ~0.3 s slower on English.
+- **Whisper was primed with English for Arabic.** Every dictation's hint was one shared
+  list — mostly Latin-script tech words plus three misheard "learned" Arabic words.
+  Arabic now gets a short punctuated Arabic sentence (`ARABIC_WHISPER_HINT`), English
+  the Latin terms. On 16 Arabic clips, through the engine's own code, repeated:
+  character errors **49.8% → 39.7–40.2%**, and sentences ending in `.`/`؟`
+  **1 → 14 of 16**.
+- **The vocabulary taught itself junk.** Words are now learned only if they appear in
+  what was said, never in CJK script, and only from English Polish. The three misheard
+  words (مادرانتي، ظانيم، هوكوري) were removed; the old list is in `flow_vocabulary.txt.bak`.
+- **Arabic spoken commands fired on ordinary sentences** — "نقطة البداية…" became a
+  bullet, "كود الخصم…" code. Bullets now need **قائمة**, code **تنسيق كود**. "نقطة" at
+  the end still types a full stop.
+- The AI's Arabic loses the vowel marks models add unasked (tanween on alif stays).
+
+### ⚡ Faster AI
+- **`think: false` on every request.** Gemma 4 is a reasoning model and wrote ~800
+  hidden tokens before each one-line answer: 5–9 s instead of ~1 s, for the same result.
+- **The model loads at start-up and stays loaded** (`OLLAMA_KEEP_ALIVE`, default 30
+  min). The first Polish after starting takes 0.8 s instead of a 7–12 s load, and
+  dictation is ready ≤0.7 s later than before.
+- `check_hardware.py --apply` no longer replaces an AI model you pinned yourself.
+
+### ✨ Added
+- `tests/test_startup.py` — fails if the skip stops working after a CTranslate2
+  upgrade, or leaves torch unimportable for code that needs it.
+- `tests/test_arabic.py` and additions to the vocabulary and hardware tests — the
+  hint per language, the language guard, vowel marks, the new triggers, `think` and
+  `keep_alive`, learn-only-what-was-said (109 tests in all).
+
+---
+
 ## [1.4.0] — 2026-09-19 — Every kind of PC, explained and tuned
 
 ### ✨ Added

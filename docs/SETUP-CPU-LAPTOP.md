@@ -202,7 +202,7 @@ Press the key, speak, press it again. The key **forces** the language, so it's n
 - Start with **"new line"** to begin a new line, **"bullet"** for a `•` bullet point, or **"format code"** to wrap the text as code.
 - End with **"and send"** to press **Enter** after it is typed (handy in chat apps).
 - End with **"period"**, **"comma"** or **"question mark"** to type the real mark.
-- In Arabic: **"سطر جديد"** (new line), **"نقطة"** or **"قائمة"** (bullet), **"كود"** (code), **"انتر"** (Enter), and **"فاصلة"** / **"علامة استفهام"** at the end for **،** / **؟**.
+- In Arabic: **"سطر جديد"** (new line), **"قائمة"** (bullet), **"تنسيق كود"** (code), **"انتر"** (Enter), and **"نقطة"** / **"فاصلة"** / **"علامة استفهام"** at the end for **.** / **،** / **؟**.
 
 ---
 

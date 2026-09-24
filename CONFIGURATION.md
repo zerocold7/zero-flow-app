@@ -39,6 +39,7 @@ only set what you want to change.
 | `READER_SMART_MAX_CHARS` | `1000` | Selections longer than this skip the LLM pass |
 | `READER_LLM_TIMEOUT` | `10` | Seconds to wait for the LLM before speaking anyway |
 | `READER_DEVICE` | `auto` | `auto` / `cpu` / `cuda` for the voice model (see §10) |
+| `OLLAMA_KEEP_ALIVE` | `30m` | How long the AI model stays loaded after use. The engine also loads it at start-up, so the first Polish is instant. `0` unloads at once (frees memory) |
 | `READER_FIRST_BATCH_CHARS` | `120` | Size of the first chunk of text sent to the voice (see §10) |
 | `READER_BATCH_CHARS` | `300` | Size of every chunk after the first (see §10) |
 
@@ -289,7 +290,9 @@ All prompts live in **`personas.py`** — edit the strings to change how the LLM
 
 | Constant | Controls |
 |----------|----------|
-| `STANDARD_SYSTEM_PROMPT` | how **Polish** (F6/F8) cleans text |
+| `STANDARD_SYSTEM_PROMPT` | how **English Polish** (F6) cleans text |
+| `ARABIC_POLISH_PROMPT` | how **Arabic Polish** (F8) cleans text — into Modern Standard Arabic, fixing hamza, ة/ه and ى/ي, with Arabic punctuation |
+| `ARABIC_WHISPER_HINT` | the sentence Whisper is primed with for Arabic dictation (F7/F8/F10) — keep it Arabic and punctuated |
 | `TRANSLATE_TO_EN_PROMPT` / `TRANSLATE_TO_AR_PROMPT` | the two **Translate** directions |
 | `LINE_CORRECTION_PROMPT` | the **fix line** action (Shift+F3) |
 | `MEMORY_MAINTENANCE_PROMPT` | the **vocabulary janitor** (Shift+F1) |
@@ -297,6 +300,19 @@ All prompts live in **`personas.py`** — edit the strings to change how the LLM
 
 Example: to make Polish more aggressive, add a rule to `STANDARD_SYSTEM_PROMPT` like
 "Rewrite run-on sentences into shorter ones."
+
+**A language guard sits behind every prompt.** The key decides the language, so the
+engine checks the answer: an Arabic answer must contain Arabic, an English one English,
+and neither may contain Chinese, Japanese or Korean script. If the model answers in the
+wrong language it pastes your own words instead, and `flow_debug.log` records what the
+model said. Arabic answers also lose any vowel marks the model adds unasked (tanween on
+alif stays: *جدًا*). Some small models need this: `qwen2.5:7b` answered Arabic Polish in
+Chinese in 5 tries out of 5 with the old prompt. Which models write the best Arabic:
+[docs/HARDWARE.md §4](docs/HARDWARE.md#ai-model--ollama_model_name).
+
+**Only the English prompt teaches words.** `[LEARN: …]` is in `STANDARD_SYSTEM_PROMPT`
+alone, and a word is only learned if it appears in what you actually said — models
+also "learn" words nobody said, and every learned word primes Whisper on each dictation.
 
 ---
 
@@ -310,8 +326,8 @@ Also in **`personas.py`**:
   ```python
   VOICE_MACROS = {
       "new_line":   ["new line", "سطر جديد"],        # said first → Shift+Enter
-      "bullet":     ["bullet", "point", "نقطة", "قائمة"],  # said first → "• " prefix
-      "code_block": ["format code", "كود"],          # said first → wrapped in `backticks`
+      "bullet":     ["bullet", "point", "قائمة"],    # said first → "• " prefix
+      "code_block": ["format code", "تنسيق كود"],    # said first → wrapped in `backticks`
       "press_enter":["and send", "انتر"],            # said last  → Enter after pasting
   }
   ```

@@ -33,8 +33,21 @@ import sounddevice as sd
 import soundfile as sf
 import keyboard
 import pyperclip
-from faster_whisper import WhisperModel
-from faster_whisper.utils import download_model
+
+# CTranslate2 (faster-whisper's engine) imports torch and transformers on import, for
+# its model *converters* — about 6 s, on every start, for code this engine never runs.
+# The import is optional (try/except ImportError) and only succeeds because the
+# reader's voice needs both installed. Marking them unavailable for this one import
+# makes the engine ready ~5 s sooner and keeps torch out of the dictation process.
+# Guarded by tests/test_startup.py.
+_skipped = [name for name in ("torch", "transformers") if name not in sys.modules]
+sys.modules.update(dict.fromkeys(_skipped))      # None: "import X" raises ImportError
+try:
+    from faster_whisper import WhisperModel
+    from faster_whisper.utils import download_model
+finally:
+    for _name in _skipped:
+        sys.modules.pop(_name, None)                 # a later real import still works
 from huggingface_hub.utils import logging as hf_logging
 
 try:
@@ -43,8 +56,9 @@ try:
     import flow_signals as signals
     from flow_core import (
         clipboard_lock, VOCAB_CACHE_FILE, TEMP_AUDIO_FILE, HISTORY_FILE,
-        ENABLE_AUDIO_CHIMES, ENABLE_TOASTS,
+        ENABLE_AUDIO_CHIMES, ENABLE_TOASTS, FOREIGN_SCRIPT,
         init_logging, log_path, get_ollama_model, load_vocabulary, query_ollama,
+        warm_up_llm,
     )
 except ImportError as e:
     print(f"❌ Critical error: Missing local module: {e}")
@@ -110,6 +124,13 @@ MIN_CLIP_SECONDS = 0.4
 HISTORY_MAX_BYTES = 500_000
 
 URL_PATTERN = re.compile(r'https?://\S+|www\.\S+')
+
+ARABIC_LETTERS = re.compile(r'[\u0621-\u064A]')
+LATIN_LETTERS = re.compile(r'[A-Za-z]')
+# Arabic vowel marks and shadda, stripped from the AI's Arabic: models add them unasked
+# ("لنُحدِّث"), and prose is written without. Tanween fath (U+064B) is kept — "جدًا" and
+# "شكرًا" spell it as standard.
+ARABIC_MARKS = re.compile(r'[\u064C-\u0652\u0670]')
 
 # Whisper punctuates what it hears, so a spoken macro rarely arrives bare: "New line.
 # Hello." / "See you then, and send." Macros are matched through this punctuation.
@@ -291,6 +312,25 @@ def drain_audio_queue():
         chunks.append(audio_queue.get())
     return np.concatenate(chunks, axis=0) if chunks else None
 
+def whisper_hint(language):
+    """Whisper's hint (initial_prompt) for one language: text in that language only.
+
+    Whisper reads the hint as the text that came just before, so its language and style
+    carry over. Priming Arabic with the shared vocabulary — mostly Latin-script tech
+    terms — raised character errors from ~38% to ~49% on the Arabic test clips and left
+    the output unpunctuated. Arabic gets a short punctuated Arabic sentence plus any
+    Arabic terms; English gets the Latin-script terms. Sorted, so the hint is the same
+    from one run to the next.
+    """
+    vocab = sorted(load_vocabulary())
+    arabic_terms = [w for w in vocab if ARABIC_LETTERS.search(w)]
+    if language == "ar":
+        return " ".join([personas.ARABIC_WHISPER_HINT] + (["، ".join(arabic_terms)] if arabic_terms else []))
+    if language == "en":
+        vocab = [w for w in vocab if not ARABIC_LETTERS.search(w)]
+    return ", ".join(vocab) or None
+
+
 def transcribe_clip(force_lang):
     """Decode TEMP_AUDIO_FILE → (text, language).
 
@@ -298,17 +338,13 @@ def transcribe_clip(force_lang):
     never mishear English as Arabic. If force_lang is None it auto-detects, and if
     Whisper drifts to a third language (gibberish) it re-decodes as the closer one.
     """
-    # Only the vocabulary terms are used as a hint — no English framing sentence,
-    # which would otherwise bias the decoder into writing Arabic speech as English.
-    vocab_hint = ", ".join(load_vocabulary()) or None
-
     def decode(language):
         # condition_on_previous_text=False prevents repetition-loop hallucinations;
         # beam_size=5 gives steadier decoding on short clips.
         segments, info = model.transcribe(
             TEMP_AUDIO_FILE, beam_size=5, vad_filter=True,
             condition_on_previous_text=False, language=language,
-            initial_prompt=vocab_hint,
+            initial_prompt=whisper_hint(language),
         )
         return "".join(s.text for s in segments).strip(), info
 
@@ -328,6 +364,23 @@ def transcribe_clip(force_lang):
 # =====================================================================
 # TEXT REFINEMENT & INJECTION
 # =====================================================================
+def checked_ai_output(output, original, lang):
+    """The AI's text if it is in the language asked for — otherwise the original words.
+
+    Better to paste what you said, unpolished, than to paste Chinese: qwen2.5:7b
+    answered Arabic Polish in Chinese in 5 tries out of 5. Arabic output also loses the
+    vowel marks models add unasked."""
+    if output == original:                       # the AI was unreachable: nothing to check
+        return output
+    wanted = ARABIC_LETTERS if lang == "ar" else LATIN_LETTERS
+    if FOREIGN_SCRIPT.search(output) or not wanted.search(output):
+        logging.warning(f"The AI did not answer in '{lang}'; pasting the original instead: "
+                        f"{output[:120]!r}")
+        print(f"{ui.C_WARN}⚠️  The AI answered in the wrong language — pasting your own words.{ui.C_RESET}")
+        return original
+    return ARABIC_MARKS.sub("", output) if lang == "ar" else output
+
+
 def refine_text(text, mode, context=""):
     """Apply the recording mode's operation. Raw modes pass straight through.
     `context` is the clipboard snapshot Polish mode hands the LLM."""
@@ -335,7 +388,8 @@ def refine_text(text, mode, context=""):
 
     if cfg["op"] == "polish":
         ui.update_console_title("OLLAMA PROCESSING")
-        out = query_ollama(text, context, personas.STANDARD_SYSTEM_PROMPT)
+        prompt = personas.ARABIC_POLISH_PROMPT if cfg["lang"] == "ar" else personas.STANDARD_SYSTEM_PROMPT
+        out = checked_ai_output(query_ollama(text, context, prompt), text, cfg["lang"])
         print(f"✨ Polished: {ui.C_GOOD}{out}{ui.C_RESET}")
         ui.show_toast("✨ Polish Complete", "Cleaned prose injected.", ENABLE_TOASTS)
         ui.play_tone("success_polish", ENABLE_AUDIO_CHIMES)
@@ -348,7 +402,7 @@ def refine_text(text, mode, context=""):
             direction, prompt = "AR→EN", personas.TRANSLATE_TO_EN_PROMPT
         else:
             direction, prompt = "EN→AR", personas.TRANSLATE_TO_AR_PROMPT
-        out = query_ollama(text, None, prompt)
+        out = checked_ai_output(query_ollama(text, None, prompt), text, cfg["to"])
         print(f"🌐 Translated [{direction}]: {ui.C_WARN}{out}{ui.C_RESET}")
         ui.show_toast("🌐 Translation Complete", f"{direction} prose injected.", ENABLE_TOASTS)
         ui.play_tone("success_translate", ENABLE_AUDIO_CHIMES)
@@ -655,6 +709,8 @@ def boot():
     # Clear any stale recording flag left behind if a previous run was force-killed
     # mid-capture — otherwise a running reader would keep refusing to speak.
     signals.set_recording(False)
+    # Load the AI model alongside Whisper rather than on the first Polish (3-12 s).
+    threading.Thread(target=warm_up_llm, daemon=True).start()
     model = load_whisper_model()
     cap_history_file()
     ui.update_console_title("ONLINE")

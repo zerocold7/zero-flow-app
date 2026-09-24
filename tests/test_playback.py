@@ -61,16 +61,34 @@ def wait_until(condition, timeout=2.0):
     return False
 
 
+# Sent through the worker at the end of each test; see PlaybackTestCase.restore.
+SETTLED = object()
+
+
 class PlaybackTestCase(unittest.TestCase):
     def install(self, fake):
+        self.fake = fake
         self._real_sd = voice_engine.sd
         voice_engine.sd = fake                   # the worker looks `sd` up on every call
         self.addCleanup(self.restore)
 
     def restore(self):
-        voice_engine.interrupt_audio()           # leave nothing queued for the next test
-        time.sleep(0.05)
+        """Hand the real sounddevice back only once the worker is provably done with
+        the fake. Too early, and a late call from the worker lands on the real device
+        (a "playback failed" line in the real log) or on the next test's fake.
+
+        A fixed sleep only guessed at "done". Instead, send a marker: there is one
+        worker, working first in first out, so once the marker has been played *and*
+        stopped, everything queued before it has finished and the worker is back
+        waiting on an empty queue — with no call to sounddevice left to make.
+        """
+        voice_engine.interrupt_audio()           # drop the queue, cut the current chunk
+        self.fake.finish_instantly = True        # let the marker play straight through
+        voice_engine.audio_queue.put((voice_engine._generation, SETTLED))
+        settled = wait_until(lambda: self.fake.played[-1:] == [SETTLED]
+                             and self.fake.calls[-1][0] == "stop")
         voice_engine.sd = self._real_sd
+        self.assertTrue(settled, "the playback worker never came back to idle")
 
 
 class TestInterrupt(PlaybackTestCase):

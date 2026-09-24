@@ -226,6 +226,20 @@ def recommend(facts, tier=None):
     return tier, settings, reasons
 
 
+def keep_chosen_model(settings, env):
+    """Keep the AI model the user already picked instead of the preset's.
+
+    The presets suggest one model per tier, but which model writes the best Arabic —
+    or suits the user — is a personal call, and --apply must not undo it. Returns a
+    note when the user's choice wins, or None."""
+    chosen = env.get("OLLAMA_MODEL_NAME", "").strip()
+    suggested = settings.get("OLLAMA_MODEL_NAME")
+    if chosen and suggested and chosen != suggested:
+        settings["OLLAMA_MODEL_NAME"] = chosen
+        return f"Keeping your own AI model, {chosen} (the preset would pick {suggested})."
+    return None
+
+
 # =====================================================================
 # SOFTWARE CHECKS
 # =====================================================================
@@ -384,6 +398,10 @@ def main(argv=None):
         print(f"GPU    : {gpu['name']} — {gpu['vram_gb']} GB ({kind})")
 
     tier, settings, reasons = recommend(facts, args.tier)
+    current_env = parse_env(_read(ENV_FILE)) if os.path.exists(ENV_FILE) else {}
+    note = keep_chosen_model(settings, current_env)
+    if note:
+        reasons.append(note)
     print(f"\nYour tier: {tier} — {TIERS[tier]}"
           + (" (chosen with --tier)" if args.tier else ""))
     for reason in reasons:

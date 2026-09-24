@@ -71,11 +71,17 @@ load_dotenv()
 OLLAMA_HOST_URL   = os.getenv("OLLAMA_HOST_URL", "http://127.0.0.1:11434/api/generate")
 OLLAMA_MODEL_NAME = os.getenv("OLLAMA_MODEL_NAME", "").strip()  # pin an exact model (e.g. qwen2.5:7b); blank = auto-discover
 FALLBACK_LLM      = os.getenv("FALLBACK_LLM", "gemma2:27b")
+# How long Ollama keeps the model in memory after a request. Its own default is 5
+# minutes, and reloading afterwards made the next Polish wait 3-12 s. "0" unloads at once.
+OLLAMA_KEEP_ALIVE = os.getenv("OLLAMA_KEEP_ALIVE", "30m").strip()
 
 ENABLE_AUDIO_CHIMES = os.getenv("ENABLE_AUDIO_CHIMES", "True").lower() in ('true', '1', 't')
 ENABLE_TOASTS       = os.getenv("ENABLE_TOAST_NOTIFICATIONS", "True").lower() in ('true', '1', 't')
 
 LEARN_PATTERN = re.compile(r'\[LEARN:\s*(.*?)\]')
+# Chinese, Japanese and Korean script. The engine only ever wants English or Arabic, and
+# some models (qwen2.5) slip into Chinese when handed Arabic.
+FOREIGN_SCRIPT = re.compile(r'[\u3040-\u30FF\u3400-\u9FFF\uAC00-\uD7AF\uF900-\uFAFF]')
 
 # =====================================================================
 # CLIPBOARD
@@ -136,13 +142,18 @@ def query_ollama(raw_text, context_text, instruction, timeout=15.0):
         response = requests.post(
             OLLAMA_HOST_URL,
             json={"model": get_ollama_model(), "prompt": prompt, "stream": False,
-                  "options": {"temperature": 0.2}},
+                  "options": {"temperature": 0.2},
+                  # Reasoning models (gemma4) otherwise write ~800 hidden tokens before
+                  # a one-line answer: 5-9 s instead of 0.8 s, same result. Models
+                  # without reasoning accept and ignore it.
+                  "think": False,
+                  "keep_alive": OLLAMA_KEEP_ALIVE},
             timeout=timeout,
         )
         ui.stop_processing_spinner()
         if response.status_code == 200:
             output = response.json().get("response", raw_text).strip()
-            return _absorb_learned_word(output)
+            return _absorb_learned_word(output, heard=raw_text)
         # Typically a model name Ollama does not have (404). Without this the text
         # just comes back unpolished and nothing anywhere says why.
         logging.warning(f"Ollama returned HTTP {response.status_code}: {response.text[:200]}")
@@ -152,6 +163,17 @@ def query_ollama(raw_text, context_text, instruction, timeout=15.0):
         logging.warning(f"Ollama request failed: {e}")
         ui.show_toast("⚠️ LLM Offline", "Ollama API failed to respond.", ENABLE_TOASTS)
     return raw_text
+
+def warm_up_llm():
+    """Load the model into Ollama ahead of the first Polish or Translate, so that one
+    is not the 3-12 s reload. Run on a background thread; stays quiet if Ollama is
+    not running (the first real request then reports it)."""
+    try:
+        requests.post(OLLAMA_HOST_URL, json={"model": get_ollama_model(),
+                                             "keep_alive": OLLAMA_KEEP_ALIVE}, timeout=120)
+        logging.info(f"LLM '{get_ollama_model()}' loaded ahead of first use.")
+    except Exception as e:
+        logging.info(f"LLM warm-up skipped: {e}")
 
 # =====================================================================
 # VOCABULARY
@@ -170,13 +192,24 @@ def load_vocabulary():
             pass
     return list(vocab)
 
-def _absorb_learned_word(output):
-    """If the LLM tagged a new term as `[LEARN: word]`, persist it and strip the tag."""
+def _squash(text):
+    return re.sub(r"[\s\-_.]", "", text.lower())
+
+def _absorb_learned_word(output, heard=None):
+    """If the LLM tagged a new term as `[LEARN: word]`, persist it and strip the tag.
+
+    `heard` is what was actually said. A term is only learned if it appears there
+    (ignoring case and spacing, so "chroma db" still teaches "ChromaDB"): models also
+    "learn" words nobody said — a misheard Arabic word, or a Chinese one — and every
+    learned word is fed to Whisper as a hint on each later dictation."""
     match = LEARN_PATTERN.search(output)
     if not match:
         return output
     word = match.group(1).strip()
-    if word and word not in load_vocabulary():
+    if word and (FOREIGN_SCRIPT.search(word)
+                 or (heard is not None and _squash(word) not in _squash(heard))):
+        logging.info(f"Ignored a learned word that was not in what was said: {word!r}")
+    elif word and word not in load_vocabulary():
         with open(VOCAB_CACHE_FILE, "a", encoding="utf-8") as f:
             f.write(f"{word}\n")
         ui.show_toast("🧠 Learned New Word", f"Added '{word}'", ENABLE_TOASTS)

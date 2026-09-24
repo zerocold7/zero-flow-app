@@ -92,6 +92,21 @@ class TestRecommend(unittest.TestCase):
         self.assertEqual(tier, "cpu-only")
 
 
+class TestKeepChosenModel(unittest.TestCase):
+    """--apply must not swap out an AI model the user picked for a preset's."""
+
+    def test_the_users_model_wins(self):
+        settings = {"OLLAMA_MODEL_NAME": "qwen2.5:7b"}
+        note = hw.keep_chosen_model(settings, {"OLLAMA_MODEL_NAME": "gemma4-e4b:latest"})
+        self.assertEqual(settings["OLLAMA_MODEL_NAME"], "gemma4-e4b:latest")
+        self.assertIn("Keeping your own AI model", note)
+
+    def test_a_blank_choice_takes_the_preset(self):
+        settings = {"OLLAMA_MODEL_NAME": "qwen2.5:7b"}
+        self.assertIsNone(hw.keep_chosen_model(settings, {"OLLAMA_MODEL_NAME": ""}))
+        self.assertEqual(settings["OLLAMA_MODEL_NAME"], "qwen2.5:7b")
+
+
 class TestPresets(unittest.TestCase):
     def test_every_preset_uses_only_real_settings(self):
         """A typo in a preset would be silently ignored by the engine."""

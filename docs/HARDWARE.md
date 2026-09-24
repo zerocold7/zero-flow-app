@@ -169,12 +169,33 @@ modes never touch it. Download it first: `ollama pull <name>`.
 | Model | Download | Good for |
 |---|---|---|
 | `gemma2:2b` | ≈1.6 GB | 8 GB RAM machines; basic Polish |
-| `qwen2.5:3b` | ≈1.9 GB | laptops; good English and Arabic |
-| `qwen2.5:7b` | 4.7 GB | 8 GB+ graphics cards; clearly better Translate |
+| `qwen2.5:3b` | ≈1.9 GB | laptops; English. Arabic untested — see below |
+| `qwen2.5:7b` | 4.7 GB | 8 GB+ graphics cards; good English, **unreliable Arabic** (below) |
 | `qwen2.5:14b` | ≈9 GB | 16 GB+ cards |
 
 Leave `OLLAMA_MODEL_NAME` blank and the engine uses whichever model Ollama lists first
-— pinning it avoids surprises.
+— pinning it avoids surprises. `check_hardware.py --apply` never replaces a model you
+have pinned yourself.
+
+**Arabic writing, measured.** Three local models, the engine's own prompts, dialect
+input with typical dictation slips, on the RTX 4070 reference PC:
+
+| Model | Arabic Polish / English → Arabic | Stays in Arabic | Speed |
+|---|---|---|---|
+| Gemma 4 E4B (8B, Q4_K_M, 3.3 GB loaded) | best: Modern Standard Arabic, fillers gone, correct dual | always | ≈1 s |
+| `iKhalid/ALLaM:7b` | correct spelling, but keeps fillers and dialect | always | ≈0.4 s |
+| `qwen2.5:7b` | when it stays in Arabic, has slips | **Chinese in 10 of 15 tries** (old prompt), 3 of 15 (new prompt) | ≈0.5 s |
+
+The engine never pastes the Chinese: its language guard falls back to your own words
+(see [CONFIGURATION.md §7](../CONFIGURATION.md#7-customizing-the-ai-behavior-prompts)). But
+if you dictate a lot of Arabic, a model that stays in Arabic gives you polished text
+instead of that fallback. Gemma 4 is a *reasoning* model: without the engine's
+`think: false` it writes ~800 hidden tokens before each answer — 5–9 s instead of 1 s.
+
+**Loaded before you need it.** The engine loads the AI model while Whisper loads and
+keeps it for `OLLAMA_KEEP_ALIVE` (default 30 minutes) after each use. Measured: the AI
+is ready 6.5–8 s after start-up, dictation ≤0.7 s later than without it, and the first
+Polish takes 0.8 s instead of a 7–12 s reload.
 
 ### Voice — `READER_DEVICE` and batch sizes
 
@@ -208,6 +229,8 @@ Leave `OLLAMA_MODEL_NAME` blank and the engine uses whichever model Ollama lists
 | Voice takes several seconds to start | voice on the CPU | normal on CPU; lower `READER_FIRST_BATCH_CHARS`, read a paragraph at a time |
 | `reader_debug.log` says "CPU-only build of torch" on an NVIDIA PC | the CPU torch was installed | reinstall torch with the CUDA command in [INSTALL.md](INSTALL.md#4-install-the-python-packages) |
 | Arabic comes out wrong, English is fine | speech model too small for Arabic | `medium` or `large-v3` — Arabic gains the most from size |
+| Arabic Polish / Translate pastes your own words unchanged; `flow_debug.log` says *"The AI did not answer in 'ar'"* | the AI model drifted into another language (often Chinese) and the guard caught it | a model that stays in Arabic — see *Arabic writing, measured* above |
+| The first Polish after a pause takes several seconds | the AI model was unloaded and is reloading | raise `OLLAMA_KEEP_ALIVE` (default `30m`) |
 | Whole PC sluggish while dictating | out of RAM | smaller speech and AI models; close other heavy apps |
 | Random phrases like "Thanks for watching!" from silence | Whisper hallucinating on near-silence | speak closer to the mic; stop recording right after you finish speaking |
 
