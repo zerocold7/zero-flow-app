@@ -83,12 +83,22 @@ def choice(name: str, default: str, allowed: tuple[str, ...]) -> str:
 
 
 # ---------------------------------------------------------------- the AI model
-# Which provider runs it (zeroflow/llm): "ollama", or "openai" for any server speaking
-# the OpenAI chat format — then AI_URL, AI_MODEL and, for a cloud service, AI_API_KEY.
-AI_PROVIDER = text("AI_PROVIDER", "ollama").lower()
+# Which provider runs it (zeroflow/llm): "builtin" (llama-server, run by the engine), "ollama",
+# or "openai" for any server speaking the OpenAI chat format — then AI_URL, AI_MODEL and,
+# for a cloud service, AI_API_KEY.
+AI_PROVIDER = text("AI_PROVIDER", "builtin").lower()
 AI_URL = text("AI_URL", "http://127.0.0.1:8080/v1/chat/completions")
 AI_MODEL = text("AI_MODEL", "")
 AI_API_KEY = text("AI_API_KEY", "")
+# The built-in AI's llama.cpp build: "auto" picks it from the graphics card (NVIDIA →
+# cuda, AMD/Intel card → vulkan, otherwise cpu).
+LLAMA_VARIANT = choice("LLAMA_VARIANT", "auto", ("auto", "cuda", "vulkan", "cpu"))
+# The built-in AI's model (Google's Gemma 4 E4B, Apache 2.0), its working memory in
+# tokens, and the local port its server listens on (this PC only).
+AI_BUILTIN_REPO = text("AI_BUILTIN_REPO", "google/gemma-4-E4B-it-qat-q4_0-gguf")
+AI_BUILTIN_FILE = text("AI_BUILTIN_FILE", "gemma-4-E4B_q4_0-it.gguf")
+AI_NUM_CTX = whole_number("AI_NUM_CTX", 8192, minimum=512)
+AI_BUILTIN_PORT = whole_number("AI_BUILTIN_PORT", 39281, minimum=1024)
 OLLAMA_HOST_URL = text("OLLAMA_HOST_URL", "http://127.0.0.1:11434/api/generate")
 # Pin an exact model (e.g. qwen2.5:7b); blank = the first model Ollama has installed.
 OLLAMA_MODEL_NAME = text("OLLAMA_MODEL_NAME", "")

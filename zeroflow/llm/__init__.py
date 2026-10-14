@@ -3,18 +3,23 @@
 The engine and the reader call these four functions; each hands the call to the active
 provider (zeroflow.llm.base.Provider), chosen with AI_PROVIDER in .env:
 
-    ollama   a local Ollama server (llm.ollama) — the default
+    builtin  llama-server, run by the engine itself (llm.builtin) — the default
+    ollama   a local Ollama server (llm.ollama)
     openai   any server speaking the OpenAI chat format (llm.openai_compatible):
              LM Studio, the llama.cpp server, vLLM, or a cloud service
 """
 from zeroflow import settings
-from zeroflow.llm import ollama, openai_compatible
+from zeroflow.llm import builtin, ollama, openai_compatible
 
-PROVIDERS = {"ollama": ollama, "openai": openai_compatible}
+PROVIDERS = {"builtin": builtin, "ollama": ollama, "openai": openai_compatible}
 
 
 def choose(name: str):
     """The provider called `name`; Ollama, with the mistake reported, if there is none."""
+    if name == "builtin" and not builtin.available():
+        settings.problems.append("The built-in AI is not installed on this PC — run "
+                                 "tools/get_llama.py, or set AI_PROVIDER=ollama. Using ollama.")
+        return ollama
     if name in PROVIDERS:
         return PROVIDERS[name]
     settings.problems.append(f'AI_PROVIDER="{name}" in .env is not one of '

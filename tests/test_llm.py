@@ -48,11 +48,13 @@ class TestRouting(unittest.TestCase):
         self.assertIsNone(llm.ask_ai("raw", None, "Polish."))
         self.assertEqual(llm.query_ai("raw", None, "Polish."), "raw")
 
-    def test_ollama_is_the_provider_today(self):
-        from zeroflow.llm import ollama
-        self.assertIs(llm.provider, ollama)
-        for name in ("ask", "warm_up", "model_name"):
-            self.assertTrue(callable(getattr(ollama, name)), name)
+    def test_the_provider_is_the_one_set_in_env(self):
+        self.assertIs(llm.provider, llm.choose(llm.settings.AI_PROVIDER))
+
+    def test_every_provider_offers_the_interface(self):
+        for name, module in llm.PROVIDERS.items():
+            for function in ("ask", "warm_up", "model_name"):
+                self.assertTrue(callable(getattr(module, function, None)), f"{name}.{function}")
 
 
 class TestChoosingAProvider(unittest.TestCase):

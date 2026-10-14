@@ -32,3 +32,6 @@ docs/*.docx
 tools/bench/clips/
 tools/bench/mine/
 tools/bench/results/
+
+# The built-in AI runtime (tools/get_llama.py)
+runtime/
