@@ -1,0 +1,15 @@
+# Developer tooling only — the app is still run from the launchers, not installed
+# with pip. Install the tools with: venv\Scripts\python -m pip install -r requirements-dev.txt
+
+[tool.ruff]
+target-version = "py312"
+line-length = 100
+extend-exclude = ["tools/"]
+
+[tool.ruff.lint]
+# Real bugs first: syntax/undefined names (F, E9), likely mistakes (B), and
+# outdated idioms (UP). Line length is not enforced — the prompts are long strings.
+select = ["E4", "E7", "E9", "F", "B", "UP"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
