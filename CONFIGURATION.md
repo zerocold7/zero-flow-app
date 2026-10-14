@@ -167,8 +167,9 @@ logs how long it took (`1.21s for 14.2s of audio`), which is the number to watch
 tuning.
 
 The **voice model** (reader) needs the CUDA build of `torch` for the GPU, and
-`pip install -r requirements.txt` alone fetches the CPU-only build. On an NVIDIA
-machine, install it first:
+`pip install -r requirements.txt -c constraints.txt` alone fetches the CPU-only build.
+(`constraints.txt` pins every package underneath to a set known to work together; see
+[INSTALL.md](docs/INSTALL.md).) On an NVIDIA machine, install it first:
 
 ```bash
 pip install torch==2.5.1+cu121 --index-url https://download.pytorch.org/whl/cu121

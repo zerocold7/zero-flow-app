@@ -1,3 +1,8 @@
+# What the engine needs. Install it together with constraints.txt, which pins every
+# package underneath these to a set known to work together:
+#   pip install -r requirements.txt -c constraints.txt
+# Without it pip takes the newest of each, and a newer transformers (5.19) broke the
+# reader on a fresh install while this file had not changed at all.
 faster-whisper==1.0.3
 sounddevice==0.4.6
 soundfile==0.14.0
@@ -25,3 +30,7 @@ nvidia-cudnn-cu12~=9.1
 #   pip install torch==2.5.1+cu121 --index-url https://download.pytorch.org/whl/cu121
 # The reader runs fine on CPU too — Kokoro-82M is small.
 kokoro==0.9.4
+# Kokoro's English pronunciation needs spaCy's small English model. Without it here,
+# it is pip-installed at runtime on the first read — a hidden download, and a failure
+# when offline.
+en_core_web_sm @ https://github.com/explosion/spacy-models/releases/download/en_core_web_sm-3.8.0/en_core_web_sm-3.8.0-py3-none-any.whl#sha256=1932429db727d4bff3deed6b34cfc05df17794f4a52eeb26cf8928f7c1a0fb85
