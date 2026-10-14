@@ -44,6 +44,7 @@ sys.modules.update(dict.fromkeys(_skipped))      # None: "import X" raises Impor
 try:
     from faster_whisper import WhisperModel
     from faster_whisper.utils import download_model
+    from faster_whisper.transcribe import Segment
 finally:
     for _name in _skipped:
         sys.modules.pop(_name, None)                 # a later real import still works
@@ -114,8 +115,9 @@ HOTKEYS = {
     "panic":       os.getenv("HOTKEY_PANIC", "esc"),
 }
 
-# This engine only ever speaks Arabic or English; anything else is a misdetection.
-SUPPORTED_LANGS = ("ar", "en")
+# Whisper's retries at rising randomness when a decode looks unreliable. Its default
+# goes up to 1.0, where the retry is close to guessing; this stops at 0.4.
+TEMPERATURES = (0.0, 0.2, 0.4)
 # Clips shorter than this (after capture) are dropped — they only ever produce
 # Whisper hallucinations, never real words.
 MIN_CLIP_SECONDS = 0.4
@@ -133,6 +135,8 @@ LATIN_LETTERS = re.compile(r'[A-Za-z]')
 # ("لنُحدِّث"), and prose is written without. Tanween fath (U+064B) is kept — "جدًا" and
 # "شكرًا" spell it as standard.
 ARABIC_MARKS = re.compile(r'[\u064C-\u0652\u0670]')
+# All of them, tanween fath and tatweel included — for comparing words, not for text.
+ARABIC_MARKS_ALL = re.compile(r'[\u064B-\u0652\u0670\u0640]')
 
 # Whisper punctuates what it hears, so a spoken macro rarely arrives bare: "New line.
 # Hello." / "See you then, and send." Macros are matched through this punctuation.
@@ -393,36 +397,107 @@ def whisper_hint(language):
     return ", ".join(vocab) or None
 
 
-def transcribe_clip(force_lang):
+def _plain(text):
+    """Words as compared with STOCK_ENDINGS: lower case, no punctuation, no Arabic vowel
+    marks, one spelling for the alef, ya and ta marbuta variants."""
+    text = ARABIC_MARKS_ALL.sub("", text.lower())
+    for variants, plain in (("أإآ", "ا"), ("ى", "ي"), ("ة", "ه")):
+        text = re.sub(f"[{variants}]", plain, text)
+    return re.sub(r"[^\w\s]|_", " ", text).split()
+
+
+# Whisper learned from subtitled videos, and a breath or a keystroke after you stop
+# talking is where it writes how those videos end. Only these phrases are ever dropped,
+# only at the very end, and only when the audio says they were not said.
+STOCK_ENDINGS = sorted({tuple(_plain(p)) for p in (
+    "thank you", "thank you very much", "thank you so much", "thanks", "thanks a lot",
+    "thank you for watching", "thanks for watching", "thank you for listening",
+    "thanks for listening", "please subscribe", "subscribe to the channel",
+    "have a good night", "have a nice day", "have a great day", "good night", "bye",
+    "bye bye", "goodbye", "see you next time", "see you", "you",
+    "شكرا", "شكرا لكم", "شكرا جزيلا", "شكرا للمشاهدة", "شكرا على المشاهدة",
+    "شكرا لحسن الاستماع", "اشتركوا في القناة", "لا تنسوا الاشتراك في القناة",
+    "ترجمة نانسي قنقر", "مع السلامة", "الى اللقاء",
+)}, key=len, reverse=True)
+# The tail counts as never said if it is this much quieter than the speech before it
+# (a breath, typing, a room), or if Whisper's own confidence in its words is this low.
+INVENTED_QUIETER_DB = 15
+INVENTED_MAX_PROBABILITY = 0.5
+# With nothing said before it, a stock phrase on audio quieter than this is a breath or
+# a room: real speech, even far from the microphone, is louder.
+INVENTED_ALONE_MAX_DBFS = -45
+
+
+def _rms(audio, spans):
+    parts = [audio[int(s * SAMPLE_RATE):int(e * SAMPLE_RATE)] for s, e in spans]
+    samples = np.concatenate([p for p in parts if len(p)] or [np.zeros(1, np.float32)])
+    return float(np.sqrt(np.mean(np.square(samples, dtype=np.float64)))) or 1e-9
+
+
+def trim_invented_ending(words, audio):
+    """`words` (Whisper's, with timings and confidence) without a stock ending that was
+    never said. `audio` is the clip as recorded, before any volume change.
+
+    A known ending ("Thank you.", "شكرا للمشاهدة"…) is dropped only from the very end,
+    and only if it sits on audio INVENTED_QUIETER_DB quieter than the speech before it,
+    or Whisper scored its own words below INVENTED_MAX_PROBABILITY. If the phrase is all
+    there is, it must be quieter than INVENTED_ALONE_MAX_DBFS or unsure. A clearly
+    spoken "thank you" passes every one of these and stays."""
+    tokens = [_plain(w.word) for w in words]
+    flat = [(i, t) for i, ts in enumerate(tokens) for t in ts]
+    for phrase in STOCK_ENDINGS:
+        if len(phrase) <= len(flat) and tuple(t for _, t in flat[-len(phrase):]) == phrase:
+            cut = flat[-len(phrase)][0]
+            break
+    else:
+        return words
+    ending, said = words[cut:], words[:cut]
+    level = _rms(audio, [(w.start, w.end) for w in ending])
+    confidence = sum(w.probability for w in ending) / len(ending)
+    if said:
+        quieter_db = 20 * np.log10(_rms(audio, [(w.start, w.end) for w in said]) / level)
+        invented = quieter_db >= INVENTED_QUIETER_DB or confidence < INVENTED_MAX_PROBABILITY
+        evidence = f"{quieter_db:.0f} dB quieter than the speech, confidence {confidence:.2f}"
+    else:
+        dbfs = 20 * np.log10(level)
+        invented = dbfs < INVENTED_ALONE_MAX_DBFS or confidence < INVENTED_MAX_PROBABILITY
+        evidence = f"nothing said before it, {dbfs:.0f} dBFS, confidence {confidence:.2f}"
+    if not invented:
+        return words
+    logging.info(f"Dropped an invented ending: {''.join(w.word for w in ending).strip()!r} "
+                 f"({evidence}).")
+    return said
+
+
+def transcribe_clip(language, audio=None):
     """Decode TEMP_AUDIO_FILE → (text, language).
 
-    force_lang ('en' or 'ar') forces the output language — no detection, so it can
-    never mishear English as Arabic. If force_lang is None it auto-detects, and if
-    Whisper drifts to a third language (gibberish) it re-decodes as the closer one.
+    `language` ('en' or 'ar') forces the output language — no detection, so it can
+    never mishear English as Arabic. `audio` is the clip as recorded; with it, a stock
+    ending nobody said is dropped (trim_invented_ending).
 
     Returns (None, None) when transcription failed — distinct from ("", lang), which
     means it ran and heard no speech. A failure on the graphics card (typically out of
     memory: Whisper, the voice and the AI model share it) retries the clip on the CPU.
     """
-    def decode(whisper, language):
+    def run(whisper):
         # condition_on_previous_text=False prevents repetition-loop hallucinations;
-        # beam_size=5 gives steadier decoding on short clips.
-        segments, info = whisper.transcribe(
+        # beam_size=5 gives steadier decoding on short clips; word timings are what
+        # trim_invented_ending weighs.
+        segments, _ = whisper.transcribe(
             TEMP_AUDIO_FILE, beam_size=5, vad_filter=True,
             condition_on_previous_text=False, language=language,
-            initial_prompt=whisper_hint(language),
+            initial_prompt=whisper_hint(language), word_timestamps=True,
+            temperature=TEMPERATURES,
         )
-        return "".join(s.text for s in segments).strip(), info
-
-    def run(whisper):
-        text, info = decode(whisper, force_lang)
-        lang = force_lang or info.language
-        if force_lang is None and lang not in SUPPORTED_LANGS:
-            probs = dict(getattr(info, "all_language_probs", None) or [])
-            lang = "ar" if probs.get("ar", 0) >= probs.get("en", 0) else "en"
-            logging.warning(f"Detected non-ar/en language — re-decoding as '{lang}'.")
-            text, _ = decode(whisper, lang)
-        return text, lang
+        segments = list(segments)
+        text = "".join(s.text for s in segments).strip()
+        words = [w for s in segments if isinstance(s.words, (list, tuple)) for w in s.words]
+        if audio is not None and words:
+            kept = trim_invented_ending(words, audio)
+            if len(kept) < len(words):
+                text = "".join(w.word for w in kept).strip()
+        return text, language
 
     try:
         return run(model)
@@ -688,22 +763,31 @@ def process_recording(capture):
             ui.update_console_title("ONLINE")
 
 
-def transcribe_and_inject(audio, mode, context):
-    """Stages 2-4 for one captured clip: transcribe, refine, paste."""
+def transcribe_audio(audio, language):
+    """One captured clip → (text, language), by exactly the steps every dictation
+    takes. Kept apart from the hotkey path so tools/bench_stt.py measures the same
+    thing you get."""
+    recorded = audio
     peak = np.max(np.abs(audio))
     if peak > 0:
         audio = audio / peak                     # normalise to full scale
     sf.write(TEMP_AUDIO_FILE, audio, SAMPLE_RATE)
+    try:
+        return transcribe_clip(language, recorded)
+    finally:
+        if os.path.exists(TEMP_AUDIO_FILE):
+            os.remove(TEMP_AUDIO_FILE)
 
+
+def transcribe_and_inject(audio, mode, context):
+    """Stages 2-4 for one captured clip: transcribe, refine, paste."""
     ui.update_console_title("DECODING")
     started = time.time()
-    text, lang = transcribe_clip(MODES[mode]["lang"])
+    text, lang = transcribe_audio(audio, MODES[mode]["lang"])
     # The speed figure docs/HARDWARE.md tunes against: seconds spent per clip.
     took = time.time() - started
     logging.info(f"Transcription result (mode={mode}, lang={lang}, "
                  f"{took:.2f}s for {len(audio) / SAMPLE_RATE:.1f}s of audio): {text!r}")
-    if os.path.exists(TEMP_AUDIO_FILE):
-        os.remove(TEMP_AUDIO_FILE)
 
     if text is None:
         logging.info("Transcription failed — nothing injected (the error is logged above).")

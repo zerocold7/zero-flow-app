@@ -188,6 +188,34 @@ class TestOllamaRequest(unittest.TestCase):
         self.assertIs(body["think"], False)
         self.assertEqual(body["keep_alive"], flow_core.OLLAMA_KEEP_ALIVE)
 
+    def test_the_context_is_sized_for_dictation(self):
+        """The model file asks for 131,072 tokens; that cost 0.6 GB of graphics memory
+        for nothing (3.58 GB → 2.99 GB measured, same speed and answers)."""
+        reply = mock.Mock(status_code=200, json=lambda: {"response": "Hello."})
+        with mock.patch.object(flow_core, "OLLAMA_NUM_CTX", 8192, create=True), \
+             mock.patch.object(flow_core.requests, "post", return_value=reply) as post:
+            flow_core.query_ollama("hello", None, "Polish this.")
+        self.assertEqual(post.call_args.kwargs["json"]["options"]["num_ctx"], 8192)
+
+    def test_warm_up_loads_the_model_exactly_as_requests_will_use_it(self):
+        """A different context size makes Ollama reload the model — the first Polish
+        would pay the 7 s load the warm-up was there to avoid."""
+        reply = mock.Mock(status_code=200, json=lambda: {"response": "Hello."})
+        with mock.patch.object(flow_core, "OLLAMA_NUM_CTX", 8192, create=True), \
+             mock.patch.object(flow_core.requests, "post", return_value=reply) as post:
+            flow_core.warm_up_llm()
+            flow_core.query_ollama("hello", None, "Polish this.")
+        warm, ask = (c.kwargs["json"] for c in post.call_args_list)
+        self.assertEqual(warm.get("options"), ask["options"])
+        self.assertEqual(warm["keep_alive"], ask["keep_alive"])
+
+    def test_a_context_of_zero_keeps_the_models_own(self):
+        reply = mock.Mock(status_code=200, json=lambda: {"response": "Hello."})
+        with mock.patch.object(flow_core, "OLLAMA_NUM_CTX", 0, create=True), \
+             mock.patch.object(flow_core.requests, "post", return_value=reply) as post:
+            flow_core.query_ollama("hello", None, "Polish this.")
+        self.assertNotIn("num_ctx", post.call_args.kwargs["json"]["options"])
+
     def test_warm_up_stays_quiet_when_ollama_is_down(self):
         with mock.patch.object(flow_core.requests, "post", side_effect=ConnectionError("refused")), \
              self.assertLogs(level="INFO") as logs:
