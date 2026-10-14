@@ -84,7 +84,7 @@ def score(case, hyp):
     }
 
 
-def run(label, model_name, runs):
+def run(label, model_name, runs, clips=CLIPS, no_filter=False):
     if model_name:
         os.environ["WHISPER_MODEL_NAME"] = model_name
     os.environ.setdefault("ZEROFLOW_LOG_DIR", os.path.join(RESULTS, "logs"))
@@ -94,12 +94,14 @@ def run(label, model_name, runs):
     import local_flow
 
     local_flow.load_vocabulary = lambda: []          # the same hint on every PC
+    if no_filter:                                    # the engine before 2.0 phase 2
+        local_flow.trim_invented_ending = lambda words, audio: words
     local_flow.model = local_flow.load_whisper_model()
-    cases = json.load(open(os.path.join(CLIPS, "index.json"), encoding="utf-8"))
+    cases = json.load(open(os.path.join(clips, "index.json"), encoding="utf-8"))
     rows = []
     for attempt in range(runs):
         for case in cases:
-            audio, _ = sf.read(os.path.join(CLIPS, case["file"]), dtype="float32")
+            audio, _ = sf.read(os.path.join(clips, case["file"]), dtype="float32")
             started = time.perf_counter()
             text, _ = local_flow.transcribe_audio(audio, case["lang"])
             took = time.perf_counter() - started
@@ -172,6 +174,10 @@ if __name__ == "__main__":
     parser.add_argument("--label", default="run")
     parser.add_argument("--model", help="a WHISPER_MODEL_NAME to try instead of .env's")
     parser.add_argument("--runs", type=int, default=1, help="repeat every clip this often")
+    parser.add_argument("--clips", default="clips",
+                        help="folder under tools/bench: clips (synthetic) or mine (your voice)")
+    parser.add_argument("--no-filter", action="store_true",
+                        help="leave invented endings in, to compare with the filter on")
     parser.add_argument("--compare", nargs=2, metavar=("BEFORE", "AFTER"))
     parser.add_argument("--show", metavar="LABEL", help="print a saved result again")
     args = parser.parse_args()
@@ -180,4 +186,5 @@ if __name__ == "__main__":
     elif args.show:
         show(load(args.show))
     else:
-        show(run(args.label, args.model, args.runs))
+        show(run(args.label, args.model, args.runs, os.path.join(HERE, args.clips),
+                 args.no_filter))
