@@ -28,7 +28,7 @@ a local LLM to clean up or translate text.
 | `check_hardware.py` | Standalone (standard library only): detects the GPU/RAM, picks a hardware tier, writes its settings into `.env` |
 | `presets/`      | One `.env` fragment per hardware tier — the model and device settings `check_hardware.py` applies |
 | `docs/`         | User guides: install, hardware & tuning, FAQ, the beginner walkthrough (English + Arabic) |
-| `tools/`        | Rebuild the generated guides (printable PDF, Arabic Word file) from their Markdown — see `tools/README.md` |
+| `tools/`        | Rebuild the generated guides (the English and Arabic printable PDFs) from their Markdown — see `tools/README.md` |
 | `tests/`        | `unittest` tests, run in the venv: text logic, recording and AI failure paths, playback threading, vocabulary and history files, process supervision (`.\venv\Scripts\python.exe -m unittest discover -s tests -t .`) |
 
 **How they are hosted.** `zero_flow.py` is a supervisor, not a merge: it runs the

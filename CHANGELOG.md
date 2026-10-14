@@ -55,6 +55,35 @@ All notable work on the **Zero- Flow Engine**. Newest first.
 
 ---
 
+## [1.5.1] — 2026-10-14 — A fresh install works again
+
+### 🐛 Fixed
+- **A fresh install could not start the reader.** `requirements.txt` named only the
+  top-level packages, so pip took the newest of everything underneath. transformers
+  5.19 needs torch 2.6 or later, while the engine uses 2.5.1 — the voice model then
+  failed to load (`module 'torch' has no attribute 'accelerator'`), on an install where
+  nothing in this project had changed. Installs made before that release were fine.
+
+### 📦 Install
+- **`constraints.txt`** pins all 122 packages to the set 1.5.0 was built and tested
+  with. Install with `pip install -r requirements.txt -c constraints.txt`; every guide
+  now says so (English and Arabic). `torch==2.5.1` there matches both the CUDA build
+  NVIDIA PCs install first and the regular one CPU-only PCs get.
+- **The spaCy English model** is a listed requirement. Kokoro used to pip-install it at
+  run time on the first read — a hidden download, and a failure when offline.
+
+### 📄 Guides
+- **The Arabic beginner guide is now a PDF** (`docs/Zero-Flow-Setup-Guide.ar.pdf`), like
+  the English one; the Word file is gone. Word still does the Arabic layout, as an
+  in-between step (`tools/build_setup_ar_pdf.ps1`).
+
+**Already installed and working?** Nothing to do. To align an existing install with
+the tested set: `.\venv\Scripts\python.exe -m pip install -r requirements.txt -c constraints.txt`.
+
+No engine code changed.
+
+---
+
 ## [1.5.0] — 2026-09-24 — Arabic that stays Arabic, and a faster start
 
 ### ⚡ Faster
