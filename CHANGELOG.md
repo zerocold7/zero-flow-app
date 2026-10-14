@@ -81,6 +81,29 @@ All notable work on the **Zero- Flow Engine**. Newest first.
 153 tests at the end of phase 1 (from 109). Each fix was broken on purpose to confirm
 its test fails.
 
+### 🧱 Structure (phase 3)
+- **The engine is a package, `zeroflow/`.** `local_flow.py` (975 lines), `flow_core.py`,
+  `engine_ui.py`, `flow_signals.py` and `personas.py` became small modules — `engine`,
+  `stt`, `llm`, `capture`, `clipboard`, `settings` and others (map in ARCHITECTURE.md).
+  `local_flow.py` and `zero_flow.py` stay as entry points, so the launchers are
+  unchanged. Code was moved verbatim, and every one of the earlier deliberate breaks is
+  still caught by its test.
+- **A typo in `.env` no longer stops the engine.** Every setting is checked; a value that
+  does not fit ("five" seconds, "gpu" for auto-or-cpu) is reported by name in the
+  console, the log and a toast, and the default is used. Yes/no settings take
+  true/false, yes/no, on/off or 1/0. `.env` is read from the program folder, wherever
+  the engine was started from.
+- **Choose the AI server in `.env`:** `AI_PROVIDER="openai"` with `AI_URL`, `AI_MODEL` and
+  (for a cloud service) `AI_API_KEY` talks to LM Studio, the llama.cpp server, vLLM,
+  OpenAI or Groq — no code to paste any more. Ollama stays the default.
+- **Shift+F3 copies the line the way F4 does** — waiting up to half a second for slow
+  apps, where it read the clipboard once after 50 ms.
+- One start-up banner, one copy routine, one URL pattern, one settings file (the
+  reader's settings included); the reader also drops `www.` addresses before speaking.
+- Type hints on every function in `zeroflow/`; `ruff` passes on the whole project.
+
+196 tests.
+
 ---
 
 ## [1.5.1] — 2026-10-14 — A fresh install works again

@@ -3,11 +3,11 @@
 How to tweak Zero- Flow. Most things are changed in **`.env`** (no code). The deeper
 ones (LLM provider, prompts, voice macros) are small, clearly-marked edits in the code.
 
-One `.env` configures **both halves** — dictation (`local_flow.py`) and the reader
+One `.env` configures **both halves** — dictation (`zeroflow/engine.py`) and the reader
 (`reader/`). Reader-only settings are in §10.
 
-> After changing **`.env`** you must **restart** the engine. Changes to `personas.py`,
-> `flow_core.py`, `local_flow.py` or `reader/` also require a restart.
+> After changing **`.env`** you must **restart** the engine. Changes to the code
+> (`zeroflow/`, `reader/`) also require a restart.
 
 ---
 
@@ -25,6 +25,7 @@ only set what you want to change.
 | `WHISPER_MODEL_NAME` | `large-v3` | Speech model — accuracy vs. speed/VRAM (see §3) |
 | `WHISPER_DEVICE` | `auto` | `auto` = NVIDIA GPU, falling back to CPU · `cpu` = skip the GPU (see §5) |
 | `WHISPER_COMPUTE_TYPE` | `float16` | GPU precision; `int8_float16` halves graphics memory (see §5) |
+| `AI_PROVIDER` | `ollama` | Which AI server: `ollama`, or `openai` for any server speaking the OpenAI chat format — then `AI_URL`, `AI_MODEL`, `AI_API_KEY` (see §6) |
 | `OLLAMA_HOST_URL` | `http://127.0.0.1:11434/api/generate` | Where the LLM lives (see §6) |
 | `OLLAMA_MODEL_NAME` | *(blank)* | Pin an exact model, e.g. `qwen2.5:7b`. Blank = auto-pick the first model Ollama serves |
 | `FALLBACK_LLM` | `gemma2:27b` | Model name used only if Ollama is unreachable |
@@ -113,7 +114,7 @@ languages, so you can swap Arabic (or English) for any of them. A language is ju
 
 **Worked example — replace Arabic with French.** Make these edits, then restart:
 
-1. **`local_flow.py` → `MODES`:** change each `"ar"` to `"fr"` and update the labels:
+1. **`zeroflow/engine.py` → `MODES`:** change each `"ar"` to `"fr"` and update the labels:
    ```python
    "ar_raw":    {"lang": "fr", "op": "raw",       "label": "FRENCH"},
    "ar_polish": {"lang": "fr", "op": "polish",    "label": "FRENCH · POLISH"},
@@ -126,20 +127,20 @@ languages, so you can swap Arabic (or English) for any of them. A language is ju
 2. **The Polish prompt.** `refine_text` uses `personas.ARABIC_POLISH_PROMPT` for `"ar"`
    and `personas.STANDARD_SYSTEM_PROMPT` for everything else — and that one says
    *answer in English only*, so French Polish would come back in English. Add a
-   `FRENCH_POLISH_PROMPT` to `personas.py` (copy the Arabic one's shape) and pick it in
+   `FRENCH_POLISH_PROMPT` to `zeroflow/personas.py` (copy the Arabic one's shape) and pick it in
    `refine_text` for `"fr"`.
 
-3. **`local_flow.py` → `refine_text`:** update the two display labels `"AR→EN"` / `"EN→AR"`
+3. **`zeroflow/engine.py` → `refine_text`:** update the two display labels `"AR→EN"` / `"EN→AR"`
    to `"FR→EN"` / `"EN→FR"` (cosmetic only).
 
-4. **`personas.py` → translate prompts:** edit the text to say *French* instead of *Arabic*:
+4. **`zeroflow/personas.py` → translate prompts:** edit the text to say *French* instead of *Arabic*:
    ```python
    TRANSLATE_TO_EN_PROMPT = "You are an elite French-to-English translation engine. ..."
    TRANSLATE_TO_AR_PROMPT = "You are an elite English-to-French translation engine. ..."
    ```
    (Keep the constant *names* — `refine_text` picks them by `to == "en"` vs. otherwise.)
 
-5. *(Optional)* **`personas.py` → `VOICE_MACROS` / `PUNCTUATION_MAP`:** replace the Arabic
+5. *(Optional)* **`zeroflow/personas.py` → `VOICE_MACROS` / `PUNCTUATION_MAP`:** replace the Arabic
    spoken triggers (e.g. `"سطر جديد"`) with French ones (`"nouvelle ligne"`), and the
    Arabic punctuation rules with French equivalents.
 
@@ -152,7 +153,7 @@ to `MODES` + `HOTKEYS` + `.env`).
 ## 5. GPU vs CPU
 By default (`WHISPER_DEVICE="auto"`) the engine tries CUDA first and **falls back to
 the CPU (`int8`) automatically** if the CUDA libraries or the NVIDIA driver are missing
-(`load_whisper_model` in `local_flow.py`).
+(`load_whisper_model` in `zeroflow/stt.py`).
 
 ```ini
 WHISPER_DEVICE="auto"             # auto = NVIDIA GPU, falling back to CPU | cpu = skip the GPU
@@ -191,111 +192,51 @@ in `reader_debug.log`. `READER_DEVICE` (§10) chooses the device explicitly.
 ## 6. Using a different LLM provider (instead of Ollama)
 The LLM is only used for **Polish**, **Translate**, the **line-fix / maintenance**
 actions and the reader's optional **Smart LLM Cleaning** — transcription itself is
-always local Whisper. Both halves reach the LLM through two functions in
-**`flow_core.py`**:
+always local Whisper. Both halves reach it through `zeroflow/llm`, which hands every
+request to the provider named by `AI_PROVIDER` in `.env`:
 
-- `discover_ollama_model()` — picks the model: `OLLAMA_MODEL_NAME` if set, otherwise
-  whatever Ollama serves first. **Setting `OLLAMA_MODEL_NAME` skips the Ollama-only
-  discovery entirely**, which is all another provider needs here.
-- `query_ollama(raw_text, context_text, instruction, timeout=15.0)` — sends the request
-  and returns the text (or the input unchanged if anything fails).
+| `AI_PROVIDER` | Talks to | Settings |
+|---|---|---|
+| `ollama` *(default)* | a local Ollama server | `OLLAMA_HOST_URL`, `OLLAMA_MODEL_NAME`, `OLLAMA_KEEP_ALIVE`, `OLLAMA_NUM_CTX` |
+| `openai` | any server speaking the OpenAI `chat/completions` format — LM Studio, the llama.cpp server, vLLM, or a cloud service such as OpenAI or Groq | `AI_URL`, `AI_MODEL`, `AI_API_KEY` |
 
-To switch providers you replace the body of `query_ollama`. The function keeps its
-name, so nothing else changes.
-
-### A) Any OpenAI-compatible server (LM Studio, llama.cpp, vLLM, OpenAI, Groq, Together…)
-Most servers — local or cloud — speak the OpenAI `chat/completions` format. In `.env`:
-
+### A) A local server (LM Studio, llama.cpp server, vLLM)
 ```ini
-OLLAMA_HOST_URL="http://localhost:1234/v1/chat/completions"   # your server's URL
-OLLAMA_MODEL_NAME="your-model-id"                             # exact model id
-LLM_API_KEY=""                                                # required for cloud; blank for local
+AI_PROVIDER="openai"
+AI_URL="http://localhost:1234/v1/chat/completions"   # LM Studio; llama.cpp's server uses port 8080
+AI_MODEL="your-model-id"                             # as the server names it
 ```
 
-In `flow_core.py`, read the key next to the other configuration:
-
-```python
-LLM_API_KEY = os.getenv("LLM_API_KEY", "")
-```
-
-…and replace `query_ollama` with:
-
-```python
-def query_ollama(raw_text, context_text, instruction, timeout=15.0):
-    user = f"Context Window Data:\n{context_text}\n\n" if context_text else ""
-    user += f"Input Raw String: {raw_text}\nOutput String:"
-
-    ui.start_processing_spinner("AI Processing")
-    try:
-        headers = {"Authorization": f"Bearer {LLM_API_KEY}"} if LLM_API_KEY else {}
-        response = requests.post(
-            OLLAMA_HOST_URL,
-            headers=headers,
-            json={
-                "model": get_ollama_model(),
-                "messages": [
-                    {"role": "system", "content": instruction},
-                    {"role": "user", "content": user},
-                ],
-                "temperature": 0.2,
-            },
-            timeout=timeout,
-        )
-        ui.stop_processing_spinner()
-        if response.status_code == 200:
-            output = response.json()["choices"][0]["message"]["content"].strip()
-            return _absorb_learned_word(output)
-        logging.warning(f"LLM returned HTTP {response.status_code}: {response.text[:200]}")
-        ui.show_toast("⚠️ LLM Error", f"HTTP {response.status_code}.", ENABLE_TOASTS)
-    except Exception as e:
-        ui.stop_processing_spinner()
-        logging.warning(f"LLM request failed: {e}")
-        ui.show_toast("⚠️ LLM Offline", "The LLM API failed to respond.", ENABLE_TOASTS)
-    return raw_text
-```
-
-Cloud round-trips are slower than a local model; if replies time out, raise the
-`timeout=15.0` default (the reader passes its own `READER_LLM_TIMEOUT`).
-
-### B) Anthropic / Claude API
-Same shape, different request and response. In `.env`:
-
+### B) A cloud service (OpenAI, Groq, Together…)
 ```ini
-OLLAMA_HOST_URL="https://api.anthropic.com/v1/messages"
-OLLAMA_MODEL_NAME="claude-haiku-4-5-20251001"   # fast and inexpensive, suits clean-up work
-LLM_API_KEY="sk-ant-..."
+AI_PROVIDER="openai"
+AI_URL="https://api.openai.com/v1/chat/completions"
+AI_MODEL="the-model-id"
+AI_API_KEY="sk-..."
 ```
+Cloud round-trips are slower than a local model. Whatever the provider, an
+unreachable server, an error or an empty answer makes Polish and Translate say
+**"AI unavailable"** and paste your own words.
 
-In the function above, replace the `requests.post(...)` call and the success branch:
-
-```python
-        response = requests.post(
-            OLLAMA_HOST_URL,
-            headers={"x-api-key": LLM_API_KEY, "anthropic-version": "2023-06-01"},
-            json={
-                "model": get_ollama_model(),
-                "max_tokens": 1024,
-                "system": instruction,
-                "messages": [{"role": "user", "content": user}],
-                "temperature": 0.2,
-            },
-            timeout=timeout,
-        )
-        ui.stop_processing_spinner()
-        if response.status_code == 200:
-            output = response.json()["content"][0]["text"].strip()
-            return _absorb_learned_word(output)
-```
+### C) Another kind of API (Anthropic / Claude, anything else)
+Write a provider: a module in `zeroflow/llm/` with the three functions described in
+`zeroflow/llm/base.py` — `ask(raw_text, context_text, instruction, timeout)` returning
+the answer or `None`, `warm_up()`, and `model_name()`. `zeroflow/llm/openai_compatible.py`
+is a complete example to copy (about 50 lines). Add it to `PROVIDERS` in
+`zeroflow/llm/__init__.py`, then set `AI_PROVIDER` to its name. For Claude, the request
+goes to `https://api.anthropic.com/v1/messages` with the headers `x-api-key` and
+`anthropic-version: 2023-06-01`, the instruction as `"system"`, the text as the one
+`"user"` message, and `"max_tokens"`; the answer is in `response.json()["content"][0]["text"]`.
 
 > ⚠️ **Privacy:** with a **cloud** provider, the text you dictate (and clipboard
 > context in Polish mode) is sent to that company's servers. Local servers (Ollama,
-> LM Studio, llama.cpp) keep everything on your machine. Your `LLM_API_KEY` lives only
+> LM Studio, llama.cpp) keep everything on your machine. Your `AI_API_KEY` lives only
 > in `.env`, which is git-ignored.
 
 ---
 
 ## 7. Customizing the AI behavior (prompts)
-All prompts live in **`personas.py`** — edit the strings to change how the LLM behaves.
+All prompts live in **`zeroflow/personas.py`** — edit the strings to change how the LLM behaves.
 
 | Constant | Controls |
 |----------|----------|
@@ -326,7 +267,7 @@ also "learn" words nobody said, and every learned word primes Whisper on each di
 ---
 
 ## 8. Voice macros, punctuation & vocabulary
-Also in **`personas.py`**:
+Also in **`zeroflow/personas.py`**:
 
 - **`BASE_VOCABULARY`** — proper nouns / tech terms Whisper should spell correctly.
   Add your project names, tools, brands.
@@ -409,7 +350,7 @@ is used and read from the local cache after that. To change the menu itself, edi
 `VOICES` in `reader/voice_engine.py`.
 
 **Pronunciation.** Words the voice mangles are rewritten phonetically just before
-speaking, from `PRONUNCIATION_MAP` in `personas.py`:
+speaking, from `PRONUNCIATION_MAP` in `zeroflow/personas.py`:
 
 ```python
 PRONUNCIATION_MAP = {

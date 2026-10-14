@@ -1,14 +1,14 @@
 # Zero- Flow — Architecture & Behaviour Guide
 
 A practical map of what the engine does, how it should behave, and where each piece
-lives in the code. Read this before changing `local_flow.py` or `reader/`.
+lives in the code. Read this before changing `zeroflow/` or `reader/`.
 
 ---
 
 ## 1. What it is
 Two background Windows processes that move text and speech in opposite directions:
 
-- **Flow** (`local_flow.py`) turns speech into typed text in whatever app has focus.
+- **Flow** (`zeroflow/engine.py`) turns speech into typed text in whatever app has focus.
   You press a hotkey, talk, press again — the words appear at your cursor.
 - **Reader** (`reader/`) turns highlighted text into speech. You press `F4` and a
   local voice reads the selection aloud.
@@ -18,17 +18,22 @@ a local LLM to clean up or translate text.
 
 | File | Responsibility |
 |------|----------------|
-| `flow_core.py`  | **Shared:** paths, `.env` config, rotating debug log, learned vocabulary, the single Ollama client |
-| `personas.py`   | **Shared:** static data — LLM prompts, base vocabulary, voice macros, punctuation, pronunciation |
-| `engine_ui.py`  | **Shared:** console UI, beeps, Windows toasts, system-tray + window icon |
-| `flow_signals.py` | **Shared:** Windows named events that keep the two halves off each other's toes |
-| `local_flow.py` | Flow: hotkeys, audio capture, transcription, refinement, injection |
+| `local_flow.py`, `zero_flow.py` | Entry points the launchers run: the dictation half alone, or the whole engine. A few lines each |
+| `zeroflow/engine.py` | Flow: hotkeys, recording, transcribe → refine → paste, the action keys |
+| `zeroflow/supervisor.py` | The whole engine: runs dictation and hosts the reader as a child sharing its console |
+| `zeroflow/stt.py` | Whisper: loading (GPU, CPU fallback), transcription, the invented-ending filter. The only module that imports faster-whisper |
+| `zeroflow/capture.py`, `clipboard.py`, `hotkeys.py` | One recording's audio; paste and copy through the clipboard; key helpers |
+| `zeroflow/llm/` | The AI model: `ask_ai` / `query_ai` route to the provider set by `AI_PROVIDER` — `ollama.py` or `openai_compatible.py` (interface in `base.py`) |
+| `zeroflow/text/` | `language.py` (which language a text is in; the AI-answer guard), `macros.py` (spoken commands and punctuation) |
+| `zeroflow/vocabulary.py`, `history.py` | The learned-word list and the dictation history |
+| `zeroflow/settings.py`, `paths.py`, `logs.py` | Every `.env` setting, checked; where files live; the debug and crash logs |
+| `zeroflow/signals.py` | Windows named objects shared by the two processes: events, the clipboard lock, one-copy claims, the Job Object |
+| `zeroflow/ui.py`, `zeroflow/personas.py` | Console, banner, tones, toasts, tray; prompts, base vocabulary, voice macros, punctuation, pronunciation |
 | `reader/`       | Reader: `app.py` (the half itself), `clipboard_tool.py`, `text_cleaner.py`, `voice_engine.py` |
-| `zero_flow.py`  | The supervisor: runs dictation and hosts the reader as a child sharing its console |
 | `check_hardware.py` | Standalone (standard library only): detects the GPU/RAM, picks a hardware tier, writes its settings into `.env` |
 | `presets/`      | One `.env` fragment per hardware tier — the model and device settings `check_hardware.py` applies |
 | `docs/`         | User guides: install, hardware & tuning, FAQ, the beginner walkthrough (English + Arabic) |
-| `tools/`        | Rebuild the generated guides (the English and Arabic printable PDFs) from their Markdown — see `tools/README.md` |
+| `tools/`        | Rebuild the printable PDFs (`tools/README.md`); measure speech and AI changes (`tools/bench/`) |
 | `tests/`        | `unittest` tests, run in the venv: text logic, recording and AI failure paths, playback threading, vocabulary and history files, process supervision (`.\venv\Scripts\python.exe -m unittest discover -s tests -t .`) |
 
 **How they are hosted.** `zero_flow.py` is a supervisor, not a merge: it runs the
@@ -50,7 +55,7 @@ state that lives in the reader; a parent-owned menu would need a command channel
 each one. The only signal that flows back is `EXIT`.
 
 The resources they would fight over — the microphone, the clipboard, and who gets to
-quit — are coordinated with named Windows objects in `flow_signals.py`. They work the
+quit — are coordinated with named Windows objects in `zeroflow/signals.py`. They work the
 same whether the halves are under `zero_flow.py` or started separately:
 
 | Signal | Kind | Set by | Effect |
@@ -117,7 +122,7 @@ console says so, and the engine carries on with the next dictation.
 
 ## 3. Modes & hotkeys
 Each is configurable in `.env`; defaults shown. Record modes live in the `MODES`
-table in `local_flow.py` as `{lang, op}` pairs.
+table in `zeroflow/engine.py` as `{lang, op}` pairs.
 
 | Hotkey | Mode | Forced lang | Behaviour |
 |--------|------|-------------|-----------|
@@ -224,7 +229,14 @@ start makes no request at all, and the one-time download notice is silenced
 
 ---
 
-## 6. Local LLM (`flow_core.py`: `discover_ollama_model`, `query_ollama`)
+## 6. The AI model (`zeroflow/llm`)
+- The engine and the reader call `zeroflow.llm` — `ask_ai`, `query_ai`, `warm_up_ai`,
+  `model_name` — which hands each call to the provider named by `AI_PROVIDER`:
+  `ollama` (`llm/ollama.py`, the default, described below) or `openai`
+  (`llm/openai_compatible.py`, any server speaking the OpenAI chat format). A provider
+  is a module with `ask`, `warm_up` and `model_name` (`llm/base.py`), so another one —
+  phase 4's built-in model — plugs in without touching the engine. An unknown name is
+  reported at start-up and Ollama used.
 - The engine picks the LLM in priority order: (1) `OLLAMA_MODEL_NAME` from
   `.env` if set — pins an exact model; (2) otherwise it queries Ollama's `/api/tags` and
   binds to the **first model installed**; (3) otherwise `FALLBACK_LLM` (Ollama unreachable).
@@ -239,7 +251,7 @@ start makes no request at all, and the one-time download notice is silenced
   model Ollama does not have) or an empty answer — each logged as a warning and shown
   as a toast. Polish, Translate and `Shift+F3` then say **"AI unavailable"** and keep
   your own words; they used to print "Polished" over the unchanged text.
-  `query_ollama` is the same call for callers that carry on with the original either
+  `query_ai` is the same call for callers that carry on with the original either
   way (the reader's Smart mode, vocabulary maintenance): it returns the input instead
   of `None`. `warm_up_llm` checks the HTTP status too, so a 404 is not logged as loaded.
 - Every request carries **`think: false`**. Reasoning models (Gemma 4) otherwise write
@@ -377,7 +389,7 @@ Design notes:
   `BASE_VOCABULARY` — that list feeds Whisper's decoder hint and the casing pass,
   where a phonetic spelling would do damage.
 - **Smart mode** (tray menu / `READER_SMART_MODE`) sends the capture through
-  `flow_core.query_ollama` with `personas.READER_CLEANUP_PROMPT`. It is off by
+  `zeroflow.llm.query_ai` with `personas.READER_CLEANUP_PROMPT`. It is off by
   default, skipped for long selections, and always falls back to the regex clean —
   the reader never stays silent because the LLM was slow.
 
@@ -413,7 +425,7 @@ is never seen.
 
 ## 10a. Processes: one copy, a supervised reader, nothing left behind
 - **One copy at a time.** Each start claims its role with a named mutex
-  (`flow_signals.claim_single_instance`): `zero_flow.py` claims both "dictation" and
+  (`signals.claim_single_instance`): `zero_flow.py` claims both "dictation" and
   "reader", `local_flow.py` "dictation", a standalone reader "reader". A second copy
   says it is already running and closes — two engines used to paste every dictation
   twice. Windows drops a claim when its process ends, however it ends.
@@ -423,7 +435,7 @@ is never seen.
   from the tray, a closed console (`0xC000013A`) and the engine's own `shutdown()` are
   not crashes.
 - **The reader dies with the engine.** `spawn_reader` puts it in a Windows Job Object
-  with *kill on close* (`flow_signals.bind_child_to_this_process`). Only the engine
+  with *kill on close* (`signals.bind_child_to_this_process`). Only the engine
   holds the job's handle, so when the engine ends — even by a crash or End task, when
   none of its clean-up code runs — Windows ends the reader too.
 - **A standalone reader's Exit** quits only itself. The exit signal is shared, and it
@@ -447,7 +459,7 @@ is never seen.
   is not read aloud properly.
 - **Images on the clipboard are lost** by dictation, `F4` and `Shift+F3` (see §8).
 
-Fixed since they were listed here: the **clipboard race** (`flow_signals.clipboard_lock()`
+Fixed since they were listed here: the **clipboard race** (`signals.clipboard_lock()`
 is a named Windows mutex, so it serialises the two halves across the process boundary
 as well as within one), and the **orphaned reader** (see §10a).
 
@@ -483,21 +495,21 @@ before the first word. The supervisor layout gets the 0.22 s figure back.
 model formats into its own, never used here — tries `import torch, transformers` on
 import. Both are installed (the reader's voice needs them), so the attempt succeeds and
 costs ~6 s on every start, loading torch into the dictation process for nothing.
-`local_flow.py` marks the two as unavailable for that one import (CTranslate2 already
+`zeroflow/stt.py` marks the two as unavailable for that one import (CTranslate2 already
 treats them as optional) and removes the marker straight after. Measured: engine ready
 in 5.0–5.3 s instead of ~10.2 s, test suite ~2 s instead of ~8 s, and no torch in the
 dictation process at all. `tests/test_startup.py` fails if a CTranslate2 upgrade
 undoes it. If CTranslate2 ever *needs* torch, the engine fails at start-up with an
 ImportError — loudly, not subtly — and the fix is to remove the skip.
 
-**A second, related trap: import order.** `win11toast` (reached through `engine_ui`)
+**A second, related trap: import order.** `win11toast` (reached through `zeroflow.ui`)
 loads WinRT native libraries. If that happens *before* faster-whisper claims its CUDA
 DLLs, CTranslate2 segfaults when it later loads the model on the GPU. Two defences:
 
-1. `engine_ui.show_toast` imports `win11toast` **lazily**, inside the worker thread,
+1. `ui.show_toast` imports `win11toast` **lazily**, inside the worker thread,
    so simply importing the UI module is harmless.
-2. `zero_flow.py` imports `local_flow` **first**, before anything that reaches
-   `engine_ui`.
+2. `zeroflow/engine.py` imports `zeroflow.stt` **first**, and `zeroflow/supervisor.py`
+   imports `engine` first, before anything that reaches `zeroflow.ui`.
 
 Keep both. If you reorder these imports, re-test by launching `zero_flow.py` and
 confirming `flow_debug.log` still says `Whisper model active on CUDA (float16)`.
