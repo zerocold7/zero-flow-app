@@ -5,6 +5,7 @@ The engine's other half runs separately via `local_flow.py`. To run both in one
 console window with one tray icon, use `zero_flow.py` instead.
 """
 import logging
+import sys
 import traceback
 
 from reader import app
@@ -14,3 +15,6 @@ if __name__ == "__main__":
         app.main()
     except Exception:
         logging.critical(f"Fatal reader crash: {traceback.format_exc()}")
+        # A non-zero code is how the engine (zero_flow.py) knows to restart the reader;
+        # falling off the end exited 0, which it took for a clean exit.
+        sys.exit(1)

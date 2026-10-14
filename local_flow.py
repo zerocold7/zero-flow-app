@@ -859,7 +859,19 @@ def register_hotkeys():
     keyboard.add_hotkey(HOTKEYS["panic"],       on_cancel_hotkey)
 
 
+def report_fatal_error(what):
+    """The engine cannot run. Log why, and say so where the user will see it —
+    started hidden, a console message alone is never seen."""
+    logging.critical(f"Fatal {what} crash: {traceback.format_exc()}")
+    print(f"{ui.C_ERR}❌ The {what} stopped with an error — details in flow_debug.log.{ui.C_RESET}")
+    ui.alert("Zero- Flow stopped", f"The {what} stopped with an error and is not running.\n\n"
+                                   f"The details are in flow_debug.log, in the program folder.")
+
+
 def main():
+    if not signals.claim_single_instance("dictation"):
+        ui.already_running()
+        return
     boot()
     ui.print_boot_sequence(get_ollama_model(), HOTKEYS,
                            speech=f"Whisper {WHISPER_MODEL_NAME} · {model_runtime}")
@@ -873,4 +885,5 @@ if __name__ == "__main__":
     try:
         main()
     except Exception:
-        logging.critical(f"Fatal engine crash: {traceback.format_exc()}")
+        report_fatal_error("dictation engine")
+        sys.exit(1)

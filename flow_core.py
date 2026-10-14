@@ -11,8 +11,10 @@ Both import this module, so there is exactly one Ollama client and one vocabular
 for the whole product. Each half keeps its own debug log (see `init_logging`), because
 the two always run as separate processes. See ARCHITECTURE.md.
 """
+import faulthandler
 import os
 import re
+import sys
 import logging
 import threading
 from logging.handlers import RotatingFileHandler
@@ -61,7 +63,31 @@ def init_logging(component):
     root.setLevel(logging.INFO)
     root.addHandler(handler)
     _log_handlers[component] = handler
+    _log_crashes(component)
     return handler
+
+
+def _log_crashes(component):
+    """Make sure a crash leaves a trace. Uncaught exceptions — on any thread — go to
+    the debug log; a native crash (a segfault in a CUDA library, say), which skips
+    Python's error handling entirely, is written by faulthandler to
+    `<component>_crash.log`. Before this, both left nothing at all."""
+    def log_uncaught(exc_type, exc, tb):
+        logging.critical("Uncaught exception", exc_info=(exc_type, exc, tb))
+
+    sys.excepthook = log_uncaught
+    threading.excepthook = lambda args: logging.critical(
+        f"Uncaught exception in thread {args.thread.name if args.thread else '?'}",
+        exc_info=(args.exc_type, args.exc_value, args.exc_traceback))
+    try:
+        global _crash_file
+        _crash_file = open(os.path.join(BASE_DIR, f"{component}_crash.log"), "a", encoding="utf-8")
+        faulthandler.enable(file=_crash_file)
+    except Exception as e:
+        logging.warning(f"Native crash logging unavailable: {e}")
+
+
+_crash_file = None        # kept open for the life of the process: faulthandler writes to it
 
 
 load_dotenv()

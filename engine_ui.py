@@ -51,6 +51,28 @@ def set_window_icon(filename="logo_tray.ico"):
     except Exception:
         pass
 
+MB_ICONERROR = 0x10
+MB_ICONINFORMATION = 0x40
+MB_SETFOREGROUND = 0x10000
+MB_TOPMOST = 0x40000
+
+def alert(title, text, icon=MB_ICONERROR):
+    """A Windows message box, which blocks until dismissed. For the few things that
+    must reach the user even when the engine was started hidden (Launch_*_Silent.vbs):
+    there, a console message or a toast that times out is never seen."""
+    try:
+        ctypes.windll.user32.MessageBoxW(None, text, title, icon | MB_SETFOREGROUND | MB_TOPMOST)
+    except Exception:
+        pass
+
+def already_running(what="Zero- Flow"):
+    """Tell the user a second copy was not started, and why."""
+    print(f"{C_WARN}{what} is already running — look for its icon by the clock. "
+          f"This copy will close.{C_RESET}")
+    alert(what, f"{what} is already running — look for its icon by the clock.\n\n"
+                f"Running two copies would paste every dictation twice, so this one "
+                f"has not started.", MB_ICONINFORMATION)
+
 def show_toast(title, body="", enable_toasts=True):
     if enable_toasts:
         def _fire():

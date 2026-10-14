@@ -4,8 +4,8 @@ Set WshShell = CreateObject("WScript.Shell")
 Set fso = CreateObject("Scripting.FileSystemObject")
 base = fso.GetParentFolderName(WScript.ScriptFullName) & "\"
 
-WshShell.Run chr(34) & base & "Launch_Flow.bat" & chr(34), 0
-WshShell.Run chr(34) & base & "Launch_Reader.bat" & chr(34), 0
+WshShell.Run chr(34) & base & "Launch_Flow.bat" & chr(34) & " silent", 0
+WshShell.Run chr(34) & base & "Launch_Reader.bat" & chr(34) & " silent", 0
 
 Set fso = Nothing
 Set WshShell = Nothing

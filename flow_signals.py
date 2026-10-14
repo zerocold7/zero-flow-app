@@ -127,6 +127,113 @@ def wait_for_exit(timeout_ms=INFINITE):
     return _kernel32.WaitForSingleObject(handle, timeout_ms) == WAIT_OBJECT_0
 
 
+def exit_requested():
+    """True if someone has already asked the engine to shut down."""
+    return wait_for_exit(0)
+
+
+# =====================================================================
+# ONE COPY AT A TIME
+# =====================================================================
+ERROR_ALREADY_EXISTS = 183
+_instance_handles = {}
+
+
+def claim_single_instance(role):
+    """Claim `role` ("dictation", "reader") for this process. False if another
+    process — or an earlier call here — already holds it.
+
+    Two engines both answered every hotkey, so every dictation was pasted twice.
+    The claim is a named mutex that Windows drops when the process ends, however it
+    ends, so a crashed engine never blocks the next start."""
+    if _kernel32 is None:
+        return True                              # no way to tell: behave as before
+    if role in _instance_handles:
+        return False
+    k32 = ctypes.WinDLL("kernel32", use_last_error=True)
+    k32.CreateMutexW.restype = ctypes.c_void_p
+    k32.CreateMutexW.argtypes = [ctypes.c_void_p, ctypes.c_bool, ctypes.c_wchar_p]
+    handle = k32.CreateMutexW(None, False, f"Local\\ZeroFlow.instance.{role}")
+    if not handle:
+        logging.warning(f"Single-instance check unavailable for '{role}'.")
+        return True
+    if ctypes.get_last_error() == ERROR_ALREADY_EXISTS:
+        k32.CloseHandle(ctypes.c_void_p(handle))
+        return False
+    _instance_handles[role] = handle             # held until this process ends
+    return True
+
+
+# =====================================================================
+# CHILD PROCESSES DIE WITH THE ENGINE
+# =====================================================================
+class _BasicLimits(ctypes.Structure):
+    _fields_ = [("PerProcessUserTimeLimit", ctypes.c_int64),
+                ("PerJobUserTimeLimit", ctypes.c_int64),
+                ("LimitFlags", ctypes.c_uint32),
+                ("MinimumWorkingSetSize", ctypes.c_size_t),
+                ("MaximumWorkingSetSize", ctypes.c_size_t),
+                ("ActiveProcessLimit", ctypes.c_uint32),
+                ("Affinity", ctypes.c_size_t),
+                ("PriorityClass", ctypes.c_uint32),
+                ("SchedulingClass", ctypes.c_uint32)]
+
+
+class _IoCounters(ctypes.Structure):
+    _fields_ = [(name, ctypes.c_uint64) for name in (
+        "ReadOperationCount", "WriteOperationCount", "OtherOperationCount",
+        "ReadTransferCount", "WriteTransferCount", "OtherTransferCount")]
+
+
+class _ExtendedLimits(ctypes.Structure):
+    _fields_ = [("BasicLimitInformation", _BasicLimits),
+                ("IoInfo", _IoCounters),
+                ("ProcessMemoryLimit", ctypes.c_size_t),
+                ("JobMemoryLimit", ctypes.c_size_t),
+                ("PeakProcessMemoryUsed", ctypes.c_size_t),
+                ("PeakJobMemoryUsed", ctypes.c_size_t)]
+
+
+JOB_OBJECT_EXTENDED_LIMIT_INFORMATION = 9
+JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE = 0x2000
+_job = None
+
+
+def bind_child_to_this_process(process):
+    """Make Windows end `process` (a subprocess.Popen) when this process ends — on a
+    crash or an End task too, when no clean-up code of ours gets to run.
+
+    A Job Object with "kill on close": this process holds the only handle to the job,
+    and Windows closes it, killing the job's processes, the moment this one is gone.
+    Without it a crashed engine left the reader running on its own. Best effort:
+    returns False if the child could not be bound."""
+    global _job
+    if _kernel32 is None:
+        return False
+    try:
+        k32 = ctypes.WinDLL("kernel32", use_last_error=True)
+        k32.CreateJobObjectW.restype = ctypes.c_void_p
+        k32.CreateJobObjectW.argtypes = [ctypes.c_void_p, ctypes.c_wchar_p]
+        k32.SetInformationJobObject.argtypes = [ctypes.c_void_p, ctypes.c_int,
+                                                ctypes.c_void_p, ctypes.c_uint32]
+        k32.AssignProcessToJobObject.argtypes = [ctypes.c_void_p, ctypes.c_void_p]
+        if _job is None:
+            job = k32.CreateJobObjectW(None, None)
+            limits = _ExtendedLimits()
+            limits.BasicLimitInformation.LimitFlags = JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE
+            if not job or not k32.SetInformationJobObject(
+                    job, JOB_OBJECT_EXTENDED_LIMIT_INFORMATION,
+                    ctypes.byref(limits), ctypes.sizeof(limits)):
+                raise OSError(ctypes.get_last_error(), "could not set up the job")
+            _job = job                           # never closed: closing it kills the child
+        if not k32.AssignProcessToJobObject(_job, int(process._handle)):
+            raise OSError(ctypes.get_last_error(), "could not add the process to the job")
+        return True
+    except Exception as e:
+        logging.warning(f"Could not tie the child process to the engine's lifetime: {e}")
+        return False
+
+
 # =====================================================================
 # CLIPBOARD MUTEX
 # =====================================================================

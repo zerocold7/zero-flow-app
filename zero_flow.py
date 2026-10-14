@@ -35,6 +35,7 @@ import os
 import subprocess
 import sys
 import threading
+import time
 import traceback
 
 import keyboard
@@ -57,6 +58,9 @@ BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 # What the reader exits with when the shared console window is closed or gets Ctrl+C:
 # the user stopping the engine, not a crash.
 STATUS_CONTROL_C_EXIT = 0xC000013A
+# The reader is restarted if it crashes, but not forever (see watch_reader).
+MAX_READER_RESTARTS = 3
+READER_STABLE_SECONDS = 60
 reader_process = None
 
 
@@ -69,7 +73,11 @@ def spawn_reader():
     """
     env = dict(os.environ, ZEROFLOW_CHILD="1")
     try:
-        return subprocess.Popen([sys.executable, "-m", "reader"], cwd=BASE_DIR, env=env)
+        child = subprocess.Popen([sys.executable, "-m", "reader"], cwd=BASE_DIR, env=env)
+        # So a crash of this process — no clean-up code runs — cannot leave the
+        # reader running on its own with an "Exit Engine" that exits nothing.
+        signals.bind_child_to_this_process(child)
+        return child
     except Exception as e:
         logging.error(f"Could not start the reader half: {e}")
         print(f"{ui.C_ERR}[engine]{ui.C_RESET} Reader failed to start: {e}")
@@ -87,23 +95,42 @@ def watch_for_exit():
 
 
 def watch_reader():
-    """If the child dies on its own, say so loudly — the vanished tray icon is
-    otherwise the only clue, and dictation carries on working regardless."""
-    if reader_process is None:
-        return
-    code = reader_process.wait()
-    if code == 0:
-        return                                   # a clean exit is handled by watch_for_exit
-    if code == STATUS_CONTROL_C_EXIT:
-        logging.info("The reader half stopped with the console (window closed or Ctrl+C).")
-        return
-    logging.error(f"The reader half exited unexpectedly (code {code}).")
-    print(f"\n{ui.C_ERR}[engine]{ui.C_RESET} The reader half stopped (exit code {code}). "
-          f"Dictation is unaffected; restart the engine to get F4 back.")
+    """Restart the reader if it dies on its own, and say so — the vanished tray icon
+    is otherwise the only clue, since dictation carries on regardless.
+
+    Restarts wait 2, 4, then 8 s, and stop after MAX_READER_RESTARTS in a row: a
+    reader that cannot start at all (a broken voice model, say) must not loop
+    forever. One that ran for READER_STABLE_SECONDS earns a fresh set of tries."""
+    global reader_process
+    restarts = 0
+    while reader_process is not None:
+        started = time.monotonic()
+        code = reader_process.wait()
+        if signals.exit_requested():
+            return                               # Exit Engine: watch_for_exit handles it
+        if code == STATUS_CONTROL_C_EXIT:
+            logging.info("The reader half stopped with the console (window closed or Ctrl+C).")
+            return
+        if time.monotonic() - started > READER_STABLE_SECONDS:
+            restarts = 0
+        if restarts >= MAX_READER_RESTARTS:
+            logging.error(f"The reader half keeps stopping (exit code {code}); giving up.")
+            print(f"\n{ui.C_ERR}[engine]{ui.C_RESET} The reader keeps stopping (exit code "
+                  f"{code}) — F4 is off. Dictation is unaffected; details in reader_debug.log.")
+            return
+        restarts += 1
+        delay = 2 ** restarts
+        logging.error(f"The reader half exited unexpectedly (code {code}); restarting in "
+                      f"{delay} s ({restarts}/{MAX_READER_RESTARTS}).")
+        print(f"\n{ui.C_WARN}[engine]{ui.C_RESET} The reader stopped (exit code {code}); "
+              f"restarting it in {delay} s.")
+        time.sleep(delay)
+        reader_process = spawn_reader()
 
 
-def shutdown():
-    """Stop the child, then this process."""
+def shutdown(code=0):
+    """Stop the child, then this process (exit code `code`: non-zero after a crash,
+    so the launcher can tell)."""
     if reader_process and reader_process.poll() is None:
         try:
             reader_process.terminate()
@@ -113,7 +140,7 @@ def shutdown():
                 reader_process.kill()
             except Exception:
                 pass
-    os._exit(0)
+    os._exit(code)
 
 
 def print_boot_sequence(llm_model):
@@ -147,6 +174,12 @@ def print_boot_sequence(llm_model):
 def main():
     global reader_process
     logging.info("=== Zero- Engine Boot Sequence Initiated ===")
+    # The whole engine claims both roles, so neither a second engine nor a standalone
+    # half (Launch_Flow / Launch_Reader) can run beside it and double every action.
+    if not (signals.claim_single_instance("dictation")
+            and signals.claim_single_instance("reader")):
+        ui.already_running()
+        return
 
     local_flow.boot()                            # loads Whisper on the GPU
     print_boot_sequence(local_flow.get_ollama_model())
@@ -170,5 +203,5 @@ if __name__ == "__main__":
     except KeyboardInterrupt:
         shutdown()
     except Exception:
-        logging.critical(f"Fatal engine crash: {traceback.format_exc()}")
-        shutdown()
+        local_flow.report_fatal_error("engine")
+        shutdown(1)
