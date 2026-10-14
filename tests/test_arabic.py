@@ -266,6 +266,20 @@ class TestFixLine(AITestCase):
             pasted, _ = self.fix_line("teh server is down", "服务器已关闭")
         self.assertEqual(pasted, [])
 
+    def test_an_unreachable_ai_is_reported(self):
+        """The line was quietly deselected, with nothing to say the AI was down."""
+        console = io.StringIO()
+        with mock.patch.object(local_flow, "keyboard") as kb, \
+             mock.patch.object(local_flow, "pyperclip") as clip, \
+             mock.patch.object(local_flow, "paste_text") as paste, \
+             mock.patch.object(local_flow, "ask_ollama", return_value=None), \
+             contextlib.redirect_stdout(console):
+            kb.is_pressed.return_value = False
+            clip.paste.side_effect = ["saved", "teh line"]
+            local_flow.correct_current_line()
+        paste.assert_not_called()
+        self.assertIn("AI unavailable", console.getvalue())
+
     def test_an_arabic_line_must_come_back_arabic(self):
         with self.assertLogs(level="WARNING"):
             pasted, _ = self.fix_line("الخادم معطل", "The server is down.")

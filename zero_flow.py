@@ -62,6 +62,7 @@ STATUS_CONTROL_C_EXIT = 0xC000013A
 MAX_READER_RESTARTS = 3
 READER_STABLE_SECONDS = 60
 reader_process = None
+shutting_down = False     # set by shutdown(), which stops the reader itself
 
 
 def spawn_reader():
@@ -106,8 +107,8 @@ def watch_reader():
     while reader_process is not None:
         started = time.monotonic()
         code = reader_process.wait()
-        if signals.exit_requested():
-            return                               # Exit Engine: watch_for_exit handles it
+        if shutting_down or signals.exit_requested():
+            return                               # the engine is closing it on purpose
         if code == STATUS_CONTROL_C_EXIT:
             logging.info("The reader half stopped with the console (window closed or Ctrl+C).")
             return
@@ -131,6 +132,8 @@ def watch_reader():
 def shutdown(code=0):
     """Stop the child, then this process (exit code `code`: non-zero after a crash,
     so the launcher can tell)."""
+    global shutting_down
+    shutting_down = True
     if reader_process and reader_process.poll() is None:
         try:
             reader_process.terminate()

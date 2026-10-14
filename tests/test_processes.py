@@ -205,6 +205,12 @@ class TestReaderSupervision(unittest.TestCase):
     def test_closing_the_console_is_not_a_crash(self):
         self.assertEqual(self.supervise(zero_flow.STATUS_CONTROL_C_EXIT, [1]), 0)
 
+    def test_the_engine_stopping_the_reader_is_not_a_crash(self):
+        """shutdown() ends the reader first; that exit is not one to restart (or to
+        log as "exited unexpectedly" on the way out)."""
+        with mock.patch.object(zero_flow, "shutting_down", True, create=True):
+            self.assertEqual(self.supervise(1, [1]), 0)
+
 
 class TestReaderExitButton(unittest.TestCase):
     def press_exit(self, child_mode):

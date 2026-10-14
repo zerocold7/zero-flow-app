@@ -800,7 +800,9 @@ def correct_current_line():
 
     lang = "ar" if ARABIC_LETTERS.search(target_text) else "en"
     fixed = ask_ollama(target_text, None, personas.LINE_CORRECTION_PROMPT)
-    if fixed is not None:
+    if fixed is None:
+        print(f"{ui.C_WARN}⚠️  AI unavailable — the line is left as it was.{ui.C_RESET}")
+    else:
         fixed = checked_ai_output(fixed, target_text, lang)
     if fixed and fixed != target_text:
         print(f"✨ Optimized: '{ui.C_GOOD}{fixed}{ui.C_RESET}'")
