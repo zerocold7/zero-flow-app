@@ -83,6 +83,12 @@ def choice(name: str, default: str, allowed: tuple[str, ...]) -> str:
 
 
 # ---------------------------------------------------------------- the AI model
+# Which provider runs it (zeroflow/llm): "ollama", or "openai" for any server speaking
+# the OpenAI chat format — then AI_URL, AI_MODEL and, for a cloud service, AI_API_KEY.
+AI_PROVIDER = text("AI_PROVIDER", "ollama").lower()
+AI_URL = text("AI_URL", "http://127.0.0.1:8080/v1/chat/completions")
+AI_MODEL = text("AI_MODEL", "")
+AI_API_KEY = text("AI_API_KEY", "")
 OLLAMA_HOST_URL = text("OLLAMA_HOST_URL", "http://127.0.0.1:11434/api/generate")
 # Pin an exact model (e.g. qwen2.5:7b); blank = the first model Ollama has installed.
 OLLAMA_MODEL_NAME = text("OLLAMA_MODEL_NAME", "")

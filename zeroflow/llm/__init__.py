@@ -1,12 +1,28 @@
 """The AI model, whichever provider runs it.
 
 The engine and the reader call these four functions; each hands the call to the active
-provider (zeroflow.llm.base.Provider). Today that is Ollama, a separate local server
-(llm.ollama). Phase 4 adds a model built into the engine as a second provider.
-"""
-from zeroflow.llm import ollama
+provider (zeroflow.llm.base.Provider), chosen with AI_PROVIDER in .env:
 
-provider = ollama
+    ollama   a local Ollama server (llm.ollama) — the default
+    openai   any server speaking the OpenAI chat format (llm.openai_compatible):
+             LM Studio, the llama.cpp server, vLLM, or a cloud service
+"""
+from zeroflow import settings
+from zeroflow.llm import ollama, openai_compatible
+
+PROVIDERS = {"ollama": ollama, "openai": openai_compatible}
+
+
+def choose(name: str):
+    """The provider called `name`; Ollama, with the mistake reported, if there is none."""
+    if name in PROVIDERS:
+        return PROVIDERS[name]
+    settings.problems.append(f'AI_PROVIDER="{name}" in .env is not one of '
+                             f'{", ".join(PROVIDERS)} — using ollama.')
+    return ollama
+
+
+provider = choose(settings.AI_PROVIDER)
 
 
 def ask_ai(raw_text: str, context_text: str | None, instruction: str,

@@ -55,5 +55,70 @@ class TestRouting(unittest.TestCase):
             self.assertTrue(callable(getattr(ollama, name)), name)
 
 
+class TestChoosingAProvider(unittest.TestCase):
+    def test_a_provider_is_chosen_by_name(self):
+        from zeroflow.llm import openai_compatible
+        self.assertIs(llm.choose("openai"), openai_compatible)
+        self.assertIs(llm.choose("ollama"), llm.ollama)
+
+    def test_an_unknown_name_is_reported_and_ollama_used(self):
+        with mock.patch.object(llm.settings, "problems", []):
+            self.assertIs(llm.choose("chatgpt"), llm.ollama)
+            self.assertEqual(len(llm.settings.problems), 1, "the mistake was not reported")
+            self.assertIn('AI_PROVIDER="chatgpt"', llm.settings.problems[0])
+
+
+class TestOpenAICompatible(unittest.TestCase):
+    """LM Studio, the llama.cpp server, OpenAI, Groq…: one chat/completions format."""
+
+    def setUp(self):
+        from zeroflow.llm import openai_compatible as provider
+        self.provider = provider
+        for patcher in (mock.patch.object(provider, "AI_URL", "http://127.0.0.1:8080/v1/chat/completions"),
+                        mock.patch.object(provider, "AI_MODEL", "local-model"),
+                        mock.patch.object(provider, "AI_API_KEY", ""),
+                        mock.patch.object(provider, "ENABLE_TOASTS", False),
+                        mock.patch.object(provider.ui, "start_processing_spinner"),
+                        mock.patch.object(provider.ui, "stop_processing_spinner")):
+            patcher.start()
+            self.addCleanup(patcher.stop)
+
+    def reply(self, status=200, content="Polished."):
+        body = {"choices": [{"message": {"content": content}}]}
+        return mock.Mock(status_code=status, json=lambda: body, text="error text")
+
+    def test_the_request_is_a_chat_with_the_instruction_as_system(self):
+        with mock.patch.object(self.provider.requests, "post", return_value=self.reply()) as post:
+            answer = self.provider.ask("so um hello", "clipboard text", "Polish this.")
+        self.assertEqual(answer, "Polished.")
+        body = post.call_args.kwargs["json"]
+        self.assertEqual(body["model"], "local-model")
+        self.assertEqual(body["messages"][0], {"role": "system", "content": "Polish this."})
+        self.assertIn("so um hello", body["messages"][1]["content"])
+        self.assertIn("clipboard text", body["messages"][1]["content"])
+        self.assertNotIn("Authorization", post.call_args.kwargs.get("headers") or {})
+
+    def test_a_key_is_sent_only_when_set(self):
+        with mock.patch.object(self.provider, "AI_API_KEY", "sk-test"), \
+             mock.patch.object(self.provider.requests, "post", return_value=self.reply()) as post:
+            self.provider.ask("hello", None, "Polish this.")
+        self.assertEqual(post.call_args.kwargs["headers"]["Authorization"], "Bearer sk-test")
+
+    def test_no_answer_is_none_with_the_reason_logged(self):
+        for outcome in (self.reply(status=500), self.reply(content="   "), ConnectionError("refused")):
+            kwargs = {"side_effect": outcome} if isinstance(outcome, Exception) else {"return_value": outcome}
+            with mock.patch.object(self.provider.requests, "post", **kwargs), \
+                 self.assertLogs(level="WARNING"):
+                self.assertIsNone(self.provider.ask("hello", None, "Polish this."))
+
+    def test_learned_words_are_taken_from_the_answer(self):
+        reply = self.reply(content="Ask Tamara. [LEARN: Tamara]")
+        with mock.patch.object(self.provider.requests, "post", return_value=reply), \
+             mock.patch.object(self.provider, "_absorb_learned_word",
+                               side_effect=lambda out, heard: "Ask Tamara.") as absorb:
+            self.assertEqual(self.provider.ask("ask tamara", None, "Polish this."), "Ask Tamara.")
+        self.assertEqual(absorb.call_args.kwargs["heard"], "ask tamara")
+
+
 if __name__ == "__main__":
     unittest.main()
