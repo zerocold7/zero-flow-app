@@ -154,7 +154,7 @@ class TestMemoryMaintenance(VocabularyTestCase):
         return self.vocab_path + ".bak"
 
     def run_maintenance(self, llm_output):
-        with mock.patch.object(engine, "query_ollama", return_value=llm_output):
+        with mock.patch.object(engine, "query_ai", return_value=llm_output):
             engine.run_memory_maintenance()
 
     def test_list_markers_are_stripped(self):
@@ -175,7 +175,7 @@ class TestMemoryMaintenance(VocabularyTestCase):
             self.assertEqual(f.read(), "Manhwa\n")
 
     def test_unchanged_output_writes_nothing(self):
-        """query_ollama returns its input when Ollama is down — that is not a success."""
+        """query_ai returns its input when Ollama is down — that is not a success."""
         current = "\n".join(sorted(vocabulary.load_vocabulary()))
         self.run_maintenance(current)
         self.assertEqual(self.read_vocab_file(), ["Manhwa"])

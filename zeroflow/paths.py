@@ -9,7 +9,7 @@ TEMP_AUDIO_FILE = os.path.join(BASE_DIR, "flow_capture.wav")
 HISTORY_FILE = os.path.join(BASE_DIR, "flow_history.md")
 
 
-def log_dir():
+def log_dir() -> str:
     """Where the debug and crash logs go: the program folder, unless ZEROFLOW_LOG_DIR
     says otherwise. The test suite points it at a temporary folder, so its deliberate
     crashes never read like real faults in the logs you look at. Read when a log is
@@ -17,5 +17,5 @@ def log_dir():
     return os.getenv("ZEROFLOW_LOG_DIR") or BASE_DIR
 
 
-def log_path(component):
+def log_path(component: str) -> str:
     return os.path.join(log_dir(), f"{component}_debug.log")

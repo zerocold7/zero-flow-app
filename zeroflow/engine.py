@@ -20,6 +20,7 @@ import time
 import traceback
 
 import keyboard
+import numpy as np
 import sounddevice as sd
 
 # stt first: it loads faster-whisper, which must claim its CUDA libraries before any
@@ -30,7 +31,7 @@ from zeroflow.capture import Capture
 from zeroflow.clipboard import copy_selection, paste_text, read_clipboard_context
 from zeroflow.history import cap_history_file, log_to_history
 from zeroflow.hotkeys import _run_async, wait_for_release
-from zeroflow.llm.ollama import ask_ollama, get_ollama_model, query_ollama, warm_up_llm
+from zeroflow.llm import ask_ai, model_name, query_ai, warm_up_ai
 from zeroflow.logs import init_logging
 from zeroflow.paths import HISTORY_FILE, VOCAB_CACHE_FILE, log_path
 from zeroflow.settings import (CHANNELS, ENABLE_AUDIO_CHIMES, ENABLE_TOASTS, HOTKEYS,
@@ -77,7 +78,7 @@ capture_lock = threading.Lock()     # guards current_capture and the reader's mi
 processing_lock = threading.Lock()
 
 
-def run_memory_maintenance():
+def run_memory_maintenance() -> None:
     """Shift+F1 — let the LLM dedupe / clean the learned-vocabulary file."""
     if is_recording():
         return
@@ -88,9 +89,9 @@ def run_memory_maintenance():
     before = sorted(load_vocabulary())
     current_vocab = "\n".join(before)
     cleaned = "\n".join(vocabulary_terms(
-        query_ollama(current_vocab, None, personas.MEMORY_MAINTENANCE_PROMPT)))
+        query_ai(current_vocab, None, personas.MEMORY_MAINTENANCE_PROMPT)))
     if not cleaned or cleaned == current_vocab:
-        # query_ollama hands back its input when the LLM is unreachable, so an
+        # query_ai hands back its input when the LLM is unreachable, so an
         # unchanged list is not a success worth rewriting the file for.
         print(f"{ui.C_WARN}🧹 Vocabulary unchanged — nothing written.{ui.C_RESET}")
     else:
@@ -114,7 +115,7 @@ def run_memory_maintenance():
     ui.update_console_title("ONLINE")
 
 
-def purge_diagnostic_files():
+def purge_diagnostic_files() -> None:
     """Shift+F2 — clear the debug log and dictation history on demand. These are the
     files that grow with use; vocabulary is curated separately by Shift+F1.
 
@@ -147,11 +148,11 @@ def purge_diagnostic_files():
     ui.play_tone("clean", ENABLE_AUDIO_CHIMES)
 
 
-def is_recording():
+def is_recording() -> bool:
     return current_capture is not None
 
 
-def _end_capture(capture):
+def _end_capture(capture: Capture) -> None:
     """Forget `capture` if it is still the current one, and only then tell the reader
     the microphone is closed — a newer recording may already have it open again."""
     global current_capture
@@ -163,7 +164,7 @@ def _end_capture(capture):
             ui.set_tray_state(False)
 
 
-def _ai_unavailable(text):
+def _ai_unavailable(text: str) -> str:
     """The AI gave no answer (why is in the log and the toast): say so, and paste
     what was said rather than nothing."""
     print(f"{ui.C_WARN}⚠️  AI unavailable — pasted your own words: {ui.C_RESET}{text}")
@@ -171,7 +172,7 @@ def _ai_unavailable(text):
     return text
 
 
-def refine_text(text, mode, context=""):
+def refine_text(text: str, mode: str, context: str = "") -> str:
     """Apply the recording mode's operation. Raw modes pass straight through.
     `context` is the clipboard snapshot Polish mode hands the LLM."""
     cfg = MODES[mode]
@@ -179,7 +180,7 @@ def refine_text(text, mode, context=""):
     if cfg["op"] == "polish":
         ui.update_console_title("OLLAMA PROCESSING")
         prompt = personas.ARABIC_POLISH_PROMPT if cfg["lang"] == "ar" else personas.STANDARD_SYSTEM_PROMPT
-        answer = ask_ollama(text, context, prompt)
+        answer = ask_ai(text, context, prompt)
         if answer is None:
             return _ai_unavailable(text)
         out = checked_ai_output(answer, text, cfg["lang"])
@@ -195,7 +196,7 @@ def refine_text(text, mode, context=""):
             direction, prompt = "AR→EN", personas.TRANSLATE_TO_EN_PROMPT
         else:
             direction, prompt = "EN→AR", personas.TRANSLATE_TO_AR_PROMPT
-        answer = ask_ollama(text, None, prompt)
+        answer = ask_ai(text, None, prompt)
         if answer is None:
             return _ai_unavailable(text)
         out = checked_ai_output(answer, text, cfg["to"])
@@ -208,7 +209,7 @@ def refine_text(text, mode, context=""):
     return text
 
 
-def inject_text(text):
+def inject_text(text: str) -> None:
     """Apply spoken macros/punctuation, then paste the text at the cursor."""
     if not text:
         return
@@ -222,7 +223,7 @@ def inject_text(text):
     paste_text(text, press_enter=end_enter)
 
 
-def process_recording(capture):
+def process_recording(capture: Capture) -> None:
     """Open the mic, capture until stopped, then transcribe → refine → inject.
 
     Everything this recording needs travels in `capture`, because the next recording
@@ -284,7 +285,7 @@ def process_recording(capture):
             ui.update_console_title("ONLINE")
 
 
-def transcribe_and_inject(audio, mode, context):
+def transcribe_and_inject(audio: np.ndarray, mode: str, context: str) -> None:
     """Stages 2-4 for one captured clip: transcribe, refine, paste."""
     ui.update_console_title("DECODING")
     started = time.time()
@@ -310,7 +311,7 @@ def transcribe_and_inject(audio, mode, context):
     log_to_history(text, mode)
 
 
-def on_record_hotkey(mode_name):
+def on_record_hotkey(mode_name: str) -> None:
     """A record key (F5–F10) was pressed: start a capture in that mode, or stop it."""
     global current_capture
 
@@ -340,7 +341,7 @@ def on_record_hotkey(mode_name):
         ui.play_tone("stop", ENABLE_AUDIO_CHIMES)
 
 
-def on_cancel_hotkey():
+def on_cancel_hotkey() -> None:
     """Esc — cancel an in-progress recording. (Does nothing when idle, so Esc keeps
     working normally in your apps; use the app's own Ctrl+Z to undo an injection.)"""
     global current_capture
@@ -353,7 +354,7 @@ def on_cancel_hotkey():
         ui.play_tone("cancel", ENABLE_AUDIO_CHIMES)
 
 
-def correct_current_line():
+def correct_current_line() -> None:
     """Shift+F3 — grab the current line, fix it via the LLM, paste it back."""
     if is_recording():
         return
@@ -371,7 +372,7 @@ def correct_current_line():
         return
 
     lang = "ar" if ARABIC_LETTERS.search(target_text) else "en"
-    fixed = ask_ollama(target_text, None, personas.LINE_CORRECTION_PROMPT)
+    fixed = ask_ai(target_text, None, personas.LINE_CORRECTION_PROMPT)
     if fixed is None:
         print(f"{ui.C_WARN}⚠️  AI unavailable — the line is left as it was.{ui.C_RESET}")
     else:
@@ -386,7 +387,7 @@ def correct_current_line():
         ui.play_tone("stop", ENABLE_AUDIO_CHIMES)
 
 
-def boot():
+def boot() -> None:
     """Load the model and get the dictation half ready. Shared by both entry points
     (this file standalone, and the supervisor in zero_flow.py)."""
 
@@ -396,13 +397,13 @@ def boot():
     # mid-capture — otherwise a running reader would keep refusing to speak.
     signals.set_recording(False)
     # Load the AI model alongside Whisper rather than on the first Polish (3-12 s).
-    threading.Thread(target=warm_up_llm, daemon=True).start()
+    threading.Thread(target=warm_up_ai, daemon=True).start()
     stt.model = stt.load_whisper_model()
     cap_history_file()
     ui.update_console_title("ONLINE")
 
 
-def register_hotkeys():
+def register_hotkeys() -> None:
     """Bind the dictation keys. Shared by both entry points."""
     # Record modes (F5–F10). suppress=True consumes the key so it never reaches the
     # focused app (e.g. F5 = browser refresh). The lambda captures each mode name.
@@ -417,7 +418,7 @@ def register_hotkeys():
     keyboard.add_hotkey(HOTKEYS["panic"],       on_cancel_hotkey)
 
 
-def report_fatal_error(what):
+def report_fatal_error(what: str) -> None:
     """The engine cannot run. Log why, and say so where the user will see it —
     started hidden, a console message alone is never seen."""
     logging.critical(f"Fatal {what} crash: {traceback.format_exc()}")
@@ -426,7 +427,7 @@ def report_fatal_error(what):
                                    f"The details are in flow_debug.log, in the program folder.")
 
 
-def run():
+def run() -> int:
     """Run the dictation half on its own (local_flow.py); exit code 1 after a crash."""
     try:
         main()
@@ -436,7 +437,7 @@ def run():
     return 0
 
 
-def key_sections(panic="cancel"):
+def key_sections(panic: str = "cancel") -> list:
     """The dictation keys, for the start-up banner — as set in .env, not as shipped."""
     hk, magenta = HOTKEYS, ui.Fore.MAGENTA
     return [
@@ -451,15 +452,15 @@ def key_sections(panic="cancel"):
     ]
 
 
-def show_banner():
+def show_banner() -> None:
     """The banner of the dictation half on its own."""
     ui.print_banner("Z E R O -   F L O W   E N G I N E",
                     [("Speech to text", f"Whisper {WHISPER_MODEL_NAME} · {stt.model_runtime}"),
-                     ("AI model", get_ollama_model())],
+                     ("AI model", model_name())],
                     key_sections())
 
 
-def main():
+def main() -> None:
     if not signals.claim_single_instance("dictation"):
         ui.already_running()
         return

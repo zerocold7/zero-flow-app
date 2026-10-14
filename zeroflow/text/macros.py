@@ -11,29 +11,29 @@ MACRO_PUNCT = r'[\s,.;:!?،؛؟…]'
 TRAILING_PUNCT = re.compile(MACRO_PUNCT + r'+$')
 
 
-def _phrases(tokens):
+def _phrases(tokens: list[str]) -> str:
     """Trigger phrases as one regex alternation, longest first."""
     return "|".join(re.escape(t) for t in sorted(tokens, key=len, reverse=True))
 
 
-def _strip_leading(text, tokens):
+def _strip_leading(text: str, tokens: list[str]) -> tuple[str, bool]:
     """Remove a leading trigger phrase and the punctuation Whisper put after it.
     Whole words only: "Pointless" is not the "point" macro. Returns (text, matched)."""
-    pattern = r'(?i)^(?:%s)(?!\w)%s*' % (_phrases(tokens), MACRO_PUNCT)
+    pattern = rf'(?i)^(?:{_phrases(tokens)})(?!\w){MACRO_PUNCT}*'
     stripped = re.sub(pattern, '', text, count=1)
     return stripped, stripped != text
 
 
-def _strip_trailing(text, tokens):
+def _strip_trailing(text: str, tokens: list[str]) -> tuple[str, bool]:
     """Remove a trailing trigger phrase, the comma Whisper puts before it and the mark
     after it — but not the speaker's own "!" or "?" in front. Whole words only: "a
     thousand send" is not the "and send" macro. Returns (text, matched)."""
-    pattern = r'(?i)[\s,،]*(?<!\w)(?:%s)%s*$' % (_phrases(tokens), MACRO_PUNCT)
+    pattern = rf'(?i)[\s,،]*(?<!\w)(?:{_phrases(tokens)}){MACRO_PUNCT}*$'
     stripped = re.sub(pattern, '', text, count=1)
     return stripped, stripped != text
 
 
-def apply_macros(text):
+def apply_macros(text: str) -> tuple[str, bool, bool]:
     """Turn a raw transcription into the exact string to paste.
 
     Spoken macros ("new line", "bullet", "format code", "and send") are detected,
@@ -69,7 +69,7 @@ def apply_macros(text):
     for word in load_vocabulary():               # normalise known-term casing
         # A function replacement, so a learned word is inserted literally: as a
         # template string, a backslash in it would raise and lose the dictation.
-        text = re.sub(r'(?i)\b' + re.escape(word) + r'\b', lambda _: word, text)
+        text = re.sub(r'(?i)\b' + re.escape(word) + r'\b', lambda _, word=word: word, text)
 
     text = text.strip()
     if wrap_code:

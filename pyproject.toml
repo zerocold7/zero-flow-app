@@ -11,5 +11,13 @@ extend-exclude = ["tools/"]
 # outdated idioms (UP). Line length is not enforced — the prompts are long strings.
 select = ["E4", "E7", "E9", "F", "B", "UP"]
 
+[tool.ruff.lint.per-file-ignores]
+# Imports that must come after a set-up line: stt's after the block that keeps torch
+# out of the faster-whisper import; tests' and tools' after sys.path points at the
+# project.
+"zeroflow/stt.py" = ["E402"]
+"tests/*" = ["E402"]
+"tools/*" = ["E402"]
+
 [tool.pytest.ini_options]
 testpaths = ["tests"]

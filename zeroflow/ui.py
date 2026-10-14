@@ -36,11 +36,13 @@ C_RESET = Style.RESET_ALL
 spinner_active = False
 tray_icon = None
 
-def update_console_title(status):
-    try: ctypes.windll.kernel32.SetConsoleTitleW(f"Zero- Core [{status}]")
-    except: pass
+def update_console_title(status: str) -> None:
+    try:
+        ctypes.windll.kernel32.SetConsoleTitleW(f"Zero- Core [{status}]")
+    except Exception:                            # no console (started hidden)
+        pass
 
-def set_window_icon(filename="logo_tray.ico"):
+def set_window_icon(filename: str = "logo_tray.ico") -> None:
     """Apply the logo to the console window (title bar + taskbar entry)."""
     try:
         path = os.path.join(BASE_DIR, filename)
@@ -59,7 +61,7 @@ MB_ICONINFORMATION = 0x40
 MB_SETFOREGROUND = 0x10000
 MB_TOPMOST = 0x40000
 
-def alert(title, text, icon=MB_ICONERROR):
+def alert(title: str, text: str, icon: int = MB_ICONERROR) -> None:
     """A Windows message box, which blocks until dismissed. For the few things that
     must reach the user even when the engine was started hidden (Launch_*_Silent.vbs):
     there, a console message or a toast that times out is never seen."""
@@ -68,7 +70,7 @@ def alert(title, text, icon=MB_ICONERROR):
     except Exception:
         pass
 
-def report_setting_problems(problems, enable_toasts=True):
+def report_setting_problems(problems: list[str], enable_toasts: bool = True) -> None:
     """Say which .env settings were ignored, and why — in the console, the log and a
     toast, since a hidden engine's console is never seen."""
     for problem in problems:
@@ -79,7 +81,7 @@ def report_setting_problems(problems, enable_toasts=True):
                    f"{len(problems)} setting(s) in .env were ignored — the defaults are "
                    f"used. Details in the log.", enable_toasts)
 
-def already_running(what="Zero- Flow"):
+def already_running(what: str = "Zero- Flow") -> None:
     """Tell the user a second copy was not started, and why."""
     print(f"{C_WARN}{what} is already running — look for its icon by the clock. "
           f"This copy will close.{C_RESET}")
@@ -87,7 +89,7 @@ def already_running(what="Zero- Flow"):
                 f"Running two copies would paste every dictation twice, so this one "
                 f"has not started.", MB_ICONINFORMATION)
 
-def show_toast(title, body="", enable_toasts=True):
+def show_toast(title: str, body: str = "", enable_toasts: bool = True) -> None:
     if enable_toasts:
         def _fire():
             try:
@@ -100,15 +102,17 @@ def show_toast(title, body="", enable_toasts=True):
                 # win11toast defaults on_click/on_dismissed/on_failed to `print`,
                 # so when a toast times out it leaks "(<ToastDismissalReason..>,)"
                 # to the console. Pass no-op handlers to keep the console clean.
-                noop = lambda *a: None
+                def ignore(*_):
+                    return None
                 toast(title, body, audio={"silent": "true"},
-                      on_click=noop, on_dismissed=noop, on_failed=noop)
+                      on_click=ignore, on_dismissed=ignore, on_failed=ignore)
             except Exception:
                 pass
         threading.Thread(target=_fire, daemon=True).start()
 
-def play_tone(tone_type, enable_chimes=True):
-    if not enable_chimes: return
+def play_tone(tone_type: str, enable_chimes: bool = True) -> None:
+    if not enable_chimes:
+        return
     tones = {
         "start": [(1000, 120)], "stop": [(700, 120)],
         "cancel": [(500, 150), (400, 150)], "success_raw": [(1100, 80)],
@@ -125,7 +129,7 @@ def play_tone(tone_type, enable_chimes=True):
             winsound.Beep(f, d)
     threading.Thread(target=_beep, daemon=True).start()
 
-def print_banner(title, about, sections):
+def print_banner(title: str, about: list[tuple[str, str]], sections: list) -> None:
     """The start-up banner, for all three ways of running the engine.
 
     `about` is (label, value) pairs — what loaded where ("Speech to text", "Whisper
@@ -148,7 +152,7 @@ def print_banner(title, about, sections):
         print(line)
         time.sleep(0.03)
 
-def start_processing_spinner(message="AI Processing"):
+def start_processing_spinner(message: str = "AI Processing") -> None:
     global spinner_active
     spinner_active = True
     def spin():
@@ -162,18 +166,18 @@ def start_processing_spinner(message="AI Processing"):
         sys.stdout.write("\r" + " " * 50 + "\r")
     threading.Thread(target=spin, daemon=True).start()
 
-def stop_processing_spinner():
+def stop_processing_spinner() -> None:
     global spinner_active
     spinner_active = False
     time.sleep(0.15)
 
-def create_image(color1, color2):
+def create_image(color1: str, color2: str) -> Image.Image:
     image = Image.new('RGB', (64, 64), color1)
     dc = ImageDraw.Draw(image)
     dc.rectangle((16, 16, 48, 48), fill=color2)
     return image
 
-def load_tray_icon(filename, fallback_fg='white'):
+def load_tray_icon(filename: str, fallback_fg: str = 'white') -> Image.Image:
     try:
         return Image.open(os.path.join(BASE_DIR, filename))
     except Exception:
@@ -183,7 +187,7 @@ def exit_action(icon, item):
     icon.stop()
     os._exit(0)
 
-def setup_system_tray():
+def setup_system_tray() -> None:
     global tray_icon
     icon_image = load_tray_icon("logo_tray.ico", 'white')
 
@@ -192,7 +196,7 @@ def setup_system_tray():
     ))
     threading.Thread(target=tray_icon.run, daemon=True).start()
 
-def set_tray_state(is_recording):
+def set_tray_state(is_recording: bool) -> None:
     global tray_icon
     if tray_icon:
         # Single transparent icon; recording state is shown in the tooltip title.

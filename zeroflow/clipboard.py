@@ -24,7 +24,7 @@ POLL_ATTEMPTS = 25
 POLL_INTERVAL = 0.02
 
 
-def paste_text(text, press_enter=False):
+def paste_text(text: str, press_enter: bool = False) -> None:
     """Paste `text` at the cursor through the clipboard, then restore the clipboard."""
     with clipboard_lock():
         saved_clipboard = pyperclip.paste()
@@ -39,7 +39,7 @@ def paste_text(text, press_enter=False):
         pyperclip.copy(saved_clipboard)          # restore the user's clipboard
 
 
-def copy_selection(select=None):
+def copy_selection(select: str | None = None) -> str | None:
     """The text selected in the focused app, or None if nothing is selected.
 
     Windows has no "read the selection" API that works everywhere, so the selection
@@ -66,7 +66,7 @@ def copy_selection(select=None):
             pyperclip.copy(saved_clipboard)
 
 
-def _press_copy():
+def _press_copy() -> None:
     """Ctrl+C, held for a moment: some apps miss a press and release sent together."""
     ctypes.windll.user32.keybd_event(VK_CONTROL, 0, 0, 0)
     ctypes.windll.user32.keybd_event(VK_C, 0, 0, 0)
@@ -75,7 +75,7 @@ def _press_copy():
     ctypes.windll.user32.keybd_event(VK_CONTROL, 0, KEYEVENTF_KEYUP, 0)
 
 
-def read_clipboard_context():
+def read_clipboard_context() -> str:
     """The clipboard, minus URLs and capped, as background for the Polish prompt."""
     try:
         # Under the lock, so an injection still in flight is not mistaken for context.

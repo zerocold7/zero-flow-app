@@ -10,7 +10,7 @@ from zeroflow.vocabulary import _absorb_learned_word
 _ollama_model = None      # resolved once, on first use
 
 
-def discover_ollama_model():
+def discover_ollama_model() -> tuple[str, bool]:
     """Choose the LLM to use, in priority order:
       1. OLLAMA_MODEL_NAME from .env, if set — pins an exact model (e.g. qwen2.5:7b).
       2. Otherwise the first model installed in Ollama.
@@ -29,7 +29,7 @@ def discover_ollama_model():
     return FALLBACK_LLM, False
 
 
-def get_ollama_model():
+def get_ollama_model() -> str:
     """The active LLM name, discovered lazily on first use and cached once Ollama has
     answered. Lazy so the reader does not pay for discovery unless it cleans text.
 
@@ -46,7 +46,7 @@ def get_ollama_model():
     return _ollama_model
 
 
-def _ollama_options():
+def _ollama_options() -> dict:
     """Model options for every request, warm-up included — they must match, or Ollama
     reloads the model."""
     options = {"temperature": 0.2}
@@ -55,13 +55,15 @@ def _ollama_options():
     return options
 
 
-def query_ollama(raw_text, context_text, instruction, timeout=15.0):
+def query_ollama(raw_text: str, context_text: str | None, instruction: str,
+                 timeout: float = 15.0) -> str:
     """The LLM's answer, or `raw_text` when there is none — for callers that carry on
     with the original either way. Callers that must tell the user use ask_ollama."""
     return ask_ollama(raw_text, context_text, instruction, timeout) or raw_text
 
 
-def ask_ollama(raw_text, context_text, instruction, timeout=15.0):
+def ask_ollama(raw_text: str, context_text: str | None, instruction: str,
+               timeout: float = 15.0) -> str | None:
     """Send text to the local LLM with a task instruction; return its output, or None
     when it did not answer (unreachable, an HTTP error, or an empty reply). Honours an
     inline `[LEARN: word]` request."""
@@ -101,7 +103,7 @@ def ask_ollama(raw_text, context_text, instruction, timeout=15.0):
     return None
 
 
-def warm_up_llm():
+def warm_up_llm() -> None:
     """Load the model into Ollama ahead of the first Polish or Translate, so that one
     is not the 3-12 s reload. Run on a background thread; stays quiet if Ollama is
     not running (the first real request then reports it)."""
@@ -121,3 +123,18 @@ def warm_up_llm():
     else:                                        # typically 404: no model by that name
         logging.warning(f"LLM warm-up failed for '{model}': HTTP {response.status_code} "
                         f"{response.text[:200]}")
+
+
+# ---------------------------------------------------------------- the provider interface
+# (zeroflow/llm/base.py) — what zeroflow.llm calls.
+def ask(raw_text: str, context_text: str | None, instruction: str,
+        timeout: float = 15.0) -> str | None:
+    return ask_ollama(raw_text, context_text, instruction, timeout)
+
+
+def warm_up() -> None:
+    warm_up_llm()
+
+
+def model_name() -> str:
+    return get_ollama_model()

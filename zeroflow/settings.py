@@ -21,21 +21,21 @@ _YES = ("true", "1", "t", "yes", "y", "on")
 _NO = ("false", "0", "f", "no", "n", "off")
 
 
-def _raw(name):
+def _raw(name: str) -> str | None:
     value = os.getenv(name)
     return value.strip() if value is not None and value.strip() else None
 
 
-def _bad(name, raw, wanted, default):
+def _bad(name: str, raw: str, wanted: str, default):
     problems.append(f'{name}="{raw}" in .env is not {wanted} — using {default}.')
     return default
 
 
-def text(name, default):
+def text(name: str, default: str) -> str:
     return _raw(name) or default
 
 
-def switch(name, default):
+def switch(name: str, default: bool) -> bool:
     """A yes/no setting: true/false, yes/no, on/off or 1/0, in any case."""
     raw = _raw(name)
     if raw is None:
@@ -47,7 +47,7 @@ def switch(name, default):
     return _bad(name, raw, "true or false", default)
 
 
-def number(name, default, minimum=None):
+def number(name: str, default: float, minimum: float | None = None) -> float:
     raw = _raw(name)
     if raw is None:
         return default
@@ -60,7 +60,7 @@ def number(name, default, minimum=None):
     return value
 
 
-def whole_number(name, default, minimum=None):
+def whole_number(name: str, default: int, minimum: int | None = None) -> int:
     raw = _raw(name)
     if raw is None:
         return default
@@ -73,7 +73,7 @@ def whole_number(name, default, minimum=None):
     return value
 
 
-def choice(name, default, allowed):
+def choice(name: str, default: str, allowed: tuple[str, ...]) -> str:
     raw = _raw(name)
     if raw is None:
         return default

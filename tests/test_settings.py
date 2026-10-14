@@ -76,7 +76,7 @@ class TestStartUp(SettingsTestCase):
         settings.problems.append('MAX_RECORDING_SECONDS="five" is not a number — using 300.')
         console = io.StringIO()
         with mock.patch.object(engine.stt, "load_whisper_model"), \
-             mock.patch.object(engine, "warm_up_llm"), \
+             mock.patch.object(engine, "warm_up_ai"), \
              mock.patch.object(engine, "cap_history_file"), \
              mock.patch.object(engine.signals, "set_recording"), \
              mock.patch.object(engine.ui, "update_console_title"), \

@@ -24,7 +24,7 @@ from zeroflow.paths import log_dir, log_path
 _log_handlers = {}
 
 
-def init_logging(component):
+def init_logging(component: str) -> logging.Handler:
     """Attach this process's rotating debug log.
 
     One log per process: the first caller names the file and every later call gets
@@ -44,7 +44,7 @@ def init_logging(component):
     return handler
 
 
-def _log_crashes(component):
+def _log_crashes(component: str) -> None:
     """Make sure a crash leaves a trace. Uncaught exceptions — on any thread — go to
     the debug log; a native crash (a segfault in a CUDA library, say), which skips
     Python's error handling entirely, is written by faulthandler to

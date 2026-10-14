@@ -11,7 +11,7 @@ from zeroflow.paths import HISTORY_FILE
 HISTORY_MAX_BYTES = 500_000
 
 
-def log_to_history(text, mode):
+def log_to_history(text: str, mode: str) -> None:
     if not text:
         return
     try:
@@ -26,7 +26,7 @@ def log_to_history(text, mode):
 HISTORY_ENTRY = re.compile(r"^\[\d\d:\d\d:\d\d\] \[", re.MULTILINE)
 
 
-def cap_history_file():
+def cap_history_file() -> None:
     """Trim flow_history.md to about half of HISTORY_MAX_BYTES once it passes the cap,
     so the dictation history can never grow without bound. Runs after every write.
 

@@ -82,7 +82,7 @@ class AITestCase(unittest.TestCase):
             calls.append(prompt)
             return answer
         console = io.StringIO()
-        with mock.patch.object(engine, "ask_ollama", side_effect=fake_ai), \
+        with mock.patch.object(engine, "ask_ai", side_effect=fake_ai), \
              contextlib.redirect_stdout(console):
             out = engine.refine_text(text, mode)
         self.printed = console.getvalue()
@@ -289,7 +289,7 @@ class TestFixLine(AITestCase):
                                side_effect=lambda: kb.send("ctrl+c")), \
              mock.patch.object(clipboard.time, "sleep"), \
              mock.patch.object(engine, "paste_text", side_effect=pasted.append), \
-             mock.patch.object(engine, "ask_ollama", return_value=answer), \
+             mock.patch.object(engine, "ask_ai", return_value=answer), \
              mock.patch.object(engine, "log_to_history"), \
              contextlib.redirect_stdout(io.StringIO()):
             kb.is_pressed.return_value = False
@@ -324,7 +324,7 @@ class TestFixLine(AITestCase):
                                side_effect=lambda: kb.send("ctrl+c")), \
              mock.patch.object(clipboard.time, "sleep"), \
              mock.patch.object(engine, "paste_text") as paste, \
-             mock.patch.object(engine, "ask_ollama", return_value=None), \
+             mock.patch.object(engine, "ask_ai", return_value=None), \
              contextlib.redirect_stdout(console):
             kb.is_pressed.return_value = False
             clip.paste.side_effect = ["saved", "teh line"]
@@ -355,7 +355,7 @@ class TestFixLine(AITestCase):
                                side_effect=lambda: kb.send("ctrl+c")), \
              mock.patch.object(clipboard.time, "sleep"), \
              mock.patch.object(engine, "paste_text"), \
-             mock.patch.object(engine, "ask_ollama", return_value="Fixed."), \
+             mock.patch.object(engine, "ask_ai", return_value="Fixed."), \
              mock.patch.object(engine, "log_to_history"), \
              mock.patch.object(engine.time, "sleep"), \
              contextlib.redirect_stdout(io.StringIO()):

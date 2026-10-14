@@ -46,7 +46,7 @@ model_runtime = ""        # where it runs, e.g. "GPU · float16" — shown in th
 TEMPERATURES = (0.0, 0.2, 0.4)
 
 
-def resolve_whisper_model():
+def resolve_whisper_model() -> str:
     """The Whisper model's folder on disk: straight from the local cache when it is
     there, downloaded only when it is not (the first run, or a new WHISPER_MODEL_NAME).
 
@@ -64,7 +64,7 @@ def resolve_whisper_model():
         return download_model(WHISPER_MODEL_NAME)
 
 
-def load_whisper_model():
+def load_whisper_model() -> WhisperModel:
     """Load faster-whisper on the GPU (unless WHISPER_DEVICE=cpu), verifying with a real
     inference so a missing CUDA library falls back to CPU at boot instead of crashing
     mid-dictation. Records where it ended up in `model_runtime`."""
@@ -95,7 +95,7 @@ def load_whisper_model():
     return m
 
 
-def whisper_hint(language):
+def whisper_hint(language: str | None) -> str | None:
     """Whisper's hint (initial_prompt) for one language: text in that language only.
 
     Whisper reads the hint as the text that came just before, so its language and style
@@ -140,13 +140,13 @@ INVENTED_MAX_PROBABILITY = 0.5
 INVENTED_ALONE_MAX_DBFS = -45
 
 
-def _rms(audio, spans):
+def _rms(audio: np.ndarray, spans: list[tuple[float, float]]) -> float:
     parts = [audio[int(s * SAMPLE_RATE):int(e * SAMPLE_RATE)] for s, e in spans]
     samples = np.concatenate([p for p in parts if len(p)] or [np.zeros(1, np.float32)])
     return float(np.sqrt(np.mean(np.square(samples, dtype=np.float64)))) or 1e-9
 
 
-def trim_invented_ending(words, audio):
+def trim_invented_ending(words: list, audio: np.ndarray) -> list:
     """`words` (Whisper's, with timings and confidence) without a stock ending that was
     never said. `audio` is the clip as recorded, before any volume change.
 
@@ -181,7 +181,7 @@ def trim_invented_ending(words, audio):
     return said
 
 
-def transcribe_clip(language, audio=None):
+def transcribe_clip(language: str, audio: np.ndarray | None = None) -> tuple[str | None, str | None]:
     """Decode TEMP_AUDIO_FILE → (text, language).
 
     `language` ('en' or 'ar') forces the output language — no detection, so it can
@@ -226,7 +226,7 @@ def transcribe_clip(language, audio=None):
 _cpu_model = None        # loaded on the first GPU failure, then kept for later ones
 
 
-def cpu_fallback_model():
+def cpu_fallback_model() -> WhisperModel:
     """A CPU copy of the speech model, for clips the graphics card could not take."""
     global _cpu_model
     if _cpu_model is None:
@@ -235,7 +235,7 @@ def cpu_fallback_model():
     return _cpu_model
 
 
-def transcribe_audio(audio, language):
+def transcribe_audio(audio: np.ndarray, language: str) -> tuple[str | None, str | None]:
     """One captured clip → (text, language), by exactly the steps every dictation
     takes. Kept apart from the hotkey path so tools/bench_stt.py measures the same
     thing you get."""

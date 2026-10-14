@@ -39,7 +39,7 @@ reader_process = None
 shutting_down = False     # set by shutdown(), which stops the reader itself
 
 
-def spawn_reader():
+def spawn_reader() -> subprocess.Popen | None:
     """Launch the reader as a child sharing this console window.
 
     No `creationflags`: that is the entire trick. CREATE_NEW_CONSOLE would give it a
@@ -60,7 +60,7 @@ def spawn_reader():
         return None
 
 
-def watch_for_exit():
+def watch_for_exit() -> None:
     """The tray icon belongs to the child, so "Exit Engine" reaches us as a signal."""
     if not signals.available():
         return
@@ -69,7 +69,7 @@ def watch_for_exit():
         shutdown()
 
 
-def watch_reader():
+def watch_reader() -> None:
     """Restart the reader if it dies on its own, and say so — the vanished tray icon
     is otherwise the only clue, since dictation carries on regardless.
 
@@ -103,7 +103,7 @@ def watch_reader():
         reader_process = spawn_reader()
 
 
-def shutdown(code=0):
+def shutdown(code: int = 0) -> None:
     """Stop the child, then this process (exit code `code`: non-zero after a crash,
     so the launcher can tell)."""
     global shutting_down
@@ -120,7 +120,7 @@ def shutdown(code=0):
     os._exit(code)
 
 
-def show_banner():
+def show_banner() -> None:
     """The banner of the whole engine: dictation's keys, plus the read key."""
     sections = engine.key_sections(panic="cancel / silence")
     sections.insert(2, ("READ ALOUD", None, [
@@ -128,11 +128,11 @@ def show_banner():
     ui.print_banner("Z E R O -   F L O W   E N G I N E",
                     [("Speech to text", f"Whisper {settings.WHISPER_MODEL_NAME} · {stt.model_runtime}"),
                      ("Text to speech", "Kokoro-82M"),
-                     ("AI model", engine.get_ollama_model())],
+                     ("AI model", engine.model_name())],
                     sections)
 
 
-def run():
+def run() -> None:
     """Run the whole engine (zero_flow.py); exit code 1 after a crash."""
     try:
         main()
@@ -143,7 +143,7 @@ def run():
         shutdown(1)
 
 
-def main():
+def main() -> None:
     global reader_process
     logging.info("=== Zero- Engine Boot Sequence Initiated ===")
     # The whole engine claims both roles, so neither a second engine nor a standalone

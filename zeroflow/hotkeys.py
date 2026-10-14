@@ -3,13 +3,14 @@ import logging
 import threading
 import time
 import traceback
+from collections.abc import Callable
 
 import keyboard
 
 from zeroflow import ui
 
 
-def wait_for_release(hotkey, timeout=1.0):
+def wait_for_release(hotkey: str, timeout: float = 1.0) -> None:
     """Wait (briefly) until every key in `hotkey` ("shift+f3") is up, so keys we send
     next are not combined with ones the user is still holding."""
     keys = [k.strip() for k in hotkey.split("+")]
@@ -18,7 +19,7 @@ def wait_for_release(hotkey, timeout=1.0):
         time.sleep(0.02)
 
 
-def _run_async(fn):
+def _run_async(fn: Callable[[], None]) -> Callable[[], None]:
     """Wrap a hotkey handler so it runs on its own daemon thread. Heavy handlers
     (LLM calls, key-sending) must never run on the keyboard listener thread —
     blocking it freezes the whole keyboard until they return, which is what forced

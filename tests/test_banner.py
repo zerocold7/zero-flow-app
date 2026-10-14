@@ -21,7 +21,7 @@ class BannerTestCase(unittest.TestCase):
     def shown(self, show):
         console = io.StringIO()
         with mock.patch.object(ui.os, "system"), mock.patch.object(ui.time, "sleep"), \
-             mock.patch.object(engine, "get_ollama_model", return_value="some-model"), \
+             mock.patch.object(engine, "model_name", return_value="some-model"), \
              contextlib.redirect_stdout(console):
             show()
         return console.getvalue()
