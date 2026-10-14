@@ -12,7 +12,8 @@ from unittest import mock
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-import local_flow
+from zeroflow import history
+
 
 CAP = 2_000
 
@@ -22,8 +23,8 @@ class HistoryTestCase(unittest.TestCase):
         handle, self.path = tempfile.mkstemp(suffix=".md")
         os.close(handle)
         self.addCleanup(os.unlink, self.path)
-        for patcher in (mock.patch.object(local_flow, "HISTORY_FILE", self.path),
-                        mock.patch.object(local_flow, "HISTORY_MAX_BYTES", CAP)):
+        for patcher in (mock.patch.object(history, "HISTORY_FILE", self.path),
+                        mock.patch.object(history, "HISTORY_MAX_BYTES", CAP)):
             patcher.start()
             self.addCleanup(patcher.stop)
 
@@ -33,7 +34,7 @@ class HistoryTestCase(unittest.TestCase):
 
     def dictate(self, count, text="مرحبا، هذه جملة تجريبية طويلة بعض الشيء"):
         for i in range(count):
-            local_flow.log_to_history(f"{i}: {text}", "ar_raw")
+            history.log_to_history(f"{i}: {text}", "ar_raw")
 
 
 class TestHistoryCap(HistoryTestCase):

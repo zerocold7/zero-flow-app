@@ -21,6 +21,8 @@ from colorama import init, Fore, Style
 import pystray
 from PIL import Image, ImageDraw
 
+from zeroflow.paths import BASE_DIR
+
 init()
 
 # Vibe Colors
@@ -40,7 +42,7 @@ def update_console_title(status):
 def set_window_icon(filename="logo_tray.ico"):
     """Apply the logo to the console window (title bar + taskbar entry)."""
     try:
-        path = os.path.join(os.path.dirname(os.path.abspath(__file__)), filename)
+        path = os.path.join(BASE_DIR, filename)
         if not os.path.exists(path):
             return
         hicon = ctypes.windll.user32.LoadImageW(None, path, 1, 0, 0, 0x00000010 | 0x00000040)
@@ -161,7 +163,7 @@ def create_image(color1, color2):
 
 def load_tray_icon(filename, fallback_fg='white'):
     try:
-        return Image.open(os.path.join(os.path.dirname(os.path.abspath(__file__)), filename))
+        return Image.open(os.path.join(BASE_DIR, filename))
     except Exception:
         return create_image('black', fallback_fg)
 

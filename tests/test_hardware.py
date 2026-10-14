@@ -11,8 +11,9 @@ from unittest import mock
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
+from zeroflow import stt
+
 import check_hardware as hw
-import local_flow
 
 REPO = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 
@@ -167,13 +168,13 @@ class TestWhisperDevice(unittest.TestCase):
             model = mock.Mock()
             model.transcribe.return_value = ([], None)
             return model
-        with mock.patch.object(local_flow, "WHISPER_DEVICE", device), \
-             mock.patch.object(local_flow, "WHISPER_COMPUTE_TYPE", compute), \
-             mock.patch.object(local_flow, "resolve_whisper_model", return_value="/models/x"), \
-             mock.patch.object(local_flow, "WhisperModel", side_effect=fake_model), \
+        with mock.patch.object(stt, "WHISPER_DEVICE", device), \
+             mock.patch.object(stt, "WHISPER_COMPUTE_TYPE", compute), \
+             mock.patch.object(stt, "resolve_whisper_model", return_value="/models/x"), \
+             mock.patch.object(stt, "WhisperModel", side_effect=fake_model), \
              self.assertLogs(level="INFO"):             # keep these out of flow_debug.log
-            local_flow.load_whisper_model()
-        return calls, local_flow.model_runtime
+            stt.load_whisper_model()
+        return calls, stt.model_runtime
 
     def test_auto_uses_the_gpu_at_the_chosen_precision(self):
         calls, runtime = self.load("auto", "int8_float16")

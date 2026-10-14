@@ -39,7 +39,7 @@ import warnings
 
 import sounddevice as sd
 
-import engine_ui as ui
+from zeroflow import ui
 
 warnings.filterwarnings("ignore", category=UserWarning)
 warnings.filterwarnings("ignore", category=FutureWarning)

@@ -26,6 +26,7 @@ import re
 import sys
 import time
 
+
 HERE = os.path.dirname(os.path.abspath(__file__))
 ROOT = os.path.dirname(os.path.dirname(HERE))
 CLIPS = os.path.join(HERE, "clips")
@@ -90,28 +91,28 @@ def run(label, model_name, runs, clips=CLIPS, no_filter=False, vocabulary=False)
     os.environ.setdefault("ZEROFLOW_LOG_DIR", os.path.join(RESULTS, "logs"))
     os.makedirs(os.environ["ZEROFLOW_LOG_DIR"], exist_ok=True)
     sys.path.insert(0, ROOT)
+    from zeroflow import stt     # after the overrides above: settings are read on import
     import soundfile as sf
-    import local_flow
 
     if not vocabulary:                               # the same hint on every PC
-        local_flow.load_vocabulary = lambda: []
+        stt.load_vocabulary = lambda: []
     if no_filter:                                    # the engine before 2.0 phase 2
-        local_flow.trim_invented_ending = lambda words, audio: words
-    local_flow.model = local_flow.load_whisper_model()
+        stt.trim_invented_ending = lambda words, audio: words
+    stt.model = stt.load_whisper_model()
     cases = json.load(open(os.path.join(clips, "index.json"), encoding="utf-8"))
     rows = []
     for attempt in range(runs):
         for case in cases:
             audio, _ = sf.read(os.path.join(clips, case["file"]), dtype="float32")
             started = time.perf_counter()
-            text, _ = local_flow.transcribe_audio(audio, case["lang"])
+            text, _ = stt.transcribe_audio(audio, case["lang"])
             took = time.perf_counter() - started
             rows.append({**case, "run": attempt, "hyp": text or "", "seconds": took,
                          **score(case, text or "")})
             mark = "!" if rows[-1]["invented"] else " "
             print(f"{mark} {case['file']:<26} {case['lang']} {took:5.2f}s  {(text or '')[:70]}")
-    result = {"label": label, "model": local_flow.WHISPER_MODEL_NAME,
-              "runtime": local_flow.model_runtime, "runs": runs, "rows": rows}
+    result = {"label": label, "model": stt.WHISPER_MODEL_NAME,
+              "runtime": stt.model_runtime, "runs": runs, "rows": rows}
     os.makedirs(RESULTS, exist_ok=True)
     with open(os.path.join(RESULTS, f"{label}.json"), "w", encoding="utf-8") as f:
         json.dump(result, f, ensure_ascii=False, indent=1)

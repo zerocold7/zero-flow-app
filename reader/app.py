@@ -23,9 +23,7 @@ import pystray
 from pystray import MenuItem
 
 try:
-    import engine_ui as ui
-    import flow_core
-    import flow_signals as signals
+    from zeroflow import settings, signals, ui
     from reader import voice_engine
     from reader.clipboard_tool import capture_highlighted_text
     from reader.text_cleaner import clean_text_instant, clean_text_smart
@@ -65,7 +63,7 @@ def process_and_speak():
     if signals.is_recording():
         # Dictation has the mic open. Speaking now would be picked up and transcribed.
         logging.info("Reader: declined to speak — the dictation half is recording.")
-        ui.play_tone("empty", flow_core.ENABLE_AUDIO_CHIMES)
+        ui.play_tone("empty", settings.ENABLE_AUDIO_CHIMES)
         return
 
     is_processing = True
@@ -75,7 +73,7 @@ def process_and_speak():
         text = capture_highlighted_text(release_key=HOTKEY_READ)
         if not text:
             logging.info("Reader: nothing selected — nothing to read.")
-            ui.play_tone("empty", flow_core.ENABLE_AUDIO_CHIMES)
+            ui.play_tone("empty", settings.ENABLE_AUDIO_CHIMES)
             return
 
         print(f"\n{ui.C_ERR}🔴 [READING]{ui.C_RESET} {text[:90]}...")
@@ -88,7 +86,7 @@ def process_and_speak():
             cleaned = clean_text_instant(text)
 
         _title("SPEAKING")
-        ui.play_tone("start", flow_core.ENABLE_AUDIO_CHIMES)
+        ui.play_tone("start", settings.ENABLE_AUDIO_CHIMES)
         voice_engine.stream_audio(cleaned)
     except Exception:
         logging.error(f"Reader pipeline failed: {traceback.format_exc()}")
@@ -200,7 +198,7 @@ def register_hotkeys():
 # =====================================================================
 def print_boot_sequence():
     os.system('cls' if os.name == 'nt' else 'clear')
-    llm = flow_core.OLLAMA_MODEL_NAME or "auto-discovered on first use"
+    llm = settings.OLLAMA_MODEL_NAME or "auto-discovered on first use"
     print(f"{ui.C_ACCENT}┌────────────────────────────────────────────────────────┐{ui.C_RESET}")
     print(f"{ui.C_ACCENT}│ {ui.Fore.MAGENTA}     Z E R O -   F L O W   ·   R E A D E R           {ui.C_ACCENT}│{ui.C_RESET}")
     print(f"{ui.C_ACCENT}│ {ui.C_RESET}🔗 Voice model: {ui.C_GOOD}[Kokoro-82M · warming in background]{ui.C_ACCENT}    │{ui.C_RESET}")
@@ -232,7 +230,7 @@ def main():
         ui.set_window_icon()
         ui.show_toast("🔊 Zero- Reader Online",
                       f"Press {HOTKEY_READ.upper()} to read the selection.",
-                      flow_core.ENABLE_TOASTS)
+                      settings.ENABLE_TOASTS)
 
     name = "Zero- Flow Engine" if CHILD_MODE else "Zero- Flow Reader"
     tray_icon = pystray.Icon("ZeroFlowReader", ui.load_tray_icon("logo_tray.ico"),

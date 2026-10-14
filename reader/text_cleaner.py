@@ -6,7 +6,7 @@ Two levels:
     clean_text_smart    — one pass through the shared local LLM, with an automatic
                           fall back to the instant clean
 
-The LLM call goes through `flow_core.query_ollama`, so the reader inherits the
+The LLM call goes through `zeroflow.llm.ollama.query_ollama`, so the reader inherits the
 engine's model discovery, the `OLLAMA_MODEL_NAME` pin from `.env`, the offline
 fallback and the console spinner. There is no second Ollama client.
 """
@@ -14,8 +14,8 @@ import logging
 import os
 import re
 
-import personas
-import flow_core
+from zeroflow import personas
+from zeroflow.llm import ollama
 
 # Above this length the LLM pass is skipped: a local 7B model needs several seconds
 # per thousand characters, which is longer than the wait for speech to simply start.
@@ -74,7 +74,7 @@ def clean_text_smart(raw_text):
         logging.info(f"Reader: {len(prepared)} chars exceeds the smart-mode limit — regex clean only.")
         return clean_text_instant(raw_text)
 
-    output = flow_core.query_ollama(prepared, None, personas.READER_CLEANUP_PROMPT,
+    output = ollama.query_ollama(prepared, None, personas.READER_CLEANUP_PROMPT,
                                     timeout=READER_LLM_TIMEOUT)
     if not output or output.strip() == prepared.strip():
         logging.info("Reader: smart clean returned nothing new — falling back to regex clean.")

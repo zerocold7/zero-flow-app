@@ -13,7 +13,7 @@ import time
 import keyboard
 import pyperclip
 
-from flow_core import clipboard_lock
+from zeroflow.signals import clipboard_lock
 
 VK_CONTROL = 0x11
 VK_C = 0x43

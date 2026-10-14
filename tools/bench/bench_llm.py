@@ -17,14 +17,15 @@ import requests
 
 ROOT = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 sys.path.insert(0, ROOT)
+
 os.environ.setdefault("ZEROFLOW_LOG_DIR", os.path.join(os.path.dirname(os.path.abspath(__file__)),
                                                        "results", "logs"))
 os.makedirs(os.environ["ZEROFLOW_LOG_DIR"], exist_ok=True)
 
-import flow_core  # noqa: E402
-import personas  # noqa: E402
+from zeroflow import personas, settings  # noqa: E402  (after sys.path above)
+from zeroflow.llm import ollama  # noqa: E402
 
-BASE = flow_core.OLLAMA_HOST_URL.rsplit("/api/", 1)[0]
+BASE = settings.OLLAMA_HOST_URL.rsplit("/api/", 1)[0]
 SAMPLES = [
     ("en", personas.STANDARD_SYSTEM_PROMPT,
      "so um I wanted to say that the the meeting tomorrow is at ten and everyone should "
@@ -84,7 +85,7 @@ def main():
     parser.add_argument("--ctx", type=int, nargs="*", default=[4096, 8192])
     parser.add_argument("--repeat", type=int, default=3)
     args = parser.parse_args()
-    model = flow_core.get_ollama_model()
+    model = ollama.get_ollama_model()
     print(f"model: {model}   Ollama: {requests.get(BASE + '/api/version').json()['version']}")
     for ctx in [None] + args.ctx:
         r = measure(model, ctx, args.repeat)
