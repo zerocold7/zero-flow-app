@@ -21,9 +21,13 @@ import numpy as np
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-import local_flow
+from zeroflow import engine
+from zeroflow import signals
+from zeroflow import stt
+from zeroflow import ui
 
-RATE = local_flow.SAMPLE_RATE
+
+RATE = stt.SAMPLE_RATE
 HALF_SECOND = RATE // 2                       # longer than MIN_CLIP_SECONDS
 
 
@@ -85,17 +89,17 @@ class CaptureTestCase(unittest.TestCase):
 
         fake_sd = mock.Mock(InputStream=self.mic.InputStream, sleep=lambda ms: time.sleep(ms / 1000))
         patches = [
-            mock.patch.object(local_flow, "sd", fake_sd),
-            mock.patch.object(local_flow, "transcribe_and_inject", side_effect=transcribe),
-            mock.patch.object(local_flow, "ENABLE_AUDIO_CHIMES", False),
+            mock.patch.object(engine, "sd", fake_sd),
+            mock.patch.object(engine, "transcribe_and_inject", side_effect=transcribe),
+            mock.patch.object(engine, "ENABLE_AUDIO_CHIMES", False),
             # A recording a broken test leaves behind ends on its own, rather than
             # holding the test run open for the real five-minute limit.
-            mock.patch.object(local_flow, "MAX_RECORDING_SECONDS", 3),
-            mock.patch.object(local_flow.ui, "set_tray_state"),
-            mock.patch.object(local_flow.ui, "update_console_title"),
-            mock.patch.object(local_flow.ui, "play_tone"),
-            mock.patch.object(local_flow.signals, "request_reader_silence"),
-            mock.patch.object(local_flow.signals, "set_recording",
+            mock.patch.object(engine, "MAX_RECORDING_SECONDS", 3),
+            mock.patch.object(ui, "set_tray_state"),
+            mock.patch.object(ui, "update_console_title"),
+            mock.patch.object(ui, "play_tone"),
+            mock.patch.object(signals, "request_reader_silence"),
+            mock.patch.object(signals, "set_recording",
                               side_effect=self.recording_signal.append),
             contextlib.redirect_stdout(io.StringIO()),
         ]
@@ -106,12 +110,12 @@ class CaptureTestCase(unittest.TestCase):
         self.addCleanup(self.stop_everything)
 
     def stop_everything(self):
-        if local_flow.is_recording():
-            local_flow.on_cancel_hotkey()
+        if engine.is_recording():
+            engine.on_cancel_hotkey()
         time.sleep(0.1)
 
     def press(self, mode):
-        local_flow.on_record_hotkey(mode)
+        engine.on_record_hotkey(mode)
 
     def wait_for_streams(self, count):
         self.assertTrue(wait_until(lambda: len(self.mic.streams) >= count
@@ -151,7 +155,7 @@ class TestCancel(CaptureTestCase):
         self.press("en_raw")
         self.wait_for_streams(1)
         self.mic.feed(0, 0.1)
-        local_flow.on_cancel_hotkey()
+        engine.on_cancel_hotkey()
         self.press("ar_raw")
         self.wait_for_streams(2)
         self.mic.feed(1, 0.2)
@@ -161,8 +165,8 @@ class TestCancel(CaptureTestCase):
         self.assertEqual([mode for mode, _ in self.transcribed], ["ar_raw"])
 
     def test_cancel_when_idle_does_nothing(self):
-        local_flow.on_cancel_hotkey()
-        self.assertFalse(local_flow.is_recording())
+        engine.on_cancel_hotkey()
+        self.assertFalse(engine.is_recording())
 
 
 class TestMicrophoneError(CaptureTestCase):
@@ -186,7 +190,7 @@ class TestMicrophoneError(CaptureTestCase):
         self.wait_for_streams(2)
         time.sleep(0.15)                      # the first one's failure has run by now
 
-        self.assertTrue(local_flow.is_recording())
+        self.assertTrue(engine.is_recording())
         self.assertIs(self.recording_signal[-1], True, "the reader was told the mic closed")
         self.mic.feed(1, 0.2)
         self.press("ar_raw")
@@ -198,13 +202,13 @@ class TestMaximumLength(CaptureTestCase):
     def test_a_forgotten_recording_stops_by_itself(self):
         """A recording left running grew by ~4 MB a minute until someone noticed.
         It now stops at MAX_RECORDING_SECONDS and is transcribed as usual."""
-        with mock.patch.object(local_flow, "MAX_RECORDING_SECONDS", 0.3, create=True):
+        with mock.patch.object(engine, "MAX_RECORDING_SECONDS", 0.3, create=True):
             self.press("en_raw")
             self.wait_for_streams(1)
             self.mic.feed(0, 0.1)
             self.wait_for_clips(1)
         self.assertEqual([mode for mode, _ in self.transcribed], ["en_raw"])
-        self.assertFalse(local_flow.is_recording())
+        self.assertFalse(engine.is_recording())
         self.assertIs(self.recording_signal[-1], False)
 
 

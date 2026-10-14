@@ -6,24 +6,23 @@ Two levels:
     clean_text_smart    — one pass through the shared local LLM, with an automatic
                           fall back to the instant clean
 
-The LLM call goes through `flow_core.query_ollama`, so the reader inherits the
+The LLM call goes through `zeroflow.llm.query_ai`, so the reader inherits the
 engine's model discovery, the `OLLAMA_MODEL_NAME` pin from `.env`, the offline
 fallback and the console spinner. There is no second Ollama client.
 """
 import logging
-import os
 import re
 
-import personas
-import flow_core
+from zeroflow import personas, settings
+from zeroflow import llm
+from zeroflow.text import URL_PATTERN  # shared: also strips www. addresses
 
 # Above this length the LLM pass is skipped: a local 7B model needs several seconds
 # per thousand characters, which is longer than the wait for speech to simply start.
-SMART_MODE_MAX_CHARS = int(os.getenv("READER_SMART_MAX_CHARS", 1000))
+SMART_MODE_MAX_CHARS = settings.READER_SMART_MAX_CHARS
 # The reader is interactive, so it waits less patiently than the dictation engine.
-READER_LLM_TIMEOUT = float(os.getenv("READER_LLM_TIMEOUT", 10.0))
+READER_LLM_TIMEOUT = settings.READER_LLM_TIMEOUT
 
-URL_PATTERN = re.compile(r'http[s]?://\S+')
 # Footnote/reference markers, dropped whole. Stripping the brackets alone would leave
 # the digits behind, and the voice would read "[1]" aloud as "one".
 FOOTNOTE_PATTERN = re.compile(r'\[\s*\d+(?:\s*[,–-]\s*\d+)*\s*\]')
@@ -37,8 +36,8 @@ ORPHAN_SPACE_PATTERN = re.compile(r'\s+([.,;:!?،؛؟])')
 # because the map is written in one casing and real text is not: "aqeeq" was being
 # fixed while "Aqeeq" sailed through untouched.
 _PRONUNCIATION_RE = re.compile(
-    r'\b(?:%s)\b' % "|".join(sorted((re.escape(w) for w in personas.PRONUNCIATION_MAP),
-                                     key=len, reverse=True)),
+    r'\b(?:' + "|".join(sorted((re.escape(w) for w in personas.PRONUNCIATION_MAP),
+                                  key=len, reverse=True)) + r')\b',
     re.IGNORECASE) if personas.PRONUNCIATION_MAP else None
 _PRONUNCIATION_LOOKUP = {w.lower(): p for w, p in personas.PRONUNCIATION_MAP.items()}
 
@@ -65,7 +64,7 @@ def clean_text_instant(raw_text):
 def clean_text_smart(raw_text):
     """Let the local LLM strip page furniture, falling back to the instant clean.
 
-    `query_ollama` returns its input unchanged when Ollama is unreachable or slow,
+    `query_ai` returns its input unchanged when Ollama is unreachable or slow,
     so an unchanged result is treated as a miss and cleaned with regex instead —
     the reader always speaks something.
     """
@@ -74,7 +73,7 @@ def clean_text_smart(raw_text):
         logging.info(f"Reader: {len(prepared)} chars exceeds the smart-mode limit — regex clean only.")
         return clean_text_instant(raw_text)
 
-    output = flow_core.query_ollama(prepared, None, personas.READER_CLEANUP_PROMPT,
+    output = llm.query_ai(prepared, None, personas.READER_CLEANUP_PROMPT,
                                     timeout=READER_LLM_TIMEOUT)
     if not output or output.strip() == prepared.strip():
         logging.info("Reader: smart clean returned nothing new — falling back to regex clean.")

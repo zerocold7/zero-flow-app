@@ -11,6 +11,7 @@ Chimes and toasts run on their own threads: a blocking call on a keyboard-hook t
 freezes the whole keyboard. `win11toast` is imported lazily for a load-order reason
 explained in show_toast().
 """
+import logging
 import os
 import sys
 import time
@@ -20,6 +21,8 @@ import threading
 from colorama import init, Fore, Style
 import pystray
 from PIL import Image, ImageDraw
+
+from zeroflow.paths import BASE_DIR
 
 init()
 
@@ -33,14 +36,16 @@ C_RESET = Style.RESET_ALL
 spinner_active = False
 tray_icon = None
 
-def update_console_title(status):
-    try: ctypes.windll.kernel32.SetConsoleTitleW(f"Zero- Core [{status}]")
-    except: pass
+def update_console_title(status: str) -> None:
+    try:
+        ctypes.windll.kernel32.SetConsoleTitleW(f"Zero- Core [{status}]")
+    except Exception:                            # no console (started hidden)
+        pass
 
-def set_window_icon(filename="logo_tray.ico"):
+def set_window_icon(filename: str = "logo_tray.ico") -> None:
     """Apply the logo to the console window (title bar + taskbar entry)."""
     try:
-        path = os.path.join(os.path.dirname(os.path.abspath(__file__)), filename)
+        path = os.path.join(BASE_DIR, filename)
         if not os.path.exists(path):
             return
         hicon = ctypes.windll.user32.LoadImageW(None, path, 1, 0, 0, 0x00000010 | 0x00000040)
@@ -56,7 +61,7 @@ MB_ICONINFORMATION = 0x40
 MB_SETFOREGROUND = 0x10000
 MB_TOPMOST = 0x40000
 
-def alert(title, text, icon=MB_ICONERROR):
+def alert(title: str, text: str, icon: int = MB_ICONERROR) -> None:
     """A Windows message box, which blocks until dismissed. For the few things that
     must reach the user even when the engine was started hidden (Launch_*_Silent.vbs):
     there, a console message or a toast that times out is never seen."""
@@ -65,7 +70,18 @@ def alert(title, text, icon=MB_ICONERROR):
     except Exception:
         pass
 
-def already_running(what="Zero- Flow"):
+def report_setting_problems(problems: list[str], enable_toasts: bool = True) -> None:
+    """Say which .env settings were ignored, and why — in the console, the log and a
+    toast, since a hidden engine's console is never seen."""
+    for problem in problems:
+        logging.warning(f"Setting ignored: {problem}")
+        print(f"{C_WARN}⚠️  {problem}{C_RESET}")
+    if problems:
+        show_toast("⚠️ Check your settings",
+                   f"{len(problems)} setting(s) in .env were ignored — the defaults are "
+                   f"used. Details in the log.", enable_toasts)
+
+def already_running(what: str = "Zero- Flow") -> None:
     """Tell the user a second copy was not started, and why."""
     print(f"{C_WARN}{what} is already running — look for its icon by the clock. "
           f"This copy will close.{C_RESET}")
@@ -73,7 +89,7 @@ def already_running(what="Zero- Flow"):
                 f"Running two copies would paste every dictation twice, so this one "
                 f"has not started.", MB_ICONINFORMATION)
 
-def show_toast(title, body="", enable_toasts=True):
+def show_toast(title: str, body: str = "", enable_toasts: bool = True) -> None:
     if enable_toasts:
         def _fire():
             try:
@@ -86,15 +102,17 @@ def show_toast(title, body="", enable_toasts=True):
                 # win11toast defaults on_click/on_dismissed/on_failed to `print`,
                 # so when a toast times out it leaks "(<ToastDismissalReason..>,)"
                 # to the console. Pass no-op handlers to keep the console clean.
-                noop = lambda *a: None
+                def ignore(*_):
+                    return None
                 toast(title, body, audio={"silent": "true"},
-                      on_click=noop, on_dismissed=noop, on_failed=noop)
+                      on_click=ignore, on_dismissed=ignore, on_failed=ignore)
             except Exception:
                 pass
         threading.Thread(target=_fire, daemon=True).start()
 
-def play_tone(tone_type, enable_chimes=True):
-    if not enable_chimes: return
+def play_tone(tone_type: str, enable_chimes: bool = True) -> None:
+    if not enable_chimes:
+        return
     tones = {
         "start": [(1000, 120)], "stop": [(700, 120)],
         "cancel": [(500, 150), (400, 150)], "success_raw": [(1100, 80)],
@@ -111,30 +129,30 @@ def play_tone(tone_type, enable_chimes=True):
             winsound.Beep(f, d)
     threading.Thread(target=_beep, daemon=True).start()
 
-def print_boot_sequence(ollama_model, hotkeys, speech="Whisper"):
-    """The standalone dictation banner. `speech` names the model and where it loaded
-    (e.g. "Whisper large-v3 · GPU · float16"), so a tuning change is visible at a glance."""
+def print_banner(title: str, about: list[tuple[str, str]], sections: list) -> None:
+    """The start-up banner, for all three ways of running the engine.
+
+    `about` is (label, value) pairs — what loaded where ("Speech to text", "Whisper
+    large-v3 · GPU · float16"), so a tuning change is visible at a glance. `sections`
+    is (heading, note, rows); a row is a list of (key, what it does, colour), or a
+    plain line of text."""
     os.system('cls' if os.name == 'nt' else 'clear')
-    lines = [
-        f"{C_ACCENT}┌────────────────────────────────────────────────────────┐{C_RESET}",
-        f"{C_ACCENT}│ {Fore.MAGENTA}          Z E R O -   F L O W   E N G I N E          {C_ACCENT}│{C_RESET}",
-        f"{C_ACCENT}│ {C_RESET}🔗 Speech to text: {C_GOOD}[{speech}]{C_RESET}",
-        f"{C_ACCENT}│ {C_RESET}🔗 Neural Pipeline: {C_GOOD}[{ollama_model}]{C_ACCENT}" + (" " * max(0, 25 - len(ollama_model))) + f"│{C_RESET}",
-        f"{C_ACCENT}└────────────────────────────────────────────────────────┘{C_RESET}",
-        f"  {C_ACCENT}DICTATE{C_RESET}   (the key forces the language)",
-        f"   {C_ACCENT}'{hotkeys['en_raw'].upper()}'{C_RESET} English · raw      {C_GOOD}'{hotkeys['en_polish'].upper()}'{C_RESET} English · polish",
-        f"   {C_WARN}'{hotkeys['ar_raw'].upper()}'{C_RESET} Arabic · raw       {C_WARN}'{hotkeys['ar_polish'].upper()}'{C_RESET} Arabic · polish",
-        f"  {C_ACCENT}TRANSLATE{C_RESET}",
-        f"   {Fore.MAGENTA}'{hotkeys['en2ar'].upper()}'{C_RESET} English → Arabic   {Fore.MAGENTA}'{hotkeys['ar2en'].upper()}'{C_RESET} Arabic → English",
-        f"  {C_ACCENT}ACTIONS{C_RESET}",
-        f"   {C_GOOD}'{hotkeys['fix'].upper()}'{C_RESET} fix line   {Fore.MAGENTA}'{hotkeys['maintenance'].upper()}'{C_RESET} vocab cleanup   {C_GOOD}'{hotkeys['purge'].upper()}'{C_RESET} clear logs   {C_ERR}'{hotkeys['panic'].upper()}'{C_RESET} cancel",
-        f"{C_ACCENT}========================================================={C_RESET}\n"
-    ]
+    rule = "─" * 56
+    lines = [f"{C_ACCENT}┌{rule}┐{C_RESET}",
+             f"{C_ACCENT}│ {Fore.MAGENTA}{title.center(54)}{C_ACCENT} │{C_RESET}"]
+    lines += [f"{C_ACCENT}│ {C_RESET}🔗 {label}: {C_GOOD}[{value}]{C_RESET}" for label, value in about]
+    lines.append(f"{C_ACCENT}└{rule}┘{C_RESET}")
+    for heading, note, rows in sections:
+        lines.append(f"  {C_ACCENT}{heading}{C_RESET}" + (f"   ({note})" if note else ""))
+        for row in rows:
+            lines.append("   " + (row if isinstance(row, str) else "   ".join(
+                f"{colour}'{key.upper()}'{C_RESET} {what}" for key, what, colour in row)))
+    lines.append(f"{C_ACCENT}{'=' * 57}{C_RESET}\n")
     for line in lines:
         print(line)
         time.sleep(0.03)
 
-def start_processing_spinner(message="AI Processing"):
+def start_processing_spinner(message: str = "AI Processing") -> None:
     global spinner_active
     spinner_active = True
     def spin():
@@ -148,20 +166,20 @@ def start_processing_spinner(message="AI Processing"):
         sys.stdout.write("\r" + " " * 50 + "\r")
     threading.Thread(target=spin, daemon=True).start()
 
-def stop_processing_spinner():
+def stop_processing_spinner() -> None:
     global spinner_active
     spinner_active = False
     time.sleep(0.15)
 
-def create_image(color1, color2):
+def create_image(color1: str, color2: str) -> Image.Image:
     image = Image.new('RGB', (64, 64), color1)
     dc = ImageDraw.Draw(image)
     dc.rectangle((16, 16, 48, 48), fill=color2)
     return image
 
-def load_tray_icon(filename, fallback_fg='white'):
+def load_tray_icon(filename: str, fallback_fg: str = 'white') -> Image.Image:
     try:
-        return Image.open(os.path.join(os.path.dirname(os.path.abspath(__file__)), filename))
+        return Image.open(os.path.join(BASE_DIR, filename))
     except Exception:
         return create_image('black', fallback_fg)
 
@@ -169,7 +187,7 @@ def exit_action(icon, item):
     icon.stop()
     os._exit(0)
 
-def setup_system_tray():
+def setup_system_tray() -> None:
     global tray_icon
     icon_image = load_tray_icon("logo_tray.ico", 'white')
 
@@ -178,7 +196,7 @@ def setup_system_tray():
     ))
     threading.Thread(target=tray_icon.run, daemon=True).start()
 
-def set_tray_state(is_recording):
+def set_tray_state(is_recording: bool) -> None:
     global tray_icon
     if tray_icon:
         # Single transparent icon; recording state is shown in the tooltip title.

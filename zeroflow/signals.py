@@ -28,6 +28,7 @@ existed.
 """
 import ctypes
 import logging
+import subprocess
 
 WAIT_OBJECT_0 = 0x00000000
 WAIT_ABANDONED = 0x00000080
@@ -56,7 +57,7 @@ except Exception:                                # not Windows, or no ctypes
 _handles = {}
 
 
-def _event(name, manual_reset):
+def _event(name: str, manual_reset: bool):
     """Open the named event, creating it if this is the first process to ask.
     Returns None if signalling is unavailable, which every caller treats as 'off'."""
     if _kernel32 is None:
@@ -70,13 +71,13 @@ def _event(name, manual_reset):
     return _handles[name]
 
 
-def available():
+def available() -> bool:
     """False when cross-process signalling could not be set up — callers should fall
     back to their old, un-coordinated behaviour rather than busy-waiting."""
     return _kernel32 is not None
 
 
-def set_recording(state):
+def set_recording(state: bool) -> None:
     """Flow: announce that the microphone is open (or no longer is)."""
     handle = _event(_RECORDING_NAME, manual_reset=True)
     if not handle:
@@ -87,7 +88,7 @@ def set_recording(state):
         _kernel32.ResetEvent(handle)
 
 
-def is_recording():
+def is_recording() -> bool:
     """Reader: True while the dictation half has the microphone open."""
     handle = _event(_RECORDING_NAME, manual_reset=True)
     if not handle:
@@ -95,14 +96,14 @@ def is_recording():
     return _kernel32.WaitForSingleObject(handle, 0) == WAIT_OBJECT_0
 
 
-def request_reader_silence():
+def request_reader_silence() -> None:
     """Flow: ask the reader to stop speaking. Harmless if it isn't running."""
     handle = _event(_SILENCE_NAME, manual_reset=False)
     if handle:
         _kernel32.SetEvent(handle)
 
 
-def wait_for_silence_request(timeout_ms=INFINITE):
+def wait_for_silence_request(timeout_ms: int = INFINITE) -> bool:
     """Reader: block until Flow asks for silence. Returns False on timeout, and
     False forever if signalling is unavailable (the watcher thread then idles)."""
     handle = _event(_SILENCE_NAME, manual_reset=False)
@@ -111,14 +112,14 @@ def wait_for_silence_request(timeout_ms=INFINITE):
     return _kernel32.WaitForSingleObject(handle, timeout_ms) == WAIT_OBJECT_0
 
 
-def request_exit():
+def request_exit() -> None:
     """Ask the whole engine to shut down. Set by whichever half the user quit from."""
     handle = _event(_EXIT_NAME, manual_reset=True)
     if handle:
         _kernel32.SetEvent(handle)
 
 
-def wait_for_exit(timeout_ms=INFINITE):
+def wait_for_exit(timeout_ms: int = INFINITE) -> bool:
     """Block until someone calls request_exit(). False on timeout, and False forever
     when signalling is unavailable, so a watcher thread exits instead of spinning."""
     handle = _event(_EXIT_NAME, manual_reset=True)
@@ -127,7 +128,7 @@ def wait_for_exit(timeout_ms=INFINITE):
     return _kernel32.WaitForSingleObject(handle, timeout_ms) == WAIT_OBJECT_0
 
 
-def exit_requested():
+def exit_requested() -> bool:
     """True if someone has already asked the engine to shut down."""
     return wait_for_exit(0)
 
@@ -139,7 +140,7 @@ ERROR_ALREADY_EXISTS = 183
 _instance_handles = {}
 
 
-def claim_single_instance(role):
+def claim_single_instance(role: str) -> bool:
     """Claim `role` ("dictation", "reader") for this process. False if another
     process — or an earlier call here — already holds it.
 
@@ -199,7 +200,7 @@ JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE = 0x2000
 _job = None
 
 
-def bind_child_to_this_process(process):
+def bind_child_to_this_process(process: subprocess.Popen) -> bool:
     """Make Windows end `process` (a subprocess.Popen) when this process ends — on a
     crash or an End task too, when no clean-up code of ours gets to run.
 
@@ -244,7 +245,7 @@ _clipboard_handle = None
 _clipboard_fallback = None
 
 
-def _clipboard_primitive():
+def _clipboard_primitive() -> None:
     global _clipboard_handle, _clipboard_fallback
     if _clipboard_handle is not None or _clipboard_fallback is not None:
         return
@@ -306,7 +307,7 @@ class _ClipboardLock:
         return False
 
 
-def clipboard_lock():
+def clipboard_lock() -> _ClipboardLock:
     """The engine-wide clipboard lock: `with flow_signals.clipboard_lock(): ...`"""
     _clipboard_primitive()
     return _ClipboardLock()

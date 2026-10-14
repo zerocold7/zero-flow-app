@@ -406,7 +406,7 @@ def main(argv=None):
           + (" (chosen with --tier)" if args.tier else ""))
     for reason in reasons:
         print(f"  - {reason}")
-    print("\nRecommended settings (presets/%s.env):" % tier)
+    print(f"\nRecommended settings (presets/{tier}.env):")
     for key, value in settings.items():
         print(f'  {key}="{value}"')
 

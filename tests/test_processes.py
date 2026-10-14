@@ -22,8 +22,12 @@ from unittest import mock
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.insert(0, ROOT)
 
-import flow_signals
-import zero_flow
+from zeroflow import engine
+from zeroflow import logs
+from zeroflow import paths
+from zeroflow import signals as flow_signals
+from zeroflow import supervisor
+
 from reader import app as reader_app
 
 SYNCHRONIZE = 0x00100000
@@ -57,7 +61,7 @@ class TestSingleInstance(unittest.TestCase):
         role = f"test-{uuid.uuid4()}"
         self.assertTrue(flow_signals.claim_single_instance(role))
         other = run_python(f"""
-            import flow_signals
+            from zeroflow import signals as flow_signals
             print(flow_signals.claim_single_instance({role!r}))
         """)
         self.assertEqual(other.stdout.strip(), "False", other.stderr)
@@ -77,12 +81,10 @@ class TestSecondCopyStopsAtTheDoor(unittest.TestCase):
         told.assert_called_once()
 
     def test_the_whole_engine(self):
-        import local_flow
-        self.refused(zero_flow, zero_flow.main, (local_flow, "boot"))
+        self.refused(supervisor, supervisor.main, (engine, "boot"))
 
     def test_the_dictation_half_alone(self):
-        import local_flow
-        self.refused(local_flow, local_flow.main, (local_flow, "boot"))
+        self.refused(engine, engine.main, (engine, "boot"))
 
     def test_the_reader_alone(self):
         with mock.patch.object(reader_app, "CHILD_MODE", False):
@@ -107,7 +109,7 @@ class TestChildDiesWithParent(unittest.TestCase):
         crash or Task Manager's End task."""
         parent = run_python("""
             import os, subprocess, sys
-            import flow_signals
+            from zeroflow import signals as flow_signals
             # No inherited output: an orphaned child would hold the test's pipe open.
             child = subprocess.Popen([sys.executable, "-c", "import time; time.sleep(60)"],
                                      stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL,
@@ -138,9 +140,8 @@ class TestTestsLeaveTheLogsAlone(unittest.TestCase):
     def test_the_suite_logs_outside_the_program_folder(self):
         """The tests' deliberate crashes and broken microphones used to land in the
         real flow_debug.log and reader_debug.log, where they read like real faults."""
-        import flow_core
-        opened = [h.baseFilename for h in flow_core._log_handlers.values()]
-        for path in opened + [flow_core.log_path("flow"), flow_core.log_path("reader")]:
+        opened = [h.baseFilename for h in logs._log_handlers.values()]
+        for path in opened + [paths.log_path("flow"), paths.log_path("reader")]:
             self.assertNotEqual(
                 os.path.dirname(os.path.abspath(path)), ROOT,
                 f"{path} is the program's own log. Run the tests from the project folder "
@@ -151,18 +152,17 @@ class TestCrashLogging(unittest.TestCase):
     """A crash used to leave nothing in the logs — invisible under the silent launcher."""
 
     def crash(self, component, code):
-        import flow_core
-        files = [os.path.join(flow_core.log_dir(), f"{component}_{kind}.log")
+        files = [os.path.join(paths.log_dir(), f"{component}_{kind}.log")
                  for kind in ("debug", "crash")]
         for path in files:
             self.addCleanup(lambda p=path: os.path.exists(p) and os.unlink(p))
-        run_python(f"import flow_core\nflow_core.init_logging({component!r})\n{code}")
-        logs = {}
+        run_python(f"from zeroflow import logs\nlogs.init_logging({component!r})\n{code}")
+        found = {}
         for path in files:
             if os.path.exists(path):
                 with open(path, encoding="utf-8", errors="replace") as f:
-                    logs[os.path.basename(path)] = f.read()
-        return logs
+                    found[os.path.basename(path)] = f.read()
+        return found
 
     def test_a_native_crash_is_written_to_the_crash_log(self):
         """A segfault skips all of Python's error handling."""
@@ -195,35 +195,35 @@ class TestReaderSupervision(unittest.TestCase):
         that exit with `later_codes` in turn. Returns how many restarts were made."""
         spawned = [FakeReader(code) for code in later_codes]
         spawn = mock.Mock(side_effect=lambda: spawned.pop(0) if spawned else None)
-        with mock.patch.object(zero_flow, "reader_process", FakeReader(first_code)), \
-             mock.patch.object(zero_flow, "spawn_reader", spawn), \
-             mock.patch.object(zero_flow.time, "sleep"), \
-             mock.patch.object(zero_flow.signals, "exit_requested",
+        with mock.patch.object(supervisor, "reader_process", FakeReader(first_code)), \
+             mock.patch.object(supervisor, "spawn_reader", spawn), \
+             mock.patch.object(supervisor.time, "sleep"), \
+             mock.patch.object(supervisor.signals, "exit_requested",
                                return_value=exit_requested, create=True), \
              mock.patch("builtins.print"), \
-             mock.patch.object(zero_flow, "logging"):
-            zero_flow.watch_reader()
+             mock.patch.object(supervisor, "logging"):
+            supervisor.watch_reader()
         return spawn.call_count
 
     def test_a_crashed_reader_is_restarted(self):
-        restarts = self.supervise(1, [zero_flow.STATUS_CONTROL_C_EXIT])
+        restarts = self.supervise(1, [supervisor.STATUS_CONTROL_C_EXIT])
         self.assertEqual(restarts, 1)
 
     def test_it_gives_up_after_repeated_crashes(self):
         """A reader that can never start must not be restarted forever."""
         restarts = self.supervise(1, [1] * 10)
-        self.assertEqual(restarts, zero_flow.MAX_READER_RESTARTS)
+        self.assertEqual(restarts, supervisor.MAX_READER_RESTARTS)
 
     def test_exit_from_the_tray_is_not_a_crash(self):
         self.assertEqual(self.supervise(0, [1], exit_requested=True), 0)
 
     def test_closing_the_console_is_not_a_crash(self):
-        self.assertEqual(self.supervise(zero_flow.STATUS_CONTROL_C_EXIT, [1]), 0)
+        self.assertEqual(self.supervise(supervisor.STATUS_CONTROL_C_EXIT, [1]), 0)
 
     def test_the_engine_stopping_the_reader_is_not_a_crash(self):
         """shutdown() ends the reader first; that exit is not one to restart (or to
         log as "exited unexpectedly" on the way out)."""
-        with mock.patch.object(zero_flow, "shutting_down", True, create=True):
+        with mock.patch.object(supervisor, "shutting_down", True, create=True):
             self.assertEqual(self.supervise(1, [1]), 0)
 
 

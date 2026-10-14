@@ -23,9 +23,7 @@ import pystray
 from pystray import MenuItem
 
 try:
-    import engine_ui as ui
-    import flow_core
-    import flow_signals as signals
+    from zeroflow import settings, signals, ui
     from reader import voice_engine
     from reader.clipboard_tool import capture_highlighted_text
     from reader.text_cleaner import clean_text_instant, clean_text_smart
@@ -37,11 +35,11 @@ except ImportError as e:
 # =====================================================================
 # CONFIGURATION
 # =====================================================================
-HOTKEY_READ = os.getenv("HOTKEY_READ", "f4")
+HOTKEY_READ = settings.HOTKEY_READ
 # Shared with the dictation half on purpose: one key silences the whole engine.
-HOTKEY_PANIC = os.getenv("HOTKEY_PANIC", "esc")
+HOTKEY_PANIC = settings.HOTKEYS["panic"]
 # Off by default: the regex clean is instant, the LLM pass costs a few seconds.
-SMART_MODE_DEFAULT = os.getenv("READER_SMART_MODE", "False").lower() in ('true', '1', 't')
+SMART_MODE_DEFAULT = settings.READER_SMART_MODE
 
 # Set by zero_flow.py when this process is the engine's child, sharing its console.
 CHILD_MODE = bool(os.getenv("ZEROFLOW_CHILD"))
@@ -65,7 +63,7 @@ def process_and_speak():
     if signals.is_recording():
         # Dictation has the mic open. Speaking now would be picked up and transcribed.
         logging.info("Reader: declined to speak — the dictation half is recording.")
-        ui.play_tone("empty", flow_core.ENABLE_AUDIO_CHIMES)
+        ui.play_tone("empty", settings.ENABLE_AUDIO_CHIMES)
         return
 
     is_processing = True
@@ -75,7 +73,7 @@ def process_and_speak():
         text = capture_highlighted_text(release_key=HOTKEY_READ)
         if not text:
             logging.info("Reader: nothing selected — nothing to read.")
-            ui.play_tone("empty", flow_core.ENABLE_AUDIO_CHIMES)
+            ui.play_tone("empty", settings.ENABLE_AUDIO_CHIMES)
             return
 
         print(f"\n{ui.C_ERR}🔴 [READING]{ui.C_RESET} {text[:90]}...")
@@ -88,7 +86,7 @@ def process_and_speak():
             cleaned = clean_text_instant(text)
 
         _title("SPEAKING")
-        ui.play_tone("start", flow_core.ENABLE_AUDIO_CHIMES)
+        ui.play_tone("start", settings.ENABLE_AUDIO_CHIMES)
         voice_engine.stream_audio(cleaned)
     except Exception:
         logging.error(f"Reader pipeline failed: {traceback.format_exc()}")
@@ -199,18 +197,13 @@ def register_hotkeys():
 # CONSOLE
 # =====================================================================
 def print_boot_sequence():
-    os.system('cls' if os.name == 'nt' else 'clear')
-    llm = flow_core.OLLAMA_MODEL_NAME or "auto-discovered on first use"
-    print(f"{ui.C_ACCENT}┌────────────────────────────────────────────────────────┐{ui.C_RESET}")
-    print(f"{ui.C_ACCENT}│ {ui.Fore.MAGENTA}     Z E R O -   F L O W   ·   R E A D E R           {ui.C_ACCENT}│{ui.C_RESET}")
-    print(f"{ui.C_ACCENT}│ {ui.C_RESET}🔗 Voice model: {ui.C_GOOD}[Kokoro-82M · warming in background]{ui.C_ACCENT}    │{ui.C_RESET}")
-    print(f"{ui.C_ACCENT}│ {ui.C_RESET}🔗 Smart clean: {ui.C_GOOD}[{llm}]{ui.C_RESET}")
-    print(f"{ui.C_ACCENT}└────────────────────────────────────────────────────────┘{ui.C_RESET}")
-    print(f"  {ui.C_ACCENT}ACTIONS{ui.C_RESET}")
-    print(f"   {ui.C_GOOD}'{HOTKEY_READ.upper()}'{ui.C_RESET} read the highlighted text   "
-          f"{ui.C_ERR}'{HOTKEY_PANIC.upper()}'{ui.C_RESET} silence")
-    print(f"   Voice, smart cleaning and suspend live in the tray menu.")
-    print(f"{ui.C_ACCENT}========================================================={ui.C_RESET}\n")
+    llm = settings.OLLAMA_MODEL_NAME or "auto-discovered on first use"
+    ui.print_banner("Z E R O -   F L O W   ·   R E A D E R",
+                    [("Voice model", "Kokoro-82M · warming in background"), ("Smart clean", llm)],
+                    [("ACTIONS", None, [
+                        [(HOTKEY_READ, "read the highlighted text", ui.C_GOOD),
+                         (HOTKEY_PANIC, "silence", ui.C_ERR)],
+                        "Voice, smart cleaning and suspend live in the tray menu."])])
 
 # =====================================================================
 # STANDALONE ENTRY POINT
@@ -218,6 +211,8 @@ def print_boot_sequence():
 def main():
     logging.info(f"=== Zero- Reader Boot Sequence Initiated (child={CHILD_MODE}) ===")
     # As the engine's child, the engine holds the "reader" claim for us.
+    if not CHILD_MODE:                           # as a child, the engine reports them
+        ui.report_setting_problems(settings.problems, settings.ENABLE_TOASTS)
     if not CHILD_MODE and not signals.claim_single_instance("reader"):
         ui.already_running("Zero- Flow Reader")
         return
@@ -232,7 +227,7 @@ def main():
         ui.set_window_icon()
         ui.show_toast("🔊 Zero- Reader Online",
                       f"Press {HOTKEY_READ.upper()} to read the selection.",
-                      flow_core.ENABLE_TOASTS)
+                      settings.ENABLE_TOASTS)
 
     name = "Zero- Flow Engine" if CHILD_MODE else "Zero- Flow Reader"
     tray_icon = pystray.Icon("ZeroFlowReader", ui.load_tray_icon("logo_tray.ico"),
