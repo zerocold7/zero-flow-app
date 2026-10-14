@@ -215,29 +215,41 @@ def recommend(facts, tier=None):
                        f"(large-v3 3.9 GB -> 2.0 GB) to leave room for the AI model.")
     if tier == "nvidia-laptop" and vram < 5.5:
         settings["WHISPER_MODEL_NAME"] = "small"
-        reasons.append(f"{vram} GB card: the 'small' speech model leaves room for the voice and AI.")
+        settings["AI_BUILTIN_REPO"], settings["AI_BUILTIN_FILE"] = "google/gemma-4-E2B-it-qat-q4_0-gguf", "gemma-4-E2B_q4_0-it.gguf"
+        reasons.append(f"{vram} GB card: the 'small' speech model and the smaller AI model "
+                       f"(Gemma 4 E2B) leave room for the voice.")
     if tier in ("cpu-only", "amd-intel-gpu") and ram and ram <= 9:
         settings["WHISPER_MODEL_NAME"] = "base"
         settings["OLLAMA_MODEL_NAME"] = "gemma2:2b"
-        reasons.append(f"{ram} GB of RAM: the lightest speech and AI models keep Windows responsive.")
+        settings["AI_BUILTIN_REPO"], settings["AI_BUILTIN_FILE"] = "google/gemma-4-E2B-it-qat-q4_0-gguf", "gemma-4-E2B_q4_0-it.gguf"
+        reasons.append(f"{ram} GB of RAM: the lightest speech model and the smaller AI model "
+                       f"(Gemma 4 E2B) keep Windows responsive.")
     if tier == "amd-intel-gpu" and other and other["vram_gb"] >= 7.5:
         reasons.append(f"{other['name']} ({other['vram_gb']} GB): if `ollama ps` shows '100% GPU' "
                        f"after a Polish, try OLLAMA_MODEL_NAME=\"qwen2.5:7b\".")
     return tier, settings, reasons
 
 
-def keep_chosen_model(settings, env):
-    """Keep the AI model the user already picked instead of the preset's.
+CHOSEN_BY_USER = {"AI_PROVIDER": "AI provider", "OLLAMA_MODEL_NAME": "AI model",
+                  "AI_BUILTIN_FILE": "built-in AI model"}
 
-    The presets suggest one model per tier, but which model writes the best Arabic —
-    or suits the user — is a personal call, and --apply must not undo it. Returns a
-    note when the user's choice wins, or None."""
-    chosen = env.get("OLLAMA_MODEL_NAME", "").strip()
-    suggested = settings.get("OLLAMA_MODEL_NAME")
-    if chosen and suggested and chosen != suggested:
-        settings["OLLAMA_MODEL_NAME"] = chosen
-        return f"Keeping your own AI model, {chosen} (the preset would pick {suggested})."
-    return None
+
+def keep_chosen_model(settings, env):
+    """Keep the AI provider and model the user already picked instead of the preset's.
+
+    The presets suggest one per tier, but which model writes the best Arabic — or
+    whether to use Ollama or a cloud API — is a personal call, and --apply must not
+    undo it. Returns a note when the user's choice wins, or None."""
+    notes = []
+    for key, what in CHOSEN_BY_USER.items():
+        chosen = env.get(key, "").strip()
+        suggested = settings.get(key)
+        if chosen and suggested and chosen != suggested:
+            settings[key] = chosen
+            if key == "AI_BUILTIN_FILE":             # the file and where it comes from go together
+                settings["AI_BUILTIN_REPO"] = env.get("AI_BUILTIN_REPO", settings.get("AI_BUILTIN_REPO"))
+            notes.append(f"Keeping your own {what}, {chosen} (the preset would pick {suggested}).")
+    return " ".join(notes) or None
 
 
 # =====================================================================
@@ -322,14 +334,32 @@ def software_checks(tier, settings):
                              "model cannot use your card: keep those two lines in requirements.txt"))
 
     env = parse_env(_read(ENV_FILE)) if os.path.exists(ENV_FILE) else {}
-    models = _ollama_models(env)
-    wanted = settings["OLLAMA_MODEL_NAME"]
-    if models is None:
-        notes.append((False, "Ollama is not running (or not installed) — start it from the Start menu."))
-    elif not any(m == wanted or m == wanted + ":latest" for m in models):
-        notes.append((False, f"Ollama does not have {wanted} yet: ollama pull {wanted}"))
+    provider = settings.get("AI_PROVIDER", "builtin")
+    if provider == "builtin":
+        variant = settings.get("LLAMA_VARIANT", "cpu")
+        server = os.path.join(BASE_DIR, "runtime", "llama", variant, "llama-server.exe")
+        if os.path.isfile(server):
+            notes.append((True, f"the built-in AI ({variant} build) is installed"))
+        else:
+            notes.append((False, f"the built-in AI ({variant} build) is not installed yet: "
+                                 f"python tools/get_llama.py"))
+        repo = settings.get("AI_BUILTIN_REPO", "google/gemma-4-E4B-it-qat-q4_0-gguf")
+        if _cached(repo):
+            notes.append((True, "the AI model is downloaded"))
+        else:
+            size = "3.35 GB" if "E2B" in repo else "5.15 GB"
+            notes.append((True, f"the AI model downloads on first start (about {size})"))
+    elif provider == "ollama":
+        models = _ollama_models(env)
+        wanted = settings["OLLAMA_MODEL_NAME"]
+        if models is None:
+            notes.append((False, "Ollama is not running (or not installed) — start it from the Start menu."))
+        elif not any(m == wanted or m == wanted + ":latest" for m in models):
+            notes.append((False, f"Ollama does not have {wanted} yet: ollama pull {wanted}"))
+        else:
+            notes.append((True, f"Ollama is running and has {wanted}"))
     else:
-        notes.append((True, f"Ollama is running and has {wanted}"))
+        notes.append((True, f"the AI runs through {provider} (AI_URL / AI_API_KEY in .env)"))
 
     size = settings["WHISPER_MODEL_NAME"]
     repo = size if "/" in size else f"Systran/faster-whisper-{size}"

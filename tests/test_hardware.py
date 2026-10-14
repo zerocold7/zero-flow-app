@@ -93,6 +93,61 @@ class TestRecommend(unittest.TestCase):
         self.assertEqual(tier, "cpu-only")
 
 
+class TestBuiltinAI(unittest.TestCase):
+    """The built-in AI: the llama.cpp build follows the card, the model the memory."""
+
+    E2B = "gemma-4-E2B_q4_0-it.gguf"
+
+    def test_each_tier_gets_its_llama_build(self):
+        cases = [
+            (pc(("NVIDIA GeForce RTX 4070", 12.0)), "cuda"),
+            (pc(("NVIDIA GeForce RTX 3060 Laptop GPU", 6.0)), "cuda"),
+            (pc(("AMD Radeon RX 7600", 8.0)), "vulkan"),
+            (pc(("Intel(R) UHD Graphics", 0.5)), "cpu"),
+        ]
+        for facts, variant in cases:
+            tier, settings, _ = hw.recommend(facts)
+            self.assertEqual(settings.get("AI_PROVIDER"), "builtin", tier)
+            self.assertEqual(settings.get("LLAMA_VARIANT"), variant, tier)
+
+    def test_a_small_laptop_card_gets_the_smaller_model(self):
+        _, settings, reasons = hw.recommend(pc(("NVIDIA GeForce RTX 3050 Laptop GPU", 4.0)))
+        self.assertEqual(settings.get("AI_BUILTIN_FILE"), self.E2B)
+        self.assertTrue(any("E2B" in r for r in reasons))
+
+    def test_8gb_of_ram_gets_the_smaller_model(self):
+        _, settings, _ = hw.recommend(pc(("Intel(R) UHD Graphics", 0.5), ram=8))
+        self.assertEqual(settings.get("AI_BUILTIN_FILE"), self.E2B)
+        self.assertIn("E2B", settings.get("AI_BUILTIN_REPO", ""))
+
+    def test_a_big_card_keeps_the_full_model(self):
+        _, settings, _ = hw.recommend(pc(("NVIDIA GeForce RTX 4070", 12.0)))
+        self.assertNotIn("AI_BUILTIN_FILE", settings)          # the engine's default: E4B
+
+    def test_a_missing_runtime_is_reported_with_the_fix(self):
+        settings = hw.load_preset("cpu-only")
+        with mock.patch.object(hw, "installed_versions", return_value=dict.fromkeys(
+                 ["faster-whisper", "kokoro", "torch", "nvidia-cublas-cu12"])), \
+             mock.patch.object(hw, "_cached", return_value=True), \
+             mock.patch.object(hw.os.path, "isfile", return_value=False):
+            notes = hw.software_checks("cpu-only", settings)
+        missing = [msg for ok, msg in notes if not ok and "get_llama" in msg]
+        self.assertEqual(len(missing), 1, notes)
+
+    def test_ollama_is_only_checked_when_it_is_the_provider(self):
+        settings = dict(hw.load_preset("cpu-only"))
+        with mock.patch.object(hw, "installed_versions", return_value=dict.fromkeys(
+                 ["faster-whisper", "kokoro", "torch", "nvidia-cublas-cu12"])), \
+             mock.patch.object(hw, "_cached", return_value=True), \
+             mock.patch.object(hw, "_ollama_models", return_value=None) as ollama:
+            hw.software_checks("cpu-only", settings)
+            ollama.assert_not_called()
+            settings["AI_PROVIDER"] = "ollama"
+            notes = hw.software_checks("cpu-only", settings)
+        ollama.assert_called_once()
+        self.assertTrue(any("Ollama is not running" in msg for _, msg in notes))
+
+
 class TestKeepChosenModel(unittest.TestCase):
     """--apply must not swap out an AI model the user picked for a preset's."""
 
@@ -101,6 +156,13 @@ class TestKeepChosenModel(unittest.TestCase):
         note = hw.keep_chosen_model(settings, {"OLLAMA_MODEL_NAME": "gemma4-e4b:latest"})
         self.assertEqual(settings["OLLAMA_MODEL_NAME"], "gemma4-e4b:latest")
         self.assertIn("Keeping your own AI model", note)
+
+    def test_the_users_ai_provider_wins(self):
+        """Someone who switched to Ollama or Claude keeps it."""
+        settings = {"AI_PROVIDER": "builtin", "OLLAMA_MODEL_NAME": "qwen2.5:7b"}
+        note = hw.keep_chosen_model(settings, {"AI_PROVIDER": "claude"})
+        self.assertEqual(settings["AI_PROVIDER"], "claude")
+        self.assertIn("claude", note)
 
     def test_a_blank_choice_takes_the_preset(self):
         settings = {"OLLAMA_MODEL_NAME": "qwen2.5:7b"}
