@@ -7,11 +7,12 @@ provider (zeroflow.llm.base.Provider), chosen with AI_PROVIDER in .env:
     ollama   a local Ollama server (llm.ollama)
     openai   any server speaking the OpenAI chat format (llm.openai_compatible):
              LM Studio, the llama.cpp server, vLLM, or a cloud service
+    claude   Anthropic's Claude, with an API key (llm.claude)
 """
 from zeroflow import settings
-from zeroflow.llm import builtin, ollama, openai_compatible
+from zeroflow.llm import builtin, claude, ollama, openai_compatible
 
-PROVIDERS = {"builtin": builtin, "ollama": ollama, "openai": openai_compatible}
+PROVIDERS = {"builtin": builtin, "ollama": ollama, "openai": openai_compatible, "claude": claude}
 
 
 def choose(name: str):

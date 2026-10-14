@@ -15,6 +15,16 @@ import subprocess
 import sys
 
 MUTATIONS = [
+    ("claude: a refusal is no answer", "x",
+     "    if response.stop_reason == \"refusal\":\n", "    if False:\n",
+     "tests.test_claude_provider.TestNoAnswer.test_a_refusal_is_no_answer"),
+    ("claude: the refusal fallback is on", "x",
+     "            fallbacks=\"default\",\n", "",
+     "tests.test_claude_provider.TestRequest.test_quick_clean_up_settings_for_the_current_model"),
+    ("claude: a rejected key is named", "x",
+     "        return _no_answer(\"the API key was rejected (401)\", \"The API key was rejected.\")\n",
+     "        return _no_answer(\"rejected (401)\", \"Rejected.\")\n",
+     "tests.test_claude_provider.TestNoAnswer.test_a_rejected_key_says_so"),
     ("runtime: checksum is checked", "x",
      "            if actual != expected:\n", "            if False:\n",
      "tests.test_llama_runtime.TestInstall.test_a_wrong_checksum_is_refused_and_nothing_installed"),
