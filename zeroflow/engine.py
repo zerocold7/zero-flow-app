@@ -20,7 +20,6 @@ import time
 import traceback
 
 import keyboard
-import pyperclip
 import sounddevice as sd
 
 # stt first: it loads faster-whisper, which must claim its CUDA libraries before any
@@ -28,7 +27,7 @@ import sounddevice as sd
 from zeroflow import stt
 from zeroflow import personas, signals, ui
 from zeroflow.capture import Capture
-from zeroflow.clipboard import clipboard_lock, paste_text, read_clipboard_context
+from zeroflow.clipboard import copy_selection, paste_text, read_clipboard_context
 from zeroflow.history import cap_history_file, log_to_history
 from zeroflow.hotkeys import _run_async, wait_for_release
 from zeroflow.llm.ollama import ask_ollama, get_ollama_model, query_ollama, warm_up_llm
@@ -364,17 +363,9 @@ def correct_current_line():
     # (DevTools in a browser) — wait for the keys to come up first.
     wait_for_release(HOTKEYS["fix"])
 
-    # Copy the line under the clipboard lock, like every other clipboard sequence,
-    # so the reader cannot copy a selection in between. The lock is not held across
-    # the LLM call below, which can take seconds.
-    with clipboard_lock():
-        saved_clipboard = pyperclip.paste()
-        pyperclip.copy("")                       # so a failed copy reads as empty, not as stale text
-        keyboard.send('shift+home'); time.sleep(0.05)
-        keyboard.send('ctrl+c');     time.sleep(0.05)
-        target_text = pyperclip.paste().strip()
-        pyperclip.copy(saved_clipboard)
-
+    # Select back to the start of the line and copy it (the clipboard lock is held for
+    # the copy, not across the LLM call below, which can take seconds).
+    target_text = copy_selection(select="shift+home")
     if not target_text:
         ui.play_tone("empty", ENABLE_AUDIO_CHIMES)
         return

@@ -81,11 +81,9 @@ class TestSecondCopyStopsAtTheDoor(unittest.TestCase):
         told.assert_called_once()
 
     def test_the_whole_engine(self):
-        from zeroflow import engine
         self.refused(supervisor, supervisor.main, (engine, "boot"))
 
     def test_the_dictation_half_alone(self):
-        from zeroflow import engine
         self.refused(engine, engine.main, (engine, "boot"))
 
     def test_the_reader_alone(self):
@@ -142,7 +140,6 @@ class TestTestsLeaveTheLogsAlone(unittest.TestCase):
     def test_the_suite_logs_outside_the_program_folder(self):
         """The tests' deliberate crashes and broken microphones used to land in the
         real flow_debug.log and reader_debug.log, where they read like real faults."""
-        from zeroflow import logs, paths
         opened = [h.baseFilename for h in logs._log_handlers.values()]
         for path in opened + [paths.log_path("flow"), paths.log_path("reader")]:
             self.assertNotEqual(
@@ -155,18 +152,17 @@ class TestCrashLogging(unittest.TestCase):
     """A crash used to leave nothing in the logs — invisible under the silent launcher."""
 
     def crash(self, component, code):
-        from zeroflow import logs, paths
         files = [os.path.join(paths.log_dir(), f"{component}_{kind}.log")
                  for kind in ("debug", "crash")]
         for path in files:
             self.addCleanup(lambda p=path: os.path.exists(p) and os.unlink(p))
         run_python(f"from zeroflow import logs\nlogs.init_logging({component!r})\n{code}")
-        logs = {}
+        found = {}
         for path in files:
             if os.path.exists(path):
                 with open(path, encoding="utf-8", errors="replace") as f:
-                    logs[os.path.basename(path)] = f.read()
-        return logs
+                    found[os.path.basename(path)] = f.read()
+        return found
 
     def test_a_native_crash_is_written_to_the_crash_log(self):
         """A segfault skips all of Python's error handling."""

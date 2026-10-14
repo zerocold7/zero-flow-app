@@ -15,6 +15,7 @@ from unittest import mock
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
+from zeroflow import clipboard
 from zeroflow import engine
 from zeroflow import hotkeys
 from zeroflow import personas
@@ -282,7 +283,11 @@ class TestFixLine(AITestCase):
         pasted = []
         with mock.patch.object(engine, "keyboard") as kb, \
              mock.patch.object(hotkeys, "keyboard", kb), \
-             mock.patch.object(engine, "pyperclip") as clip, \
+             mock.patch.object(clipboard, "keyboard", kb), \
+             mock.patch.object(clipboard, "pyperclip") as clip, \
+             mock.patch.object(clipboard, "_press_copy",
+                               side_effect=lambda: kb.send("ctrl+c")), \
+             mock.patch.object(clipboard.time, "sleep"), \
              mock.patch.object(engine, "paste_text", side_effect=pasted.append), \
              mock.patch.object(engine, "ask_ollama", return_value=answer), \
              mock.patch.object(engine, "log_to_history"), \
@@ -296,6 +301,13 @@ class TestFixLine(AITestCase):
         pasted, _ = self.fix_line("teh server is down", "The server is down.")
         self.assertEqual(pasted, ["The server is down."])
 
+    def test_the_line_is_selected_then_copied(self):
+        """Shift+Home selects back to the start of the line; the copy comes after."""
+        _, kb = self.fix_line("teh server is down", "The server is down.")
+        sends = [c.args[0] for c in kb.send.call_args_list]
+        self.assertIn("shift+home", sends)
+        self.assertLess(sends.index("shift+home"), sends.index("ctrl+c"))
+
     def test_an_answer_in_the_wrong_language_is_not_pasted(self):
         with self.assertLogs(level="WARNING"):
             pasted, _ = self.fix_line("teh server is down", "服务器已关闭")
@@ -306,7 +318,11 @@ class TestFixLine(AITestCase):
         console = io.StringIO()
         with mock.patch.object(engine, "keyboard") as kb, \
              mock.patch.object(hotkeys, "keyboard", kb), \
-             mock.patch.object(engine, "pyperclip") as clip, \
+             mock.patch.object(clipboard, "keyboard", kb), \
+             mock.patch.object(clipboard, "pyperclip") as clip, \
+             mock.patch.object(clipboard, "_press_copy",
+                               side_effect=lambda: kb.send("ctrl+c")), \
+             mock.patch.object(clipboard.time, "sleep"), \
              mock.patch.object(engine, "paste_text") as paste, \
              mock.patch.object(engine, "ask_ollama", return_value=None), \
              contextlib.redirect_stdout(console):
@@ -333,7 +349,11 @@ class TestFixLine(AITestCase):
             return down
         with mock.patch.object(engine, "keyboard") as kb, \
              mock.patch.object(hotkeys, "keyboard", kb), \
-             mock.patch.object(engine, "pyperclip") as clip, \
+             mock.patch.object(clipboard, "keyboard", kb), \
+             mock.patch.object(clipboard, "pyperclip") as clip, \
+             mock.patch.object(clipboard, "_press_copy",
+                               side_effect=lambda: kb.send("ctrl+c")), \
+             mock.patch.object(clipboard.time, "sleep"), \
              mock.patch.object(engine, "paste_text"), \
              mock.patch.object(engine, "ask_ollama", return_value="Fixed."), \
              mock.patch.object(engine, "log_to_history"), \
