@@ -84,7 +84,7 @@ def score(case, hyp):
     }
 
 
-def run(label, model_name, runs, clips=CLIPS, no_filter=False):
+def run(label, model_name, runs, clips=CLIPS, no_filter=False, vocabulary=False):
     if model_name:
         os.environ["WHISPER_MODEL_NAME"] = model_name
     os.environ.setdefault("ZEROFLOW_LOG_DIR", os.path.join(RESULTS, "logs"))
@@ -93,7 +93,8 @@ def run(label, model_name, runs, clips=CLIPS, no_filter=False):
     import soundfile as sf
     import local_flow
 
-    local_flow.load_vocabulary = lambda: []          # the same hint on every PC
+    if not vocabulary:                               # the same hint on every PC
+        local_flow.load_vocabulary = lambda: []
     if no_filter:                                    # the engine before 2.0 phase 2
         local_flow.trim_invented_ending = lambda words, audio: words
     local_flow.model = local_flow.load_whisper_model()
@@ -176,6 +177,8 @@ if __name__ == "__main__":
     parser.add_argument("--runs", type=int, default=1, help="repeat every clip this often")
     parser.add_argument("--clips", default="clips",
                         help="folder under tools/bench: clips (synthetic) or mine (your voice)")
+    parser.add_argument("--vocabulary", action="store_true",
+                        help="prime Whisper with this PC's vocabulary, as the engine does")
     parser.add_argument("--no-filter", action="store_true",
                         help="leave invented endings in, to compare with the filter on")
     parser.add_argument("--compare", nargs=2, metavar=("BEFORE", "AFTER"))
@@ -187,4 +190,4 @@ if __name__ == "__main__":
         show(load(args.show))
     else:
         show(run(args.label, args.model, args.runs, os.path.join(HERE, args.clips),
-                 args.no_filter))
+                 args.no_filter, args.vocabulary))
