@@ -1,5 +1,5 @@
 # Tools for working on the engine, not for running it.
 # Install after requirements.txt:  venv\Scripts\python -m pip install -r requirements-dev.txt
 ruff          # lint:  venv\Scripts\python -m ruff check .
-pytest        # tests: venv\Scripts\python -m pytest  (or: -m unittest discover -s tests)
+pytest        # tests: venv\Scripts\python -m pytest  (or: -m unittest discover -s tests -t .)
 reportlab     # tools/build_setup_pdf.py

@@ -43,8 +43,16 @@ HISTORY_FILE = os.path.join(BASE_DIR, "flow_history.md")
 _log_handlers = {}
 
 
+def log_dir():
+    """Where the debug and crash logs go: the program folder, unless ZEROFLOW_LOG_DIR
+    says otherwise. The test suite points it at a temporary folder, so its deliberate
+    crashes never read like real faults in the logs you look at. Read when a log is
+    opened, not at import, so setting it any time before then works."""
+    return os.getenv("ZEROFLOW_LOG_DIR") or BASE_DIR
+
+
 def log_path(component):
-    return os.path.join(BASE_DIR, f"{component}_debug.log")
+    return os.path.join(log_dir(), f"{component}_debug.log")
 
 
 def init_logging(component):
@@ -81,7 +89,7 @@ def _log_crashes(component):
         exc_info=(args.exc_type, args.exc_value, args.exc_traceback))
     try:
         global _crash_file
-        _crash_file = open(os.path.join(BASE_DIR, f"{component}_crash.log"), "a", encoding="utf-8")
+        _crash_file = open(os.path.join(log_dir(), f"{component}_crash.log"), "a", encoding="utf-8")
         faulthandler.enable(file=_crash_file)
     except Exception as e:
         logging.warning(f"Native crash logging unavailable: {e}")

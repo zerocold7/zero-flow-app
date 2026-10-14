@@ -172,7 +172,7 @@ choose: pointing it at a cloud AI provider ([CONFIGURATION.md §6](CONFIGURATION
 ## For developers
 
 ```powershell
-.\venv\Scripts\python.exe -m unittest discover -s tests
+.\venv\Scripts\python.exe -m unittest discover -s tests -t .
 ```
 
 Run them in the engine's venv: the tests use the standard library's `unittest`, but

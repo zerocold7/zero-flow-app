@@ -134,11 +134,26 @@ class TestReaderExitCode(unittest.TestCase):
         self.assertNotEqual(crashed.returncode, 0, crashed.stderr)
 
 
+class TestTestsLeaveTheLogsAlone(unittest.TestCase):
+    def test_the_suite_logs_outside_the_program_folder(self):
+        """The tests' deliberate crashes and broken microphones used to land in the
+        real flow_debug.log and reader_debug.log, where they read like real faults."""
+        import flow_core
+        opened = [h.baseFilename for h in flow_core._log_handlers.values()]
+        for path in opened + [flow_core.log_path("flow"), flow_core.log_path("reader")]:
+            self.assertNotEqual(
+                os.path.dirname(os.path.abspath(path)), ROOT,
+                f"{path} is the program's own log. Run the tests from the project folder "
+                f"with:  python -m unittest discover -s tests -t .")
+
+
 class TestCrashLogging(unittest.TestCase):
     """A crash used to leave nothing in the logs — invisible under the silent launcher."""
 
     def crash(self, component, code):
-        files = [os.path.join(ROOT, f"{component}_{kind}.log") for kind in ("debug", "crash")]
+        import flow_core
+        files = [os.path.join(flow_core.log_dir(), f"{component}_{kind}.log")
+                 for kind in ("debug", "crash")]
         for path in files:
             self.addCleanup(lambda p=path: os.path.exists(p) and os.unlink(p))
         run_python(f"import flow_core\nflow_core.init_logging({component!r})\n{code}")
