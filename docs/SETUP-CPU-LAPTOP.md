@@ -127,7 +127,7 @@ These commands create a private folder named **venv** and download the needed li
 ```powershell
 python -m venv venv
 .\venv\Scripts\python.exe -m pip install --upgrade pip
-.\venv\Scripts\python.exe -m pip install -r requirements.txt
+.\venv\Scripts\python.exe -m pip install -r requirements.txt -c constraints.txt
 ```
 
 ---

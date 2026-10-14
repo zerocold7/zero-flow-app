@@ -4,6 +4,57 @@ All notable work on the **Zero- Flow Engine**. Newest first.
 
 ---
 
+## [Unreleased] — 2.0 in progress
+
+### 🛡️ Stability (phase 1)
+- **Quick presses no longer mix up recordings.** Every recording shared one audio
+  queue and one "recording" and "cancel" flag. Stop-then-start within 40 ms kept the
+  first recording running and wiped its audio; Esc followed by a record key could still
+  paste the cancelled clip; a microphone that failed late stopped the *next*
+  recording. Each recording now has its own state (`Capture`).
+- **A forgotten recording stops itself** after `MAX_RECORDING_SECONDS` (300 s) and is
+  transcribed as usual. It used to grow by ~4 MB a minute.
+- **"AI unavailable" instead of "Polished".** When the AI did not answer, Polish
+  printed "✨ Polished" and Translate "Translated" over your unchanged words. An empty
+  answer pasted nothing; it now counts as no answer.
+- **With Ollama down at the first Polish**, the fallback model was kept for the whole
+  session, so every request after Ollama started failed with a 404. A 404 at start-up
+  was also logged as "loaded".
+- **Shift+F3** passes its answer through the language guard, waits for Shift to come
+  up (Ctrl+C with Shift held is Ctrl+Shift+C), and says when the AI is down.
+- **Vocabulary:** a learned word appended to a file without a final newline glued onto
+  the last word ("VisaKokoro"); writes now share a lock, so `Shift+F1` keeps a word
+  learned while it ran; and the model's chatter ("Here is the cleaned list:") is no
+  longer saved as words.
+- **History** is capped as it is written, not only at start-up, and trimmed at an
+  entry boundary.
+- **Out of graphics memory mid-dictation**, a clip is retried on a CPU copy of the
+  speech model. It used to be lost, and logged as "silence".
+- **One copy at a time.** A second engine says it is already running and closes; two
+  pasted every dictation twice.
+- **The reader is supervised:** a crash restarts it (after 2, 4, 8 s, then gives up
+  and says so). It used to exit with code 0, so F4 died silently. It is tied to the
+  engine with a Windows Job Object, so a crashed engine no longer leaves it running.
+  A standalone reader's Exit no longer shuts down a full engine.
+- **Crashes leave a trace:** uncaught errors on any thread go to the debug log, native
+  crashes to `flow_crash.log` / `reader_crash.log`, and a fatal error shows a message
+  box — a hidden engine's console is never seen.
+- **Hidden launches leave nothing behind:** each exit of a `*_Silent.vbs` launch left
+  an invisible `cmd.exe` waiting for a key. Visible launchers now pause only after an
+  error.
+
+### 📦 Install
+- **`constraints.txt` pins every package** to a set known to work together; install
+  with `pip install -r requirements.txt -c constraints.txt`. Without it, a fresh install
+  took transformers 5.19, which needs a newer torch, and the reader could not start.
+- The spaCy English model is a listed requirement; Kokoro used to pip-install it on the
+  first read (a hidden download, and a failure offline).
+- `requirements-dev.txt` and a `ruff` configuration for working on the engine.
+
+153 tests (from 109). Each fix was broken on purpose to confirm its test fails.
+
+---
+
 ## [1.5.0] — 2026-09-24 — Arabic that stays Arabic, and a faster start
 
 ### ⚡ Faster

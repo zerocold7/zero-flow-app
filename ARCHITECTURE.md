@@ -29,7 +29,7 @@ a local LLM to clean up or translate text.
 | `presets/`      | One `.env` fragment per hardware tier — the model and device settings `check_hardware.py` applies |
 | `docs/`         | User guides: install, hardware & tuning, FAQ, the beginner walkthrough (English + Arabic) |
 | `tools/`        | Rebuild the generated guides (printable PDF, Arabic Word file) from their Markdown — see `tools/README.md` |
-| `tests/`        | Standard-library unit tests: text logic, playback threading, vocabulary maintenance (`python -m unittest discover -s tests`) |
+| `tests/`        | `unittest` tests, run in the venv: text logic, recording and AI failure paths, playback threading, vocabulary and history files, process supervision (`.\venv\Scripts\python.exe -m unittest discover -s tests`) |
 
 **How they are hosted.** `zero_flow.py` is a supervisor, not a merge: it runs the
 dictation half in its own process and launches the reader as a **child process**,
@@ -75,8 +75,9 @@ Every dictation flows through the same stages (functions named for the refactore
  [hotkey press]                on_record_hotkey(mode)        — starts a worker thread
         │
         ▼
- 1. CAPTURE        process_recording → audio_callback        — mic @ 16 kHz mono, live meter
-        │                                                      (clips < 0.4 s are dropped)
+ 1. CAPTURE        process_recording → Capture.callback      — mic @ 16 kHz mono, live meter
+        │                                                      (clips < 0.4 s are dropped,
+        │                                                      stops itself after 300 s)
         ▼                  ── transcribe_and_inject(), one clip at a time ──
  2. TRANSCRIBE     transcribe_clip()                          — faster-whisper large-v3
         │                                                      GPU float16, CPU int8 fallback
@@ -91,10 +92,18 @@ Every dictation flows through the same stages (functions named for the refactore
 ```
 
 The mode chosen at step 1 is **locked for the whole capture** — it cannot change
-mid-recording. It is passed down the stages as an argument, not kept in a global, so
-starting the next dictation while this one is still transcribing cannot change what
-this one does. Steps 2–4 run one clip at a time (`processing_lock`), so clips are
-pasted in the order they were spoken.
+mid-recording. Each recording is a **`Capture` object** holding its own mode, audio,
+and stop/cancel state, and it is passed down the stages rather than kept in globals.
+The next recording can start the moment this one is stopped, while this one's
+microphone is still closing; with one shared audio queue and shared "recording" and
+"cancel" flags, quick presses used to mix two recordings up (the second wiped the
+first's audio, Esc was undone by the next key, a late microphone error stopped the
+newer recording). Only the *current* capture may tell the reader the microphone is
+closed (`_end_capture`). Steps 2–4 run one clip at a time (`processing_lock`), so clips
+are pasted in the order they were spoken.
+
+A recording left running stops by itself after `MAX_RECORDING_SECONDS` (300 s) and is
+transcribed as usual.
 
 The clipboard context Polish mode hands the LLM is read *after* the mic closes, not on
 the key press: `pyperclip` can block for up to half a second while another app holds
@@ -189,6 +198,11 @@ answers are also stripped of vowel marks and shadda (tanween on alif stays: *ج�
 3. Otherwise, or on failure, load on `cpu` / `int8`.
 4. Where it ended up goes into `model_runtime` (e.g. `GPU · int8_float16`), which the
    start-up banner shows, and into the log.
+5. **During dictation**, a clip the graphics card fails on — typically out of memory,
+   since Whisper, the voice and the AI model share it — is retried on a CPU copy of the
+   model (`cpu_fallback_model`, loaded on first need and then kept). `transcribe_clip`
+   returns `(None, None)` for a failure, distinct from `("", lang)` for silence, so the
+   log no longer blames the microphone for a crash.
 
 Each dictation logs its decode time next to the clip length (`1.21s for 14.2s of
 audio`) — the figure `docs/HARDWARE.md` tunes against. Which settings suit which
@@ -215,14 +229,21 @@ start makes no request at all, and the one-time download notice is silenced
 ## 6. Local LLM (`flow_core.py`: `discover_ollama_model`, `query_ollama`)
 - The engine picks the LLM in priority order: (1) `OLLAMA_MODEL_NAME` from
   `.env` if set — pins an exact model; (2) otherwise it queries Ollama's `/api/tags` and
-  binds to the **first model it is serving**; (3) otherwise `FALLBACK_LLM` (Ollama unreachable).
-  The choice is made once and cached (`get_ollama_model`): dictation makes it at boot
-  for the banner, the reader only the first time it actually cleans text with the LLM.
-- `query_ollama` sends `instruction + optional context + input` at `temperature 0.2`
-  (low, so Polish stays faithful instead of "creatively" translating). On any error it
-  returns the original text unchanged, so a dead LLM never loses your dictation — and
-  says why: an unreachable server or a non-200 reply (typically HTTP 404, a model name
-  Ollama does not have) is logged as a warning and shown as a toast.
+  binds to the **first model installed**; (3) otherwise `FALLBACK_LLM` (Ollama unreachable).
+  The choice is cached once Ollama has answered (`get_ollama_model`): dictation makes
+  it at boot for the banner, the reader only the first time it cleans text with the
+  LLM. The fallback is **never** cached — with Ollama down at the first Polish, caching
+  it bound the whole session to a model that may not exist, so every request after
+  Ollama started got a 404.
+- `ask_ollama` sends `instruction + optional context + input` at `temperature 0.2`
+  (low, so Polish stays faithful instead of "creatively" translating) and returns the
+  answer, or `None` when there is none: unreachable, a non-200 reply (typically 404, a
+  model Ollama does not have) or an empty answer — each logged as a warning and shown
+  as a toast. Polish, Translate and `Shift+F3` then say **"AI unavailable"** and keep
+  your own words; they used to print "Polished" over the unchanged text.
+  `query_ollama` is the same call for callers that carry on with the original either
+  way (the reader's Smart mode, vocabulary maintenance): it returns the input instead
+  of `None`. `warm_up_llm` checks the HTTP status too, so a 404 is not logged as loaded.
 - Every request carries **`think: false`**. Reasoning models (Gemma 4) otherwise write
   ~800 hidden tokens before a one-line answer — 5–9 s instead of ~1 s, for the same
   text. Models without reasoning accept and ignore it (checked on qwen2.5 and ALLaM).
@@ -239,9 +260,15 @@ start makes no request at all, and the one-time download notice is silenced
   taught three misheard words (removed), and a model answering in Chinese tagged a
   Chinese one. Only the English Polish prompt asks for tags at all.
 - **Vocabulary maintenance** (`Shift+F1`, `run_memory_maintenance`) hands the whole
-  list to the LLM and writes back what it returns, minus any `- ` / `1. ` list markers.
+  list to the LLM and writes back the terms it returns (`vocabulary_terms`): list
+  markers are stripped, and the model's chatter — "Here is the cleaned list:", or any
+  line longer than four words — is dropped, since every kept line primes Whisper.
   The previous file is kept as `flow_vocabulary.txt.bak`, and an unchanged result —
   which is also what an unreachable LLM returns — writes nothing.
+- Every write to the vocabulary file holds `VOCAB_LOCK`: a Polish can learn a word
+  while `Shift+F1` is rewriting the list, and the rewrite keeps it. A learned word is
+  always appended on a line of its own, even if the file lost its final newline
+  (it once glued "Visa" and the next word into "VisaKokoro").
 
 ---
 
@@ -336,9 +363,10 @@ Design notes:
 | `flow_capture.wav` | Temporary audio buffer (deleted after each decode) |
 | `flow_vocabulary.txt` | Learned proper nouns / tech terms (deduped on write, pruned by `Shift+F1`) |
 | `flow_vocabulary.txt.bak` | The list as it was before the last `Shift+F1` rewrite |
-| `flow_history.md` | Append-only log of injected text; auto-trimmed at boot past ~500 KB |
+| `flow_history.md` | Append-only log of injected text; trimmed after any write that takes it past ~500 KB, at an entry boundary |
 | `flow_debug.log` | Dictation diagnostics; auto-rotated at ~1 MB (×2 backups ≈ 3 MB cap) |
 | `reader_debug.log` | Reader diagnostics; rotated the same way |
+| `flow_crash.log`, `reader_crash.log` | Native crashes (e.g. a segfault in a CUDA library), written by `faulthandler`; normally empty |
 
 Each half logs to its **own** file. That is deliberate: two processes sharing one
 `RotatingFileHandler` fight at rollover — on Windows the rename fails outright while
@@ -346,21 +374,41 @@ the other process holds the file open, and the log then grows forever, defeating
 rotation. `Shift+F2` clears the dictation log and history; the reader's log rotates
 on its own (it writes a handful of lines per read).
 
-**None of these grow without bound:** both debug logs rotate, history is trimmed at boot,
-and `Shift+F2` clears the dictation pair on demand. The debug logs are the first place
-to look when something misbehaves — every transcription records `mode=…` and `lang=…`,
-and re-decodes / skips / fallbacks / failures are all logged, dictation in
-`flow_debug.log` and the reader in `reader_debug.log`. Under `zero_flow.py` the parent
-also logs a reader that dies: a clean exit or a closed console (`0xC000013A`) is
-recorded as such, anything else as an error with its exit code.
+**None of these grow without bound:** both debug logs rotate, history is trimmed as it
+is written, and `Shift+F2` clears the dictation pair on demand. The debug logs are the
+first place to look when something misbehaves — every transcription records `mode=…`
+and `lang=…`, and re-decodes / skips / fallbacks / failures are all logged, dictation
+in `flow_debug.log` and the reader in `reader_debug.log`. An uncaught exception on any
+thread is logged there too (`sys.excepthook`, `threading.excepthook`, set up by
+`init_logging`), and a fatal one also shows a message box — a hidden engine's console
+is never seen.
+
+---
+
+## 10a. Processes: one copy, a supervised reader, nothing left behind
+- **One copy at a time.** Each start claims its role with a named mutex
+  (`flow_signals.claim_single_instance`): `zero_flow.py` claims both "dictation" and
+  "reader", `local_flow.py` "dictation", a standalone reader "reader". A second copy
+  says it is already running and closes — two engines used to paste every dictation
+  twice. Windows drops a claim when its process ends, however it ends.
+- **The reader is supervised.** It exits with code 1 when it crashes (it used to exit
+  0, which looked like a clean exit). `watch_reader` restarts it after 2, 4 and 8 s,
+  then gives up and says so; a reader that ran for a minute earns fresh tries. Exit
+  from the tray, a closed console (`0xC000013A`) and the engine's own `shutdown()` are
+  not crashes.
+- **The reader dies with the engine.** `spawn_reader` puts it in a Windows Job Object
+  with *kill on close* (`flow_signals.bind_child_to_this_process`). Only the engine
+  holds the job's handle, so when the engine ends — even by a crash or End task, when
+  none of its clean-up code runs — Windows ends the reader too.
+- **A standalone reader's Exit** quits only itself. The exit signal is shared, and it
+  used to shut down a full engine running alongside.
+- **Launchers** pass `silent` from the `.vbs` files: started hidden, a launcher never
+  waits for a key (each exit used to leave an invisible `cmd.exe` behind); started
+  visible, it pauses only after an error, so the message can be read.
 
 ---
 
 ## 11. Known gaps
-- **The child can be orphaned.** If the parent is force-killed (Task Manager, not the
-  tray), the reader survives as a tray app. Its own Exit still works. A Windows Job
-  Object with `JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE` would close this properly; worth
-  adding only if orphans actually turn up in practice.
 - **Console interleaving.** Dictation redraws a live level meter with `\r` while
   recording. The mic interlock stops reading and recording overlapping, so the two
   rarely print at once, but nothing enforces it.
@@ -373,9 +421,9 @@ recorded as such, anything else as an error with its exit code.
   is not read aloud properly.
 - **Images on the clipboard are lost** by dictation, `F4` and `Shift+F3` (see §8).
 
-The clipboard race listed here previously is **fixed**: `flow_signals.clipboard_lock()`
+Fixed since they were listed here: the **clipboard race** (`flow_signals.clipboard_lock()`
 is a named Windows mutex, so it serialises the two halves across the process boundary
-as well as within one.
+as well as within one), and the **orphaned reader** (see §10a).
 
 ---
 

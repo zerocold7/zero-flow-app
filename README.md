@@ -171,14 +171,18 @@ choose: pointing it at a cloud AI provider ([CONFIGURATION.md §6](CONFIGURATION
 
 ## For developers
 
-```bash
-python -m unittest discover -s tests
+```powershell
+.\venv\Scripts\python.exe -m unittest discover -s tests
 ```
 
-Standard library only — no models loaded, no sound, about two seconds. It covers the
-logic that breaks quietly: voice macros and spoken punctuation, sentence batching, the
-reader's clean-up and audio-thread safety, vocabulary learning, hardware tiers and
-presets. Start with [ARCHITECTURE.md](ARCHITECTURE.md).
+Run them in the engine's venv: the tests use the standard library's `unittest`, but
+import the engine, so its packages must be installed. No models are loaded and nothing
+plays; about five seconds. They cover what breaks quietly: voice macros and spoken
+punctuation, quick start/stop/cancel of recordings, AI failures, the vocabulary and
+history files, sentence batching, the reader's audio-thread safety and supervision,
+one-copy-at-a-time, hardware tiers and presets. A few start real Python processes, to
+test how Windows treats them. Developer tools: `requirements-dev.txt`. Start with
+[ARCHITECTURE.md](ARCHITECTURE.md).
 
 ## License
 

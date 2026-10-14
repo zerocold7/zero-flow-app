@@ -68,7 +68,7 @@ Then the variant for your tier:
 
 ```powershell
 .\venv\Scripts\python.exe -m pip install torch==2.5.1+cu121 --index-url https://download.pytorch.org/whl/cu121
-.\venv\Scripts\python.exe -m pip install -r requirements.txt
+.\venv\Scripts\python.exe -m pip install -r requirements.txt -c constraints.txt
 ```
 
 Also keep your NVIDIA driver up to date.
@@ -77,7 +77,7 @@ Also keep your NVIDIA driver up to date.
 everything in `requirements.txt` except the two `nvidia-` lines:
 
 ```powershell
-.\venv\Scripts\python.exe -m pip install ((Get-Content requirements.txt) | Where-Object { $_ -match '^[A-Za-z]' -and $_ -notmatch '^nvidia-' })
+.\venv\Scripts\python.exe -m pip install ((Get-Content requirements.txt) | Where-Object { $_ -match '^[A-Za-z]' -and $_ -notmatch '^nvidia-' }) -c constraints.txt
 ```
 
 This step takes several minutes.
@@ -134,7 +134,7 @@ sign-in; stop it from its tray icon (**Exit Engine**).
 ```powershell
 cd C:\local-voice-flow
 git pull
-.\venv\Scripts\python.exe -m pip install -r requirements.txt
+.\venv\Scripts\python.exe -m pip install -r requirements.txt -c constraints.txt
 ```
 
 (On `cpu-only` / `amd-intel-gpu`, use the step 4 variant instead of the last line.)
