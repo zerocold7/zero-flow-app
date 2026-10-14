@@ -21,6 +21,11 @@ All notable work on the **Zero- Flow Engine**. Newest first.
 - **The spaCy English model** is a listed requirement. Kokoro used to pip-install it at
   run time on the first read — a hidden download, and a failure when offline.
 
+### 📄 Guides
+- **The Arabic beginner guide is now a PDF** (`docs/Zero-Flow-Setup-Guide.ar.pdf`), like
+  the English one; the Word file is gone. Word still does the Arabic layout, as an
+  in-between step (`tools/build_setup_ar_pdf.ps1`).
+
 **Already installed and working?** Nothing to do. To align an existing install with
 the tested set: `.\venv\Scripts\python.exe -m pip install -r requirements.txt -c constraints.txt`.
 

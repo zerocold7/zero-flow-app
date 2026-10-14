@@ -6,7 +6,7 @@
 
 ويندوز 11 · لينوفو IdeaPad Slim 5 (i7-13620H، 16 جيجابايت، Intel UHD) · المستودع: github.com/zerocold7/local-voice-flow
 
-> 🌍 In English: **[Read this guide in English](SETUP-CPU-LAPTOP.md)** · نسخة Word: [.docx](SETUP-CPU-LAPTOP.ar.docx)
+> 🌍 In English: **[Read this guide in English](SETUP-CPU-LAPTOP.md)** · نسخة PDF: [PDF](Zero-Flow-Setup-Guide.ar.pdf)
 
 > 🎮 **في جهازك كرت شاشة NVIDIA أو AMD أو Intel؟** اتبع [دليل التثبيت](INSTALL.ar.md) بدلاً من هذا الدليل — فهو يغطي كل أنواع الأجهزة، و[دليل العتاد والضبط](HARDWARE.ar.md) يشرح ما تتوقعه من جهازك.
 

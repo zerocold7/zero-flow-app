@@ -1,11 +1,11 @@
-// Rebuild docs/SETUP-CPU-LAPTOP.ar.docx from docs/SETUP-CPU-LAPTOP.ar.md (RTL Arabic).
+// Lay out docs/SETUP-CPU-LAPTOP.ar.md (RTL Arabic) as a Word document - the first step
+// of the Arabic PDF: tools/build_setup_ar_pdf.ps1 runs this, then has Word print it.
 //
-// Run it after editing the Arabic beginner guide, so the Word file never drifts from
-// the Markdown it comes from:
+// Normally run through build_setup_ar_pdf.ps1 after editing the Arabic guide. On its own:
 //
 //     npm install docx
-//     node tools/build_setup_docx.js            // writes docs/SETUP-CPU-LAPTOP.ar.docx
-//     node tools/build_setup_docx.js other.docx // or somewhere else, to preview first
+//     node tools/build_setup_docx.js out.docx  // the PDF script passes a temporary path
+//     node tools/build_setup_docx.js           // or docs/SETUP-CPU-LAPTOP.ar.docx, to preview
 //
 // See tools/README.md.
 const fs = require("fs");

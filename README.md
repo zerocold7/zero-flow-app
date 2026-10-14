@@ -98,7 +98,7 @@ Then install the packages for your tier, write your settings, pull the AI model 
 start **`Launch_Zero.bat`** — every step, per tier, in **[docs/INSTALL.md](docs/INSTALL.md)**.
 Never done anything like this? The **[Beginner Guide](docs/SETUP-CPU-LAPTOP.md)** walks
 through every click (also as a [printable PDF](docs/Zero-Flow-Setup-Guide.pdf), and
-[in Arabic](docs/SETUP-CPU-LAPTOP.ar.md) · [Word](docs/SETUP-CPU-LAPTOP.ar.docx)).
+[in Arabic](docs/SETUP-CPU-LAPTOP.ar.md) · [PDF](docs/Zero-Flow-Setup-Guide.ar.pdf)).
 
 ## Keys
 
@@ -146,7 +146,7 @@ the tray icon. To start with Windows, see the [FAQ](docs/FAQ.md#can-it-start-wit
 |---|---|---|
 | **Install** — every PC, step by step | [INSTALL.md](docs/INSTALL.md) | [INSTALL.ar.md](docs/INSTALL.ar.md) |
 | **Hardware & tuning** — tiers, measured speeds, fixes | [HARDWARE.md](docs/HARDWARE.md) | [HARDWARE.ar.md](docs/HARDWARE.ar.md) |
-| **Beginner guide** — no graphics card, every click | [SETUP-CPU-LAPTOP.md](docs/SETUP-CPU-LAPTOP.md) · [PDF](docs/Zero-Flow-Setup-Guide.pdf) | [SETUP-CPU-LAPTOP.ar.md](docs/SETUP-CPU-LAPTOP.ar.md) · [Word](docs/SETUP-CPU-LAPTOP.ar.docx) |
+| **Beginner guide** — no graphics card, every click | [SETUP-CPU-LAPTOP.md](docs/SETUP-CPU-LAPTOP.md) · [PDF](docs/Zero-Flow-Setup-Guide.pdf) | [SETUP-CPU-LAPTOP.ar.md](docs/SETUP-CPU-LAPTOP.ar.md) · [PDF](docs/Zero-Flow-Setup-Guide.ar.pdf) |
 | **FAQ** | [FAQ.md](docs/FAQ.md) | |
 | **Every setting** — keys, models, prompts, other AI providers, languages | [CONFIGURATION.md](CONFIGURATION.md) | |
 | **How it works inside** | [ARCHITECTURE.md](ARCHITECTURE.md) | |
