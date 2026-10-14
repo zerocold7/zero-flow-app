@@ -399,29 +399,54 @@ def transcribe_clip(force_lang):
     force_lang ('en' or 'ar') forces the output language — no detection, so it can
     never mishear English as Arabic. If force_lang is None it auto-detects, and if
     Whisper drifts to a third language (gibberish) it re-decodes as the closer one.
+
+    Returns (None, None) when transcription failed — distinct from ("", lang), which
+    means it ran and heard no speech. A failure on the graphics card (typically out of
+    memory: Whisper, the voice and the AI model share it) retries the clip on the CPU.
     """
-    def decode(language):
+    def decode(whisper, language):
         # condition_on_previous_text=False prevents repetition-loop hallucinations;
         # beam_size=5 gives steadier decoding on short clips.
-        segments, info = model.transcribe(
+        segments, info = whisper.transcribe(
             TEMP_AUDIO_FILE, beam_size=5, vad_filter=True,
             condition_on_previous_text=False, language=language,
             initial_prompt=whisper_hint(language),
         )
         return "".join(s.text for s in segments).strip(), info
 
-    try:
-        text, info = decode(force_lang)
+    def run(whisper):
+        text, info = decode(whisper, force_lang)
         lang = force_lang or info.language
         if force_lang is None and lang not in SUPPORTED_LANGS:
             probs = dict(getattr(info, "all_language_probs", None) or [])
             lang = "ar" if probs.get("ar", 0) >= probs.get("en", 0) else "en"
             logging.warning(f"Detected non-ar/en language — re-decoding as '{lang}'.")
-            text, _ = decode(lang)
+            text, _ = decode(whisper, lang)
         return text, lang
+
+    try:
+        return run(model)
     except Exception as e:
-        logging.error(f"Whisper transcription failed: {e}")
-        return "", None
+        if not model_runtime.startswith("GPU"):
+            logging.error(f"Whisper transcription failed: {e}")
+            return None, None
+        logging.warning(f"Whisper failed on the graphics card ({e}); transcribing this clip on the CPU.")
+    try:
+        return run(cpu_fallback_model())
+    except Exception as e:
+        logging.error(f"Whisper transcription failed on the CPU too: {e}")
+        return None, None
+
+
+_cpu_model = None        # loaded on the first GPU failure, then kept for later ones
+
+def cpu_fallback_model():
+    """A CPU copy of the speech model, for clips the graphics card could not take."""
+    global _cpu_model
+    if _cpu_model is None:
+        _cpu_model = WhisperModel(resolve_whisper_model(), device="cpu", compute_type="int8")
+        logging.info("Loaded a CPU copy of the speech model for graphics-card failures.")
+    return _cpu_model
 
 # =====================================================================
 # TEXT REFINEMENT & INJECTION
@@ -680,6 +705,11 @@ def transcribe_and_inject(audio, mode, context):
     if os.path.exists(TEMP_AUDIO_FILE):
         os.remove(TEMP_AUDIO_FILE)
 
+    if text is None:
+        logging.info("Transcription failed — nothing injected (the error is logged above).")
+        print(f"{ui.C_ERR}❌ Transcription failed — details in flow_debug.log.{ui.C_RESET}")
+        ui.play_tone("empty", ENABLE_AUDIO_CHIMES)
+        return
     if not text:
         logging.info("Empty transcription — nothing injected (silence / VAD dropped all audio).")
         ui.play_tone("empty", ENABLE_AUDIO_CHIMES)
