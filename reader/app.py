@@ -37,9 +37,9 @@ except ImportError as e:
 # =====================================================================
 HOTKEY_READ = settings.HOTKEY_READ
 # Shared with the dictation half on purpose: one key silences the whole engine.
-HOTKEY_PANIC = os.getenv("HOTKEY_PANIC", "esc")
+HOTKEY_PANIC = settings.HOTKEYS["panic"]
 # Off by default: the regex clean is instant, the LLM pass costs a few seconds.
-SMART_MODE_DEFAULT = os.getenv("READER_SMART_MODE", "False").lower() in ('true', '1', 't')
+SMART_MODE_DEFAULT = settings.READER_SMART_MODE
 
 # Set by zero_flow.py when this process is the engine's child, sharing its console.
 CHILD_MODE = bool(os.getenv("ZEROFLOW_CHILD"))
@@ -211,6 +211,8 @@ def print_boot_sequence():
 def main():
     logging.info(f"=== Zero- Reader Boot Sequence Initiated (child={CHILD_MODE}) ===")
     # As the engine's child, the engine holds the "reader" claim for us.
+    if not CHILD_MODE:                           # as a child, the engine reports them
+        ui.report_setting_problems(settings.problems, settings.ENABLE_TOASTS)
     if not CHILD_MODE and not signals.claim_single_instance("reader"):
         ui.already_running("Zero- Flow Reader")
         return

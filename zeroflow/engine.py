@@ -25,7 +25,7 @@ import sounddevice as sd
 # stt first: it loads faster-whisper, which must claim its CUDA libraries before any
 # WinRT library (win11toast, via ui) is loaded. See zero_flow.py.
 from zeroflow import stt
-from zeroflow import personas, signals, ui
+from zeroflow import personas, settings, signals, ui
 from zeroflow.capture import Capture
 from zeroflow.clipboard import copy_selection, paste_text, read_clipboard_context
 from zeroflow.history import cap_history_file, log_to_history
@@ -391,6 +391,7 @@ def boot():
     (this file standalone, and the supervisor in zero_flow.py)."""
 
     ui.update_console_title("INITIALIZING HARDWARE")
+    ui.report_setting_problems(settings.problems, ENABLE_TOASTS)
     # Clear any stale recording flag left behind if a previous run was force-killed
     # mid-capture — otherwise a running reader would keep refusing to speak.
     signals.set_recording(False)

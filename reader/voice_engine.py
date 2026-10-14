@@ -39,7 +39,7 @@ import warnings
 
 import sounddevice as sd
 
-from zeroflow import ui
+from zeroflow import settings, ui
 
 warnings.filterwarnings("ignore", category=UserWarning)
 warnings.filterwarnings("ignore", category=FutureWarning)
@@ -57,17 +57,17 @@ VOICES = {
     "American Female (Bella)": "af_bella",
     "British Female (Emma)": "bf_emma",
 }
-DEFAULT_VOICE = os.getenv("READER_VOICE", "af_heart")
+DEFAULT_VOICE = settings.READER_VOICE
 
 # "auto" (GPU when available), "cpu", or "cuda". Honoured under every launcher.
-DEVICE_POLICY = os.getenv("READER_DEVICE", "auto").strip().lower()
+DEVICE_POLICY = settings.READER_DEVICE
 
 # Sentence-aligned batching, so speech starts after the first sentence instead of
 # after the whole passage. Latin and Arabic sentence enders, plus a hard line break.
 SENTENCE_SPLIT = re.compile(r'(?<=[.!?؟۔…])\s+|\n+')
 # The first batch is kept short: it is the only one the listener waits on.
-FIRST_BATCH_CHARS = int(os.getenv("READER_FIRST_BATCH_CHARS", 120))
-BATCH_CHARS = int(os.getenv("READER_BATCH_CHARS", 300))
+FIRST_BATCH_CHARS = settings.READER_FIRST_BATCH_CHARS
+BATCH_CHARS = settings.READER_BATCH_CHARS
 
 current_voice = DEFAULT_VOICE
 # Holds (generation, audio) pairs. interrupt_audio() bumps the generation, so every

@@ -11,18 +11,17 @@ engine's model discovery, the `OLLAMA_MODEL_NAME` pin from `.env`, the offline
 fallback and the console spinner. There is no second Ollama client.
 """
 import logging
-import os
 import re
 
-from zeroflow import personas
+from zeroflow import personas, settings
 from zeroflow.llm import ollama
 from zeroflow.text import URL_PATTERN  # shared: also strips www. addresses
 
 # Above this length the LLM pass is skipped: a local 7B model needs several seconds
 # per thousand characters, which is longer than the wait for speech to simply start.
-SMART_MODE_MAX_CHARS = int(os.getenv("READER_SMART_MAX_CHARS", 1000))
+SMART_MODE_MAX_CHARS = settings.READER_SMART_MAX_CHARS
 # The reader is interactive, so it waits less patiently than the dictation engine.
-READER_LLM_TIMEOUT = float(os.getenv("READER_LLM_TIMEOUT", 10.0))
+READER_LLM_TIMEOUT = settings.READER_LLM_TIMEOUT
 
 # Footnote/reference markers, dropped whole. Stripping the brackets alone would leave
 # the digits behind, and the voice would read "[1]" aloud as "one".
