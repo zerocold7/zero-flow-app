@@ -154,6 +154,12 @@ The biggest single lever. Bigger is more accurate, especially for **Arabic**, an
 Bold = measured; the rest are estimates from model size. Downloads happen once, on
 the first start after you change the setting.
 
+**`large-v3-turbo`** (`WHISPER_MODEL_NAME="mobiuslabsgmbh/faster-whisper-large-v3-turbo"`,
+1.6 GB) is worth it **only if you dictate English alone**. Measured on an RTX 4070
+with `tools/bench/bench_stt.py`: English just as accurate as `large-v3` and 35% faster
+(0.29 vs 0.46 s per clip) — but Arabic far worse (56% vs 35% character errors, and
+words it invented), so it is never the default here.
+
 ### Where the speech model runs — `WHISPER_DEVICE` and `WHISPER_COMPUTE_TYPE`
 
 | Setting | Values | When to change it |
@@ -196,6 +202,12 @@ instead of that fallback. Gemma 4 is a *reasoning* model: without the engine's
 keeps it for `OLLAMA_KEEP_ALIVE` (default 30 minutes) after each use. Measured: the AI
 is ready 6.5–8 s after start-up, dictation ≤0.7 s later than without it, and the first
 Polish takes 0.8 s instead of a 7–12 s reload.
+
+**Sized for dictation.** The engine asks for an 8,192-token context
+(`OLLAMA_NUM_CTX`). A model file can ask for far more: gemma4-e4b's 131,072 held
+**3.58 GB** of graphics memory against **2.99 GB** — 0.6 GB freed for Whisper and the
+voice, with the same speed (0.37 s per Polish) and answers. Measure your own model
+with `tools/bench/bench_llm.py`.
 
 ### Voice — `READER_DEVICE` and batch sizes
 

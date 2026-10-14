@@ -41,6 +41,7 @@ only set what you want to change.
 | `READER_LLM_TIMEOUT` | `10` | Seconds to wait for the LLM before speaking anyway |
 | `READER_DEVICE` | `auto` | `auto` / `cpu` / `cuda` for the voice model (see §10) |
 | `OLLAMA_KEEP_ALIVE` | `30m` | How long the AI model stays loaded after use. The engine also loads it at start-up, so the first Polish is instant. `0` unloads at once (frees memory) |
+| `OLLAMA_NUM_CTX` | `8192` | The AI model's working memory, in tokens. Enough for a five-minute dictation and its answer; gemma4-e4b's own setting (131,072) held 0.6 GB more graphics memory for nothing. `0` keeps the model's own |
 | `READER_FIRST_BATCH_CHARS` | `120` | Size of the first chunk of text sent to the voice (see §10) |
 | `READER_BATCH_CHARS` | `300` | Size of every chunk after the first (see §10) |
 
@@ -89,8 +90,10 @@ and more memory.
 | `medium` | 1.5 GB | ≈2 / 1 GB | good balance; the NVIDIA-laptop default |
 | `large-v3` | 3 GB | **3.9 / 2.0 GB** | **default** — best accuracy, best Arabic |
 | `distil-large-v3` | 1.5 GB | ≈2 / 1 GB | faster large-quality — **English only**, useless for the Arabic keys |
+| `mobiuslabsgmbh/faster-whisper-large-v3-turbo` | 1.6 GB | — | **English as accurate as `large-v3` and 35% faster** (0.29 vs 0.46 s per clip); **Arabic much worse** (56% vs 35% character errors). Only for English-only use |
 
-Bold figures were measured on an RTX 4070; the rest are estimates from model size. On
+Bold figures were measured on an RTX 4070 (the turbo comparison with
+`tools/bench/bench_stt.py`, on synthetic clips); the rest are estimates from model size. On
 a CPU, `large-v3` took 12.8 s for a 14 s clip — prefer `small`. The full per-hardware
 picture, with measured speeds: [docs/HARDWARE.md](docs/HARDWARE.md).
 
@@ -120,7 +123,11 @@ languages, so you can swap Arabic (or English) for any of them. A language is ju
    (The dict keys like `ar_raw` are just internal names — leave them, or rename them and
    also update the matching keys in `HOTKEYS` **and** the `HOTKEY_*` lines in `.env`.)
 
-2. **`local_flow.py` → `SUPPORTED_LANGS`:** `("ar", "en")` → `("fr", "en")`.
+2. **The Polish prompt.** `refine_text` uses `personas.ARABIC_POLISH_PROMPT` for `"ar"`
+   and `personas.STANDARD_SYSTEM_PROMPT` for everything else — and that one says
+   *answer in English only*, so French Polish would come back in English. Add a
+   `FRENCH_POLISH_PROMPT` to `personas.py` (copy the Arabic one's shape) and pick it in
+   `refine_text` for `"fr"`.
 
 3. **`local_flow.py` → `refine_text`:** update the two display labels `"AR→EN"` / `"EN→AR"`
    to `"FR→EN"` / `"EN→FR"` (cosmetic only).

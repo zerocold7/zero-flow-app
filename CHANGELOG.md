@@ -51,7 +51,35 @@ All notable work on the **Zero- Flow Engine**. Newest first.
   first read (a hidden download, and a failure offline).
 - `requirements-dev.txt` and a `ruff` configuration for working on the engine.
 
-153 tests (from 109). Each fix was broken on purpose to confirm its test fails.
+### 🎯 Accuracy and speed (phase 2)
+- **Invented endings are dropped.** A stock ending — "Thank you.", "Have a good
+  night.", "شكرا للمشاهدة", "اشتركوا في القناة" — is removed from the very end of a
+  dictation when the audio shows it was never said: it sits 15 dB or more below your
+  speech (a breath, typing, the room), or Whisper was unsure of its own words. A
+  clearly spoken "thank you" stays. Each drop is logged with its evidence.
+- Whisper's retries stop at temperature 0.4 instead of 1.0, where a retry is close to
+  guessing.
+- **0.6 GB of graphics memory back.** The AI's context is set to 8,192 tokens
+  (`OLLAMA_NUM_CTX`); gemma4-e4b's model file asked for 131,072 — 3.58 GB against
+  2.99 GB, measured, with the same speed and answers. The warm-up sends the same
+  setting, so the first Polish still takes 0.3 s.
+- **Measured, not adopted:** `large-v3-turbo` is as accurate in English and 35% faster,
+  but far worse in Arabic (56% vs 35% character errors) — documented as an
+  English-only option. An answer-length cap for the AI saved nothing measurable and
+  could cut long dictations short.
+- **`tools/bench/`:** a speech benchmark that runs the engine's own transcription on
+  132 synthetic cases (clean, room noise, breath, typing, quiet, no speech) and on
+  recordings of your own voice (`record_mine.py`, kept on your PC), plus an AI-model
+  benchmark for memory and speed.
+- The unused auto-detect path in transcription is gone; every key forces its language.
+- CONFIGURATION.md's "change a language" recipe now says the Polish prompt must change
+  too — the English one answers in English only.
+
+168 tests. The filter changed no error rate on the synthetic clips and kept every real
+"thank you" in them.
+
+153 tests at the end of phase 1 (from 109). Each fix was broken on purpose to confirm
+its test fails.
 
 ---
 

@@ -158,10 +158,8 @@ never block the keyboard listener — a blocked listener freezes the whole keybo
 - Every record mode **forces** its language via `MODES[mode]["lang"]` (`en` or `ar`),
   so there is **no detection step** to get wrong — accented English can no longer be
   misheard as Arabic. This is the key design choice.
-- `transcribe_clip(force_lang)` passes that language straight to Whisper.
-- It still keeps an auto-detect path (`force_lang=None`): if Whisper ever drifts to a
-  language outside `SUPPORTED_LANGS` (`ar`/`en`), it re-decodes as the closer of the two.
-  No current mode uses this path, but it's there for safety.
+- `transcribe_clip(language)` passes that language straight to Whisper. (An auto-detect
+  path kept "for safety" was removed in 2.0: no mode ever used it.)
 - **The Whisper hint (`initial_prompt`) is per language** (`whisper_hint`). Whisper
   reads it as the text that came just before, so its language and style carry over:
   - **Arabic** gets `personas.ARABIC_WHISPER_HINT` — one short, punctuated Arabic
@@ -253,6 +251,12 @@ start makes no request at all, and the one-time download notice is silenced
   made the next Polish wait 3–12 s. Measured: the AI is ready 6.5–8 s after start-up,
   and dictation is ready ≤0.7 s later than without the warm-up. Loading the AI *after*
   Whisper instead left it ready at 10–11 s.
+- Every request — and the warm-up, with the **same** options, or Ollama would load the
+  model again on the first Polish — carries **`num_ctx`** (`OLLAMA_NUM_CTX`, default
+  8,192 tokens). A model file can ask for far more than dictation needs: gemma4-e4b's
+  asks for 131,072, which held 3.58 GB of graphics memory against 2.99 GB, with the
+  same speed and answers (`tools/bench/bench_llm.py`). 4,096 saved no more, so the
+  default leaves room for a five-minute dictation and its answer.
 - If the LLM tags a term as `[LEARN: word]`, `_absorb_learned_word` saves it to
   `flow_vocabulary.txt` and strips the tag — **but only if the term appears in what was
   said** (ignoring case and spacing), and never in Chinese, Japanese or Korean script.
@@ -278,7 +282,29 @@ Hallucination originates in Whisper, not the app code. Mitigations in `transcrib
 - `condition_on_previous_text=False` — stops repetition-loop spirals.
 - `beam_size=5` — steadier decoding on short clips.
 - `MIN_CLIP_SECONDS = 0.4` — sub-0.4 s captures are discarded (they only hallucinate).
-- the `ar/en` re-decode (section 4) — prevents wrong-language gibberish.
+- `vad_filter=True` — Silero VAD hands Whisper only the stretches it judges to be
+  speech, so silence and steady noise never reach it (on the benchmark, no clip without
+  speech produced any text).
+- `TEMPERATURES = (0.0, 0.2, 0.4)` — Whisper's retries when a decode looks unreliable
+  stop at 0.4 instead of 1.0, where a retry is close to guessing.
+- **Invented endings** (`trim_invented_ending`). Whisper learned from subtitled videos,
+  and a short sound after the last word — a breath, a keystroke — passes the VAD as
+  "speech"; alone at the end of a clip, it is where Whisper writes "Thank you." or
+  "اشتركوا في القناة". Transcription asks for word timings, and a known stock ending
+  (`STOCK_ENDINGS`) is dropped from the **very end** only when the audio says it was
+  never said: it sits ≥15 dB below the speech before it, or Whisper's own confidence
+  in its words is under 0.5 (alone in a clip: below −45 dBFS, or unsure). Levels are
+  measured on the clip as recorded, before the volume is normalised. A clearly spoken
+  "thank you" passes every test and stays — `tests/test_hallucination.py` pins both
+  sides, and every drop is logged with its evidence.
+
+**Measuring it.** `tools/bench/` runs the engine's own transcription (`transcribe_audio`,
+the same steps as a dictation) over test clips and scores errors, end punctuation,
+invented words and time. Synthetic clips (`make_clips.py`) prove a change does no harm
+— on them the filter changed no error rate, kept every real "thank you", and cost
+0.02–0.05 s per clip — but they cannot reproduce invented endings, which depend on a
+real room and microphone. `record_mine.py` records your own voice for that (kept on
+your PC, git-ignored), and `bench_stt.py --no-filter` gives the comparison.
 
 ---
 

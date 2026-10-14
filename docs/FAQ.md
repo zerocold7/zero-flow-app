@@ -77,9 +77,14 @@ on Fn-Lock (on many Lenovo, HP and ASUS models), or hold `Fn` with the key. You 
 move the hotkeys to other keys in `.env` — [CONFIGURATION.md §2](../CONFIGURATION.md#2-changing-hotkeys).
 
 ### It typed "Thanks for watching!" — I never said that
-Whisper sometimes invents a stock phrase when a clip is nearly silent. The engine
-already drops clips under 0.4 s; beyond that, speak a little closer to the microphone
-and stop the recording right after you finish speaking.
+Whisper learned from subtitled videos, and a breath or a keystroke after your last word
+is where it writes how those videos end: "Thank you.", "Have a good night.",
+"اشتركوا في القناة". The engine drops such an ending when the audio shows it was never
+said — it sits on sound far quieter than your speech, or Whisper was unsure of it — and
+keeps a "thank you" you really said. `flow_debug.log` records each one it drops
+("Dropped an invented ending"). If one still gets through, speak a little closer to the
+microphone and stop the recording soon after you finish. To test it on your own voice:
+`tools/bench/record_mine.py` (see [ARCHITECTURE.md §7](../ARCHITECTURE.md#7-anti-hallucination-measures)).
 
 ### What happened to the picture I had copied?
 Dictation, `F4` and `Shift+F3` all borrow the clipboard and restore it afterwards — but
