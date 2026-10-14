@@ -35,7 +35,7 @@ except ImportError as e:
 # =====================================================================
 # CONFIGURATION
 # =====================================================================
-HOTKEY_READ = os.getenv("HOTKEY_READ", "f4")
+HOTKEY_READ = settings.HOTKEY_READ
 # Shared with the dictation half on purpose: one key silences the whole engine.
 HOTKEY_PANIC = os.getenv("HOTKEY_PANIC", "esc")
 # Off by default: the regex clean is instant, the LLM pass costs a few seconds.
@@ -197,18 +197,13 @@ def register_hotkeys():
 # CONSOLE
 # =====================================================================
 def print_boot_sequence():
-    os.system('cls' if os.name == 'nt' else 'clear')
     llm = settings.OLLAMA_MODEL_NAME or "auto-discovered on first use"
-    print(f"{ui.C_ACCENT}┌────────────────────────────────────────────────────────┐{ui.C_RESET}")
-    print(f"{ui.C_ACCENT}│ {ui.Fore.MAGENTA}     Z E R O -   F L O W   ·   R E A D E R           {ui.C_ACCENT}│{ui.C_RESET}")
-    print(f"{ui.C_ACCENT}│ {ui.C_RESET}🔗 Voice model: {ui.C_GOOD}[Kokoro-82M · warming in background]{ui.C_ACCENT}    │{ui.C_RESET}")
-    print(f"{ui.C_ACCENT}│ {ui.C_RESET}🔗 Smart clean: {ui.C_GOOD}[{llm}]{ui.C_RESET}")
-    print(f"{ui.C_ACCENT}└────────────────────────────────────────────────────────┘{ui.C_RESET}")
-    print(f"  {ui.C_ACCENT}ACTIONS{ui.C_RESET}")
-    print(f"   {ui.C_GOOD}'{HOTKEY_READ.upper()}'{ui.C_RESET} read the highlighted text   "
-          f"{ui.C_ERR}'{HOTKEY_PANIC.upper()}'{ui.C_RESET} silence")
-    print(f"   Voice, smart cleaning and suspend live in the tray menu.")
-    print(f"{ui.C_ACCENT}========================================================={ui.C_RESET}\n")
+    ui.print_banner("Z E R O -   F L O W   ·   R E A D E R",
+                    [("Voice model", "Kokoro-82M · warming in background"), ("Smart clean", llm)],
+                    [("ACTIONS", None, [
+                        [(HOTKEY_READ, "read the highlighted text", ui.C_GOOD),
+                         (HOTKEY_PANIC, "silence", ui.C_ERR)],
+                        "Voice, smart cleaning and suspend live in the tray menu."])])
 
 # =====================================================================
 # STANDALONE ENTRY POINT

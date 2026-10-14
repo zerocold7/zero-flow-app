@@ -120,32 +120,16 @@ def shutdown(code=0):
     os._exit(code)
 
 
-def print_boot_sequence(llm_model):
-    os.system('cls' if os.name == 'nt' else 'clear')
-    hk = settings.HOTKEYS
-    read_key = os.getenv("HOTKEY_READ", "f4").upper()
-    lines = [
-        f"{ui.C_ACCENT}┌────────────────────────────────────────────────────────┐{ui.C_RESET}",
-        f"{ui.C_ACCENT}│ {ui.Fore.MAGENTA}       Z E R O -   F L O W   E N G I N E             {ui.C_ACCENT}│{ui.C_RESET}",
-        f"{ui.C_ACCENT}│ {ui.C_RESET}🔗 Speech to text: {ui.C_GOOD}[Whisper {settings.WHISPER_MODEL_NAME} · "
-        f"{stt.model_runtime}]{ui.C_RESET}",
-        f"{ui.C_ACCENT}│ {ui.C_RESET}🔗 Text to speech: {ui.C_GOOD}[Kokoro-82M]{ui.C_ACCENT}                        │{ui.C_RESET}",
-        f"{ui.C_ACCENT}│ {ui.C_RESET}🔗 Neural pipeline: {ui.C_GOOD}[{llm_model}]{ui.C_RESET}",
-        f"{ui.C_ACCENT}└────────────────────────────────────────────────────────┘{ui.C_RESET}",
-        f"  {ui.C_ACCENT}DICTATE{ui.C_RESET}   (the key forces the language)",
-        f"   {ui.C_ACCENT}'{hk['en_raw'].upper()}'{ui.C_RESET} English · raw      {ui.C_GOOD}'{hk['en_polish'].upper()}'{ui.C_RESET} English · polish",
-        f"   {ui.C_WARN}'{hk['ar_raw'].upper()}'{ui.C_RESET} Arabic · raw       {ui.C_WARN}'{hk['ar_polish'].upper()}'{ui.C_RESET} Arabic · polish",
-        f"  {ui.C_ACCENT}TRANSLATE{ui.C_RESET}",
-        f"   {ui.Fore.MAGENTA}'{hk['en2ar'].upper()}'{ui.C_RESET} English → Arabic   {ui.Fore.MAGENTA}'{hk['ar2en'].upper()}'{ui.C_RESET} Arabic → English",
-        f"  {ui.C_ACCENT}READ ALOUD{ui.C_RESET}",
-        f"   {ui.C_GOOD}'{read_key}'{ui.C_RESET} speak the highlighted text  (voice + options in the tray)",
-        f"  {ui.C_ACCENT}ACTIONS{ui.C_RESET}",
-        f"   {ui.C_GOOD}'{hk['fix'].upper()}'{ui.C_RESET} fix line   {ui.Fore.MAGENTA}'{hk['maintenance'].upper()}'{ui.C_RESET} vocab cleanup   "
-        f"{ui.C_GOOD}'{hk['purge'].upper()}'{ui.C_RESET} clear logs   {ui.C_ERR}'{hk['panic'].upper()}'{ui.C_RESET} cancel / silence",
-        f"{ui.C_ACCENT}========================================================={ui.C_RESET}\n",
-    ]
-    for line in lines:
-        print(line)
+def show_banner():
+    """The banner of the whole engine: dictation's keys, plus the read key."""
+    sections = engine.key_sections(panic="cancel / silence")
+    sections.insert(2, ("READ ALOUD", None, [
+        [(settings.HOTKEY_READ, "speak the highlighted text  (voice + options in the tray)", ui.C_GOOD)]]))
+    ui.print_banner("Z E R O -   F L O W   E N G I N E",
+                    [("Speech to text", f"Whisper {settings.WHISPER_MODEL_NAME} · {stt.model_runtime}"),
+                     ("Text to speech", "Kokoro-82M"),
+                     ("AI model", engine.get_ollama_model())],
+                    sections)
 
 
 def run():
@@ -170,7 +154,7 @@ def main():
         return
 
     engine.boot()                                # loads Whisper on the GPU
-    print_boot_sequence(engine.get_ollama_model())
+    show_banner()
     ui.set_window_icon()
     ui.show_toast("🚀 Zero- Flow Engine Online",
                   "Dictation and read-aloud are both active.", settings.ENABLE_TOASTS)

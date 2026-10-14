@@ -435,13 +435,35 @@ def run():
     return 0
 
 
+def key_sections(panic="cancel"):
+    """The dictation keys, for the start-up banner — as set in .env, not as shipped."""
+    hk, magenta = HOTKEYS, ui.Fore.MAGENTA
+    return [
+        ("DICTATE", "the key forces the language", [
+            [(hk["en_raw"], "English · raw   ", ui.C_ACCENT), (hk["en_polish"], "English · polish", ui.C_GOOD)],
+            [(hk["ar_raw"], "Arabic · raw    ", ui.C_WARN), (hk["ar_polish"], "Arabic · polish", ui.C_WARN)]]),
+        ("TRANSLATE", None, [
+            [(hk["en2ar"], "English → Arabic", magenta), (hk["ar2en"], "Arabic → English", magenta)]]),
+        ("ACTIONS", None, [
+            [(hk["fix"], "fix line", ui.C_GOOD), (hk["maintenance"], "vocab cleanup", magenta),
+             (hk["purge"], "clear logs", ui.C_GOOD), (hk["panic"], panic, ui.C_ERR)]]),
+    ]
+
+
+def show_banner():
+    """The banner of the dictation half on its own."""
+    ui.print_banner("Z E R O -   F L O W   E N G I N E",
+                    [("Speech to text", f"Whisper {WHISPER_MODEL_NAME} · {stt.model_runtime}"),
+                     ("AI model", get_ollama_model())],
+                    key_sections())
+
+
 def main():
     if not signals.claim_single_instance("dictation"):
         ui.already_running()
         return
     boot()
-    ui.print_boot_sequence(get_ollama_model(), HOTKEYS,
-                           speech=f"Whisper {WHISPER_MODEL_NAME} · {stt.model_runtime}")
+    show_banner()
     ui.show_toast("🚀 Zero- Flow Online", "Background engine is active and listening.", ENABLE_TOASTS)
     ui.setup_system_tray()
     ui.set_window_icon()

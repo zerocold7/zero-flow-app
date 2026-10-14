@@ -62,3 +62,6 @@ HOTKEYS = {
 # A recording left running stops by itself after this long, and is transcribed as
 # usual. Without a limit a forgotten one grew by ~4 MB a minute.
 MAX_RECORDING_SECONDS = float(os.getenv("MAX_RECORDING_SECONDS", 300))
+
+# The reader's key: read the highlighted text aloud.
+HOTKEY_READ = os.getenv("HOTKEY_READ", "f4")

@@ -113,25 +113,25 @@ def play_tone(tone_type, enable_chimes=True):
             winsound.Beep(f, d)
     threading.Thread(target=_beep, daemon=True).start()
 
-def print_boot_sequence(ollama_model, hotkeys, speech="Whisper"):
-    """The standalone dictation banner. `speech` names the model and where it loaded
-    (e.g. "Whisper large-v3 · GPU · float16"), so a tuning change is visible at a glance."""
+def print_banner(title, about, sections):
+    """The start-up banner, for all three ways of running the engine.
+
+    `about` is (label, value) pairs — what loaded where ("Speech to text", "Whisper
+    large-v3 · GPU · float16"), so a tuning change is visible at a glance. `sections`
+    is (heading, note, rows); a row is a list of (key, what it does, colour), or a
+    plain line of text."""
     os.system('cls' if os.name == 'nt' else 'clear')
-    lines = [
-        f"{C_ACCENT}┌────────────────────────────────────────────────────────┐{C_RESET}",
-        f"{C_ACCENT}│ {Fore.MAGENTA}          Z E R O -   F L O W   E N G I N E          {C_ACCENT}│{C_RESET}",
-        f"{C_ACCENT}│ {C_RESET}🔗 Speech to text: {C_GOOD}[{speech}]{C_RESET}",
-        f"{C_ACCENT}│ {C_RESET}🔗 Neural Pipeline: {C_GOOD}[{ollama_model}]{C_ACCENT}" + (" " * max(0, 25 - len(ollama_model))) + f"│{C_RESET}",
-        f"{C_ACCENT}└────────────────────────────────────────────────────────┘{C_RESET}",
-        f"  {C_ACCENT}DICTATE{C_RESET}   (the key forces the language)",
-        f"   {C_ACCENT}'{hotkeys['en_raw'].upper()}'{C_RESET} English · raw      {C_GOOD}'{hotkeys['en_polish'].upper()}'{C_RESET} English · polish",
-        f"   {C_WARN}'{hotkeys['ar_raw'].upper()}'{C_RESET} Arabic · raw       {C_WARN}'{hotkeys['ar_polish'].upper()}'{C_RESET} Arabic · polish",
-        f"  {C_ACCENT}TRANSLATE{C_RESET}",
-        f"   {Fore.MAGENTA}'{hotkeys['en2ar'].upper()}'{C_RESET} English → Arabic   {Fore.MAGENTA}'{hotkeys['ar2en'].upper()}'{C_RESET} Arabic → English",
-        f"  {C_ACCENT}ACTIONS{C_RESET}",
-        f"   {C_GOOD}'{hotkeys['fix'].upper()}'{C_RESET} fix line   {Fore.MAGENTA}'{hotkeys['maintenance'].upper()}'{C_RESET} vocab cleanup   {C_GOOD}'{hotkeys['purge'].upper()}'{C_RESET} clear logs   {C_ERR}'{hotkeys['panic'].upper()}'{C_RESET} cancel",
-        f"{C_ACCENT}========================================================={C_RESET}\n"
-    ]
+    rule = "─" * 56
+    lines = [f"{C_ACCENT}┌{rule}┐{C_RESET}",
+             f"{C_ACCENT}│ {Fore.MAGENTA}{title.center(54)}{C_ACCENT} │{C_RESET}"]
+    lines += [f"{C_ACCENT}│ {C_RESET}🔗 {label}: {C_GOOD}[{value}]{C_RESET}" for label, value in about]
+    lines.append(f"{C_ACCENT}└{rule}┘{C_RESET}")
+    for heading, note, rows in sections:
+        lines.append(f"  {C_ACCENT}{heading}{C_RESET}" + (f"   ({note})" if note else ""))
+        for row in rows:
+            lines.append("   " + (row if isinstance(row, str) else "   ".join(
+                f"{colour}'{key.upper()}'{C_RESET} {what}" for key, what, colour in row)))
+    lines.append(f"{C_ACCENT}{'=' * 57}{C_RESET}\n")
     for line in lines:
         print(line)
         time.sleep(0.03)
