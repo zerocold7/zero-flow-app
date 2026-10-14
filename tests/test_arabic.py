@@ -6,6 +6,8 @@ Arabic recognition ~11 points of accuracy, a model that answered Arabic Polish i
 Chinese, vowel marks nobody asked for, and spoken commands that fired on ordinary
 Arabic sentences. No model is loaded; the AI and Whisper are stand-ins.
 """
+import contextlib
+import io
 import os
 import sys
 import unittest
@@ -65,13 +67,18 @@ class AITestCase(unittest.TestCase):
             self.addCleanup(patcher.stop)
 
     def refine(self, text, mode, answer):
+        """refine_text with the AI answering `answer` (None: the AI was unreachable).
+        What it printed is kept in self.printed."""
         calls = []
 
         def fake_ai(raw, context, prompt, **kw):
             calls.append(prompt)
-            return raw if answer is None else answer    # None: "Ollama was unreachable"
-        with mock.patch.object(local_flow, "query_ollama", side_effect=fake_ai):
+            return answer
+        console = io.StringIO()
+        with mock.patch.object(local_flow, "ask_ollama", side_effect=fake_ai), \
+             contextlib.redirect_stdout(console):
             out = local_flow.refine_text(text, mode)
+        self.printed = console.getvalue()
         return out, calls[0]
 
 
@@ -101,6 +108,13 @@ class TestArabicPolish(AITestCase):
             out, _ = self.refine(self.RAW, "ar_polish", None)
         self.assertEqual(out, self.RAW)
 
+    def test_an_unreachable_ai_is_reported_not_called_polished(self):
+        """It used to print "✨ Polished" and play the success tone over your own,
+        unchanged words — so nothing told you the AI was not running."""
+        self.refine(self.RAW, "ar_polish", None)
+        self.assertNotIn("Polished", self.printed)
+        self.assertIn("AI unavailable", self.printed)
+
 
 class TestTranslation(AITestCase):
     def test_to_arabic_rejects_an_answer_with_no_arabic(self):
@@ -117,6 +131,13 @@ class TestTranslation(AITestCase):
         with self.assertLogs(level="WARNING"):
             out, _ = self.refine("انشرها", "ar2en", "انشرها الآن")
         self.assertEqual(out, "انشرها")
+
+    def test_an_unreachable_ai_is_reported_not_called_translated(self):
+        """The untranslated words are pasted; the console must say so."""
+        out, _ = self.refine("Publish it", "en2ar", None)
+        self.assertEqual(out, "Publish it")
+        self.assertNotIn("Translated", self.printed)
+        self.assertIn("AI unavailable", self.printed)
 
     def test_a_good_translation_goes_through(self):
         out, prompt = self.refine("Publish it on Thursday", "en2ar", "انشرها يوم الخميس.")
@@ -172,6 +193,111 @@ class TestOllamaRequest(unittest.TestCase):
              self.assertLogs(level="INFO") as logs:
             flow_core.warm_up_llm()                  # must not raise
         self.assertIn("warm-up skipped", logs.output[-1])
+
+    def test_warm_up_reports_a_model_ollama_does_not_have(self):
+        """A 404 was logged as "loaded ahead of first use"."""
+        reply = mock.Mock(status_code=404, text='{"error":"model not found"}')
+        with mock.patch.object(flow_core.requests, "post", return_value=reply), \
+             self.assertLogs(level="INFO") as logs:
+            flow_core.warm_up_llm()
+        self.assertNotIn("loaded ahead", "\n".join(logs.output))
+        self.assertIn("404", "\n".join(logs.output))
+
+    def test_an_empty_answer_counts_as_no_answer(self):
+        """An empty reply would otherwise paste nothing at all."""
+        reply = mock.Mock(status_code=200, json=lambda: {"response": "  "})
+        with mock.patch.object(flow_core.requests, "post", return_value=reply), \
+             self.assertLogs(level="WARNING") as logs:
+            self.assertIsNone(flow_core.ask_ollama("hello", None, "Polish this."))
+            self.assertEqual(flow_core.query_ollama("hello", None, "Polish this."), "hello")
+        self.assertIn("empty answer", logs.output[0])          # and the log says why
+
+
+class TestModelDiscovery(unittest.TestCase):
+    def setUp(self):
+        # Fixed names, not the ones in your .env — there the fallback and the installed
+        # model can be the same, which would let this pass without testing anything.
+        for patcher in (mock.patch.object(flow_core, "_ollama_model", None),
+                        mock.patch.object(flow_core, "OLLAMA_MODEL_NAME", ""),
+                        mock.patch.object(flow_core, "FALLBACK_LLM", "fallback-model")):
+            patcher.start()
+            self.addCleanup(patcher.stop)
+
+    def test_the_fallback_is_not_kept_once_ollama_is_running(self):
+        """Ollama down at the first Polish bound the engine to FALLBACK_LLM for the rest
+        of the session — every later request then got a 404."""
+        tags = mock.Mock(status_code=200, json=lambda: {"models": [{"name": "installed-model"}]})
+        with mock.patch.object(flow_core.requests, "get",
+                               side_effect=[ConnectionError("refused"), tags]):
+            self.assertEqual(flow_core.get_ollama_model(), "fallback-model")
+            self.assertEqual(flow_core.get_ollama_model(), "installed-model")
+
+    def test_a_discovered_model_is_kept(self):
+        """Once Ollama has answered, the engine stops asking."""
+        tags = mock.Mock(status_code=200, json=lambda: {"models": [{"name": "installed-model"}]})
+        with mock.patch.object(flow_core.requests, "get", return_value=tags) as get:
+            flow_core.get_ollama_model()
+            flow_core.get_ollama_model()
+        self.assertEqual(get.call_count, 1)
+
+
+class TestFixLine(AITestCase):
+    """Shift+F3: copy the line, let the AI fix it, paste it back."""
+
+    def fix_line(self, line, answer):
+        pasted = []
+        with mock.patch.object(local_flow, "keyboard") as kb, \
+             mock.patch.object(local_flow, "pyperclip") as clip, \
+             mock.patch.object(local_flow, "paste_text", side_effect=pasted.append), \
+             mock.patch.object(local_flow, "ask_ollama", return_value=answer), \
+             mock.patch.object(local_flow, "log_to_history"), \
+             contextlib.redirect_stdout(io.StringIO()):
+            kb.is_pressed.return_value = False
+            clip.paste.side_effect = ["saved clipboard", line]
+            local_flow.correct_current_line()
+        return pasted, kb
+
+    def test_a_good_fix_is_pasted(self):
+        pasted, _ = self.fix_line("teh server is down", "The server is down.")
+        self.assertEqual(pasted, ["The server is down."])
+
+    def test_an_answer_in_the_wrong_language_is_not_pasted(self):
+        with self.assertLogs(level="WARNING"):
+            pasted, _ = self.fix_line("teh server is down", "服务器已关闭")
+        self.assertEqual(pasted, [])
+
+    def test_an_arabic_line_must_come_back_arabic(self):
+        with self.assertLogs(level="WARNING"):
+            pasted, _ = self.fix_line("الخادم معطل", "The server is down.")
+        self.assertEqual(pasted, [])
+
+    def test_waits_for_shift_to_be_released_before_copying(self):
+        """Ctrl+C sent while you still hold Shift is Ctrl+Shift+C — DevTools in a
+        browser, not copy."""
+        events = []
+        held = iter([True, True])                    # Shift still down for two checks
+
+        def is_pressed(key):
+            down = next(held, False)
+            events.append(("down" if down else "up", key))
+            return down
+        with mock.patch.object(local_flow, "keyboard") as kb, \
+             mock.patch.object(local_flow, "pyperclip") as clip, \
+             mock.patch.object(local_flow, "paste_text"), \
+             mock.patch.object(local_flow, "ask_ollama", return_value="Fixed."), \
+             mock.patch.object(local_flow, "log_to_history"), \
+             mock.patch.object(local_flow.time, "sleep"), \
+             contextlib.redirect_stdout(io.StringIO()):
+            kb.is_pressed.side_effect = is_pressed
+            kb.send.side_effect = lambda key: events.append(("send", key))
+            clip.paste.side_effect = ["saved", "line"]
+            local_flow.correct_current_line()
+        first_send = next(i for i, e in enumerate(events) if e[0] == "send")
+        self.assertIn(("up", "shift"), events[:first_send], "sent keys without checking Shift")
+        shift_up = events.index(("up", "shift"))
+        last_down = max(i for i, e in enumerate(events) if e[0] == "down")
+        self.assertLess(last_down, shift_up)         # it kept checking while Shift was held
+        self.assertLess(shift_up, first_send)        # and sent nothing until it was up
 
 
 if __name__ == "__main__":

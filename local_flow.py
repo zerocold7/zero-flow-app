@@ -55,10 +55,10 @@ try:
     import engine_ui as ui
     import flow_signals as signals
     from flow_core import (
-        clipboard_lock, VOCAB_CACHE_FILE, TEMP_AUDIO_FILE, HISTORY_FILE,
+        clipboard_lock, VOCAB_CACHE_FILE, VOCAB_LOCK, TEMP_AUDIO_FILE, HISTORY_FILE,
         ENABLE_AUDIO_CHIMES, ENABLE_TOASTS, FOREIGN_SCRIPT,
         init_logging, log_path, get_ollama_model, load_vocabulary, query_ollama,
-        warm_up_llm,
+        ask_ollama, warm_up_llm,
     )
 except ImportError as e:
     print(f"❌ Critical error: Missing local module: {e}")
@@ -138,6 +138,8 @@ MACRO_PUNCT = r'[\s,.;:!?،؛؟…]'
 TRAILING_PUNCT = re.compile(MACRO_PUNCT + r'+$')
 # LLMs like to answer "list the words" with "- word" or "1. word"; keep only the word.
 LIST_MARKER = re.compile(r'^\s*(?:[-*•]|\d+[.)])\s+')
+# A vocabulary term is a name or phrase ("Visual Studio Code"), never a sentence.
+MAX_TERM_WORDS = 4
 
 # =====================================================================
 # RUNTIME STATE (set in main / mutated by the hotkey + worker threads)
@@ -228,6 +230,20 @@ def cap_history_file():
     except Exception as e:
         logging.error(f"History cap failed: {e}")
 
+def vocabulary_terms(llm_output):
+    """The terms in the LLM's answer to "clean up this list", without its chatter.
+
+    Models wrap the list in sentences ("Here is the cleaned list:", "I removed the
+    duplicates..."). Kept, each became a "word" and was fed to Whisper as a hint on
+    every dictation. A term is short and never introduces something with a colon."""
+    terms = []
+    for line in (llm_output or "").splitlines():
+        term = LIST_MARKER.sub('', line).strip()
+        if term and not term.endswith(":") and len(term.split()) <= MAX_TERM_WORDS:
+            terms.append(term)
+    return terms
+
+
 def run_memory_maintenance():
     """Shift+F1 — let the LLM dedupe / clean the learned-vocabulary file."""
     if recording:
@@ -236,21 +252,25 @@ def run_memory_maintenance():
     ui.show_toast("🧹 Memory Maintenance", "AI is optimizing your vocabulary files.", ENABLE_TOASTS)
     ui.update_console_title("MAINTENANCE RUNNING")
 
-    current_vocab = "\n".join(sorted(load_vocabulary()))
-    cleaned = query_ollama(current_vocab, None, personas.MEMORY_MAINTENANCE_PROMPT)
-    terms = [LIST_MARKER.sub('', line).strip() for line in (cleaned or "").splitlines()]
-    cleaned = "\n".join(t for t in terms if t)
+    before = sorted(load_vocabulary())
+    current_vocab = "\n".join(before)
+    cleaned = "\n".join(vocabulary_terms(
+        query_ollama(current_vocab, None, personas.MEMORY_MAINTENANCE_PROMPT)))
     if not cleaned or cleaned == current_vocab:
         # query_ollama hands back its input when the LLM is unreachable, so an
         # unchanged list is not a success worth rewriting the file for.
         print(f"{ui.C_WARN}🧹 Vocabulary unchanged — nothing written.{ui.C_RESET}")
     else:
         try:
-            # The LLM rewrites a list you built up over time; keep the last version.
-            if os.path.exists(VOCAB_CACHE_FILE):
-                shutil.copyfile(VOCAB_CACHE_FILE, VOCAB_CACHE_FILE + ".bak")
-            with open(VOCAB_CACHE_FILE, "w", encoding="utf-8") as f:
-                f.write(cleaned + "\n")
+            with VOCAB_LOCK:
+                # A Polish may have learned a word while the LLM was working on the
+                # old list; carry it over rather than overwrite it.
+                added = [w for w in load_vocabulary() if w not in before]
+                # The LLM rewrites a list you built up over time; keep the last version.
+                if os.path.exists(VOCAB_CACHE_FILE):
+                    shutil.copyfile(VOCAB_CACHE_FILE, VOCAB_CACHE_FILE + ".bak")
+                with open(VOCAB_CACHE_FILE, "w", encoding="utf-8") as f:
+                    f.write("\n".join([cleaned, *added]) + "\n")
             print(f"{ui.C_GOOD}✅ Vocabulary successfully compressed and organized "
                   f"(previous list saved as flow_vocabulary.txt.bak).{ui.C_RESET}")
             ui.show_toast("✅ Maintenance Complete", "Memory files pruned successfully.", ENABLE_TOASTS)
@@ -381,6 +401,14 @@ def checked_ai_output(output, original, lang):
     return ARABIC_MARKS.sub("", output) if lang == "ar" else output
 
 
+def _ai_unavailable(text):
+    """The AI gave no answer (why is in the log and the toast): say so, and paste
+    what was said rather than nothing."""
+    print(f"{ui.C_WARN}⚠️  AI unavailable — pasted your own words: {ui.C_RESET}{text}")
+    ui.play_tone("success_raw", ENABLE_AUDIO_CHIMES)
+    return text
+
+
 def refine_text(text, mode, context=""):
     """Apply the recording mode's operation. Raw modes pass straight through.
     `context` is the clipboard snapshot Polish mode hands the LLM."""
@@ -389,7 +417,10 @@ def refine_text(text, mode, context=""):
     if cfg["op"] == "polish":
         ui.update_console_title("OLLAMA PROCESSING")
         prompt = personas.ARABIC_POLISH_PROMPT if cfg["lang"] == "ar" else personas.STANDARD_SYSTEM_PROMPT
-        out = checked_ai_output(query_ollama(text, context, prompt), text, cfg["lang"])
+        answer = ask_ollama(text, context, prompt)
+        if answer is None:
+            return _ai_unavailable(text)
+        out = checked_ai_output(answer, text, cfg["lang"])
         print(f"✨ Polished: {ui.C_GOOD}{out}{ui.C_RESET}")
         ui.show_toast("✨ Polish Complete", "Cleaned prose injected.", ENABLE_TOASTS)
         ui.play_tone("success_polish", ENABLE_AUDIO_CHIMES)
@@ -402,7 +433,10 @@ def refine_text(text, mode, context=""):
             direction, prompt = "AR→EN", personas.TRANSLATE_TO_EN_PROMPT
         else:
             direction, prompt = "EN→AR", personas.TRANSLATE_TO_AR_PROMPT
-        out = checked_ai_output(query_ollama(text, None, prompt), text, cfg["to"])
+        answer = ask_ollama(text, None, prompt)
+        if answer is None:
+            return _ai_unavailable(text)
+        out = checked_ai_output(answer, text, cfg["to"])
         print(f"🌐 Translated [{direction}]: {ui.C_WARN}{out}{ui.C_RESET}")
         ui.show_toast("🌐 Translation Complete", f"{direction} prose injected.", ENABLE_TOASTS)
         ui.play_tone("success_translate", ENABLE_AUDIO_CHIMES)
@@ -651,12 +685,24 @@ def on_cancel_hotkey():
         print(f"\n{ui.C_ERR}🛑 Recording cancelled.{ui.C_RESET}")
         ui.play_tone("cancel", ENABLE_AUDIO_CHIMES)
 
+def wait_for_release(hotkey, timeout=1.0):
+    """Wait (briefly) until every key in `hotkey` ("shift+f3") is up, so keys we send
+    next are not combined with ones the user is still holding."""
+    keys = [k.strip() for k in hotkey.split("+")]
+    deadline = time.monotonic() + timeout
+    while any(keyboard.is_pressed(k) for k in keys) and time.monotonic() < deadline:
+        time.sleep(0.02)
+
+
 def correct_current_line():
     """Shift+F3 — grab the current line, fix it via the LLM, paste it back."""
     if recording:
         return
     print(f"\n{ui.C_ACCENT}⚡ Running contextual line refinement...{ui.C_RESET}")
     ui.play_tone("start", ENABLE_AUDIO_CHIMES)
+    # Still holding Shift from Shift+F3 would turn the Ctrl+C below into Ctrl+Shift+C
+    # (DevTools in a browser) — wait for the keys to come up first.
+    wait_for_release(HOTKEYS["fix"])
 
     # Copy the line under the clipboard lock, like every other clipboard sequence,
     # so the reader cannot copy a selection in between. The lock is not held across
@@ -673,7 +719,10 @@ def correct_current_line():
         ui.play_tone("empty", ENABLE_AUDIO_CHIMES)
         return
 
-    fixed = query_ollama(target_text, None, personas.LINE_CORRECTION_PROMPT)
+    lang = "ar" if ARABIC_LETTERS.search(target_text) else "en"
+    fixed = ask_ollama(target_text, None, personas.LINE_CORRECTION_PROMPT)
+    if fixed is not None:
+        fixed = checked_ai_output(fixed, target_text, lang)
     if fixed and fixed != target_text:
         print(f"✨ Optimized: '{ui.C_GOOD}{fixed}{ui.C_RESET}'")
         paste_text(fixed)                        # replaces the still-selected line
