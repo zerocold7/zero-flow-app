@@ -149,9 +149,11 @@ def change_voice(icon, item):
 
 def exit_application(icon, item):
     """Quit. This is the engine's only exit control when running as the child, so it
-    has to bring the parent down too."""
+    has to bring the parent down too. A standalone reader only quits itself: the exit
+    signal is shared, and it used to shut down a full engine running alongside."""
     voice_engine.interrupt_audio()
-    signals.request_exit()
+    if CHILD_MODE:
+        signals.request_exit()
     icon.stop()
     os._exit(0)
 
@@ -215,6 +217,10 @@ def print_boot_sequence():
 # =====================================================================
 def main():
     logging.info(f"=== Zero- Reader Boot Sequence Initiated (child={CHILD_MODE}) ===")
+    # As the engine's child, the engine holds the "reader" claim for us.
+    if not CHILD_MODE and not signals.claim_single_instance("reader"):
+        ui.already_running("Zero- Flow Reader")
+        return
     if CHILD_MODE:
         # The parent has already drawn the banner and owns the console; adding our
         # own here (with its cls) would wipe it.

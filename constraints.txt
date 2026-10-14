@@ -3,7 +3,7 @@
 # says which versions, so a fresh install gets the same set, not whatever is
 # newest that day (transformers 5.19 broke the reader on a fresh install).
 #   pip install -r requirements.txt -c constraints.txt
-# torch comes from the PyTorch index (see requirements.txt), pinned here too.
+# torch==2.5.1 also matches the CUDA build (2.5.1+cu121) that NVIDIA PCs install first.
 
 addict==2.4.0
 annotated-doc==0.0.4
@@ -101,7 +101,7 @@ sympy==1.13.1
 termcolor==3.3.0
 thinc==8.3.13
 tokenizers==0.23.1
-torch==2.5.1+cu121
+torch==2.5.1
 tqdm==4.68.1
 transformers==5.16.1
 typer==0.25.1

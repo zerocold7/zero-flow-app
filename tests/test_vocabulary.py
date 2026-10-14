@@ -6,6 +6,7 @@ flow_vocabulary.txt is never touched.
 import os
 import sys
 import tempfile
+import threading
 import unittest
 from unittest import mock
 
@@ -86,6 +87,33 @@ class TestLearnOnlyWhatWasSaid(VocabularyTestCase):
         self.assertEqual(self.read_vocab_file(), [])
 
 
+class TestSafeAppend(VocabularyTestCase):
+    """Appending a learned word must never damage the words already there."""
+
+    def test_word_lands_on_its_own_line_when_the_file_lacks_a_final_newline(self):
+        """A hand-edited file often ends without a newline ("...Visa"); appending
+        straight onto it produced "VisaKokoro" — one wrong word instead of two."""
+        with open(self.vocab_path, "w", encoding="utf-8") as f:
+            f.write("Docker\nVisa")
+        flow_core._absorb_learned_word("text [LEARN: Kokoro]", heard="kokoro")
+        self.assertEqual(self.read_vocab_file(), ["Docker", "Visa", "Kokoro"])
+
+    def test_writers_wait_for_the_vocabulary_lock(self):
+        """Shift+F1 rewrites the whole file while a dictation may be appending to it;
+        both go through one lock so neither loses the other's change."""
+        flow_core.VOCAB_LOCK.acquire()
+        writer = threading.Thread(target=flow_core._absorb_learned_word,
+                                  args=("x [LEARN: Kokoro]",), kwargs={"heard": "kokoro"})
+        try:
+            writer.start()
+            writer.join(0.3)
+            self.assertNotIn("Kokoro", self.read_vocab_file())   # still waiting
+        finally:
+            flow_core.VOCAB_LOCK.release()
+        writer.join(2)
+        self.assertIn("Kokoro", self.read_vocab_file())
+
+
 class TestLoadVocabulary(VocabularyTestCase):
     def test_includes_the_base_list(self):
         vocab = flow_core.load_vocabulary()
@@ -131,6 +159,13 @@ class TestMemoryMaintenance(VocabularyTestCase):
         """Models answer "list the words" with "- word" / "1. word"."""
         self.run_maintenance("- Docker\n2. Python\n3.5-turbo\n\n* Kokoro")
         self.assertEqual(self.read_vocab_file(), ["Docker", "Python", "3.5-turbo", "Kokoro"])
+
+    def test_the_models_chatter_is_not_kept_as_vocabulary(self):
+        """Models wrap the list in a sentence or two. Kept, those lines became
+        "words" and were fed to Whisper as hints on every later dictation."""
+        self.run_maintenance("Here is the cleaned list:\nDocker\nVisual Studio Code\n"
+                             "I removed the duplicates and sorted the remaining terms for you.")
+        self.assertEqual(self.read_vocab_file(), ["Docker", "Visual Studio Code"])
 
     def test_previous_list_is_backed_up(self):
         self.run_maintenance("Docker")

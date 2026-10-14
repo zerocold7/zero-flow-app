@@ -95,7 +95,7 @@ Set-ExecutionPolicy -ExecutionPolicy RemoteSigned -Scope Process
 **4.** تثبيت المكتبات — نسخة المعالج فقط. هذا الأمر يقرأ قائمة المكتبات من ملف المشروع نفسه ويتخطى مكتبات كروت الشاشة الثقيلة (`nvidia-`)، ما يوفّر ~1.2 جيجابايت. ويشمل صوت القراءة `kokoro`. قد يستغرق عدة دقائق:
 
 ```powershell
-pip install ((Get-Content requirements.txt) | Where-Object { $_ -match '^[A-Za-z]' -and $_ -notmatch '^nvidia-' })
+pip install ((Get-Content requirements.txt) | Where-Object { $_ -match '^[A-Za-z]' -and $_ -notmatch '^nvidia-' }) -c constraints.txt
 ```
 
 ## 📌 خامساً: إنشاء ملف الإعدادات الخفيف (.env)

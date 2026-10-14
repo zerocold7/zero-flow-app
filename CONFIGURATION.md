@@ -30,6 +30,7 @@ only set what you want to change.
 | `FALLBACK_LLM` | `gemma2:27b` | Model name used only if Ollama is unreachable |
 | `SAMPLE_RATE` | `16000` | Mic sample rate (Hz). Whisper expects 16000 — leave it |
 | `CHANNELS` | `1` | Mic channels (mono). Leave it |
+| `MAX_RECORDING_SECONDS` | `300` | A recording left running stops by itself after this many seconds, and is transcribed as usual |
 | `ENABLE_AUDIO_CHIMES` | `True` | Beeps on start/stop/success |
 | `ENABLE_TOAST_NOTIFICATIONS` | `True` | Windows toast pop-ups |
 | `HOTKEY_*` | see §2 | Key bindings |
@@ -167,8 +168,9 @@ logs how long it took (`1.21s for 14.2s of audio`), which is the number to watch
 tuning.
 
 The **voice model** (reader) needs the CUDA build of `torch` for the GPU, and
-`pip install -r requirements.txt` alone fetches the CPU-only build. On an NVIDIA
-machine, install it first:
+`pip install -r requirements.txt -c constraints.txt` alone fetches the CPU-only build.
+(`constraints.txt` pins every package underneath to a set known to work together; see
+[INSTALL.md](docs/INSTALL.md).) On an NVIDIA machine, install it first:
 
 ```bash
 pip install torch==2.5.1+cu121 --index-url https://download.pytorch.org/whl/cu121

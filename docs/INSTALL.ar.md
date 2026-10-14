@@ -61,7 +61,7 @@ python -m venv venv
 
 ```powershell
 .\venv\Scripts\python.exe -m pip install torch==2.5.1+cu121 --index-url https://download.pytorch.org/whl/cu121
-.\venv\Scripts\python.exe -m pip install -r requirements.txt
+.\venv\Scripts\python.exe -m pip install -r requirements.txt -c constraints.txt
 ```
 
 وحافظ على تحديث تعريف كرت NVIDIA.
@@ -69,7 +69,7 @@ python -m venv venv
 **فئتا `cpu-only` و `amd-intel-gpu`** — تجاوز مكتبات NVIDIA (1.2 جيجابايت). هذا الأمر يثبّت كل ما في `requirements.txt` ما عدا سطرَي `nvidia-`:
 
 ```powershell
-.\venv\Scripts\python.exe -m pip install ((Get-Content requirements.txt) | Where-Object { $_ -match '^[A-Za-z]' -and $_ -notmatch '^nvidia-' })
+.\venv\Scripts\python.exe -m pip install ((Get-Content requirements.txt) | Where-Object { $_ -match '^[A-Za-z]' -and $_ -notmatch '^nvidia-' }) -c constraints.txt
 ```
 
 هذه الخطوة تستغرق عدة دقائق.
@@ -115,7 +115,7 @@ ollama pull qwen2.5:3b
 ```powershell
 cd C:\local-voice-flow
 git pull
-.\venv\Scripts\python.exe -m pip install -r requirements.txt
+.\venv\Scripts\python.exe -m pip install -r requirements.txt -c constraints.txt
 ```
 
 (في فئتَي `cpu-only` و `amd-intel-gpu` استخدم أمر الخطوة 4 بدل السطر الأخير.) التحديث لا يمسّ أبداً ملف `.env` ولا المفردات ولا السجل. أعد تشغيل `python check_hardware.py` لترى إن تغيّرت التوصيات.

@@ -20,7 +20,6 @@ See ARCHITECTURE.md for the full design rationale.
 import os
 import sys
 import time
-import queue
 import shutil
 import threading
 import re
@@ -55,10 +54,10 @@ try:
     import engine_ui as ui
     import flow_signals as signals
     from flow_core import (
-        clipboard_lock, VOCAB_CACHE_FILE, TEMP_AUDIO_FILE, HISTORY_FILE,
+        clipboard_lock, VOCAB_CACHE_FILE, VOCAB_LOCK, TEMP_AUDIO_FILE, HISTORY_FILE,
         ENABLE_AUDIO_CHIMES, ENABLE_TOASTS, FOREIGN_SCRIPT,
         init_logging, log_path, get_ollama_model, load_vocabulary, query_ollama,
-        warm_up_llm,
+        ask_ollama, warm_up_llm,
     )
 except ImportError as e:
     print(f"❌ Critical error: Missing local module: {e}")
@@ -120,6 +119,9 @@ SUPPORTED_LANGS = ("ar", "en")
 # Clips shorter than this (after capture) are dropped — they only ever produce
 # Whisper hallucinations, never real words.
 MIN_CLIP_SECONDS = 0.4
+# A recording left running stops by itself after this long, and is transcribed as
+# usual. Without a limit a forgotten one grew by ~4 MB a minute.
+MAX_RECORDING_SECONDS = float(os.getenv("MAX_RECORDING_SECONDS", 300))
 # flow_history.md is trimmed back to its newest content once it grows past this.
 HISTORY_MAX_BYTES = 500_000
 
@@ -138,15 +140,18 @@ MACRO_PUNCT = r'[\s,.;:!?،؛؟…]'
 TRAILING_PUNCT = re.compile(MACRO_PUNCT + r'+$')
 # LLMs like to answer "list the words" with "- word" or "1. word"; keep only the word.
 LIST_MARKER = re.compile(r'^\s*(?:[-*•]|\d+[.)])\s+')
+# A vocabulary term is a name or phrase ("Visual Studio Code"), never a sentence.
+MAX_TERM_WORDS = 4
 
 # =====================================================================
 # RUNTIME STATE (set in main / mutated by the hotkey + worker threads)
 # =====================================================================
 model = None              # faster-whisper model, loaded in main()
 model_runtime = ""        # where it runs, e.g. "GPU · float16" — shown in the banner
-recording = False         # True while the mic stream is open
-cancel_flag = False       # set by Esc to discard the current capture
-audio_queue = queue.Queue()
+# The recording in progress (a Capture), or None. Each recording has its own audio and
+# its own stop/cancel state: shared ones let quick presses mix up two recordings.
+current_capture = None
+capture_lock = threading.Lock()     # guards current_capture and the reader's mic signal
 # One clip is transcribed → refined → pasted at a time. The next capture can start
 # while the last is still being processed; this keeps them from sharing the temp WAV
 # and makes them land in the order they were spoken.
@@ -214,43 +219,71 @@ def log_to_history(text, mode):
             f.write(f"[{datetime.now().strftime('%H:%M:%S')}] [{mode.upper()}]\n{text}\n\n")
     except Exception as e:
         logging.error(f"History write fail: {e}")
+    cap_history_file()
+
+# Where each history entry starts: its "[12:34:56] [MODE]" header at a line start.
+HISTORY_ENTRY = re.compile(r"^\[\d\d:\d\d:\d\d\] \[", re.MULTILINE)
 
 def cap_history_file():
-    """Trim flow_history.md to its newest half once it passes HISTORY_MAX_BYTES,
-    so the dictation history can never grow without bound."""
+    """Trim flow_history.md to about half of HISTORY_MAX_BYTES once it passes the cap,
+    so the dictation history can never grow without bound. Runs after every write.
+
+    The cut lands on an entry's first line, so no dictation is kept half-written."""
     try:
-        if os.path.exists(HISTORY_FILE) and os.path.getsize(HISTORY_FILE) > HISTORY_MAX_BYTES:
-            with open(HISTORY_FILE, "r", encoding="utf-8") as f:
-                kept = f.read()[-(HISTORY_MAX_BYTES // 2):]
-            with open(HISTORY_FILE, "w", encoding="utf-8") as f:
-                f.write(f"[... older history trimmed on {datetime.now():%Y-%m-%d %H:%M} ...]\n\n{kept}")
-            logging.info("flow_history.md trimmed (exceeded size cap).")
+        if not os.path.exists(HISTORY_FILE) or os.path.getsize(HISTORY_FILE) <= HISTORY_MAX_BYTES:
+            return
+        with open(HISTORY_FILE, encoding="utf-8") as f:
+            text = f.read()
+        tail = text.encode("utf-8")[-(HISTORY_MAX_BYTES // 2):].decode("utf-8", "ignore")
+        start = HISTORY_ENTRY.search(tail)
+        kept = tail[start.start():] if start else ""
+        with open(HISTORY_FILE, "w", encoding="utf-8") as f:
+            f.write(f"[... older history trimmed on {datetime.now():%Y-%m-%d %H:%M} ...]\n\n{kept}")
+        logging.info("flow_history.md trimmed (exceeded size cap).")
     except Exception as e:
         logging.error(f"History cap failed: {e}")
 
+def vocabulary_terms(llm_output):
+    """The terms in the LLM's answer to "clean up this list", without its chatter.
+
+    Models wrap the list in sentences ("Here is the cleaned list:", "I removed the
+    duplicates..."). Kept, each became a "word" and was fed to Whisper as a hint on
+    every dictation. A term is short and never introduces something with a colon."""
+    terms = []
+    for line in (llm_output or "").splitlines():
+        term = LIST_MARKER.sub('', line).strip()
+        if term and not term.endswith(":") and len(term.split()) <= MAX_TERM_WORDS:
+            terms.append(term)
+    return terms
+
+
 def run_memory_maintenance():
     """Shift+F1 — let the LLM dedupe / clean the learned-vocabulary file."""
-    if recording:
+    if is_recording():
         return
     print(f"\n{ui.C_WARN}🧹 AI Janitor: Analyzing and pruning vocabulary memory...{ui.C_RESET}")
     ui.show_toast("🧹 Memory Maintenance", "AI is optimizing your vocabulary files.", ENABLE_TOASTS)
     ui.update_console_title("MAINTENANCE RUNNING")
 
-    current_vocab = "\n".join(sorted(load_vocabulary()))
-    cleaned = query_ollama(current_vocab, None, personas.MEMORY_MAINTENANCE_PROMPT)
-    terms = [LIST_MARKER.sub('', line).strip() for line in (cleaned or "").splitlines()]
-    cleaned = "\n".join(t for t in terms if t)
+    before = sorted(load_vocabulary())
+    current_vocab = "\n".join(before)
+    cleaned = "\n".join(vocabulary_terms(
+        query_ollama(current_vocab, None, personas.MEMORY_MAINTENANCE_PROMPT)))
     if not cleaned or cleaned == current_vocab:
         # query_ollama hands back its input when the LLM is unreachable, so an
         # unchanged list is not a success worth rewriting the file for.
         print(f"{ui.C_WARN}🧹 Vocabulary unchanged — nothing written.{ui.C_RESET}")
     else:
         try:
-            # The LLM rewrites a list you built up over time; keep the last version.
-            if os.path.exists(VOCAB_CACHE_FILE):
-                shutil.copyfile(VOCAB_CACHE_FILE, VOCAB_CACHE_FILE + ".bak")
-            with open(VOCAB_CACHE_FILE, "w", encoding="utf-8") as f:
-                f.write(cleaned + "\n")
+            with VOCAB_LOCK:
+                # A Polish may have learned a word while the LLM was working on the
+                # old list; carry it over rather than overwrite it.
+                added = [w for w in load_vocabulary() if w not in before]
+                # The LLM rewrites a list you built up over time; keep the last version.
+                if os.path.exists(VOCAB_CACHE_FILE):
+                    shutil.copyfile(VOCAB_CACHE_FILE, VOCAB_CACHE_FILE + ".bak")
+                with open(VOCAB_CACHE_FILE, "w", encoding="utf-8") as f:
+                    f.write("\n".join([cleaned, *added]) + "\n")
             print(f"{ui.C_GOOD}✅ Vocabulary successfully compressed and organized "
                   f"(previous list saved as flow_vocabulary.txt.bak).{ui.C_RESET}")
             ui.show_toast("✅ Maintenance Complete", "Memory files pruned successfully.", ENABLE_TOASTS)
@@ -266,7 +299,7 @@ def purge_diagnostic_files():
 
     Clears this process's log only. The reader owns `reader_debug.log` and rotates it
     itself; truncating a file another process holds open would only corrupt it."""
-    if recording:
+    if is_recording():
         return
     try:
         open(HISTORY_FILE, "w", encoding="utf-8").close()
@@ -295,22 +328,51 @@ def purge_diagnostic_files():
 # =====================================================================
 # AUDIO CAPTURE & TRANSCRIPTION
 # =====================================================================
-def audio_callback(indata, frames, time_info, status):
-    """sounddevice callback: buffer audio and draw a live level meter."""
-    if not recording:
-        return
-    audio_queue.put(indata.copy())
-    level = int(min(np.linalg.norm(indata) * 10, 20))
-    bars = "|" * level + " " * (20 - level)
-    sys.stdout.write(f"\r{ui.C_ACCENT}[{ui.C_GOOD}{bars}{ui.C_ACCENT}] Capturing Voice Data...{ui.C_RESET}")
-    sys.stdout.flush()
+class Capture:
+    """One recording: its mode, its audio, and whether it was stopped or cancelled.
 
-def drain_audio_queue():
-    """Collect everything captured so far into one array, or None if empty."""
-    chunks = []
-    while not audio_queue.empty():
-        chunks.append(audio_queue.get())
-    return np.concatenate(chunks, axis=0) if chunks else None
+    Nothing here is shared with the next recording, which can start the moment this
+    one is stopped — while this one's microphone is still closing."""
+
+    def __init__(self, mode):
+        self.mode = mode
+        self._chunks = []
+        self.stopped = threading.Event()
+        self.cancelled = False
+
+    def callback(self, indata, frames, time_info, status):
+        """sounddevice callback: keep the audio and draw a live level meter."""
+        if self.stopped.is_set():
+            return
+        self._chunks.append(indata.copy())
+        level = int(min(np.linalg.norm(indata) * 10, 20))
+        bars = "|" * level + " " * (20 - level)
+        sys.stdout.write(f"\r{ui.C_ACCENT}[{ui.C_GOOD}{bars}{ui.C_ACCENT}] Capturing Voice Data...{ui.C_RESET}")
+        sys.stdout.flush()
+
+    def stop(self, cancel=False):
+        self.cancelled = self.cancelled or cancel
+        self.stopped.set()
+
+    def audio(self):
+        """Everything captured, as one array, or None if nothing was."""
+        return np.concatenate(self._chunks, axis=0) if self._chunks else None
+
+
+def is_recording():
+    return current_capture is not None
+
+
+def _end_capture(capture):
+    """Forget `capture` if it is still the current one, and only then tell the reader
+    the microphone is closed — a newer recording may already have it open again."""
+    global current_capture
+    with capture_lock:
+        if current_capture is capture:
+            current_capture = None
+        if current_capture is None:
+            signals.set_recording(False)
+            ui.set_tray_state(False)
 
 def whisper_hint(language):
     """Whisper's hint (initial_prompt) for one language: text in that language only.
@@ -337,29 +399,54 @@ def transcribe_clip(force_lang):
     force_lang ('en' or 'ar') forces the output language — no detection, so it can
     never mishear English as Arabic. If force_lang is None it auto-detects, and if
     Whisper drifts to a third language (gibberish) it re-decodes as the closer one.
+
+    Returns (None, None) when transcription failed — distinct from ("", lang), which
+    means it ran and heard no speech. A failure on the graphics card (typically out of
+    memory: Whisper, the voice and the AI model share it) retries the clip on the CPU.
     """
-    def decode(language):
+    def decode(whisper, language):
         # condition_on_previous_text=False prevents repetition-loop hallucinations;
         # beam_size=5 gives steadier decoding on short clips.
-        segments, info = model.transcribe(
+        segments, info = whisper.transcribe(
             TEMP_AUDIO_FILE, beam_size=5, vad_filter=True,
             condition_on_previous_text=False, language=language,
             initial_prompt=whisper_hint(language),
         )
         return "".join(s.text for s in segments).strip(), info
 
-    try:
-        text, info = decode(force_lang)
+    def run(whisper):
+        text, info = decode(whisper, force_lang)
         lang = force_lang or info.language
         if force_lang is None and lang not in SUPPORTED_LANGS:
             probs = dict(getattr(info, "all_language_probs", None) or [])
             lang = "ar" if probs.get("ar", 0) >= probs.get("en", 0) else "en"
             logging.warning(f"Detected non-ar/en language — re-decoding as '{lang}'.")
-            text, _ = decode(lang)
+            text, _ = decode(whisper, lang)
         return text, lang
+
+    try:
+        return run(model)
     except Exception as e:
-        logging.error(f"Whisper transcription failed: {e}")
-        return "", None
+        if not model_runtime.startswith("GPU"):
+            logging.error(f"Whisper transcription failed: {e}")
+            return None, None
+        logging.warning(f"Whisper failed on the graphics card ({e}); transcribing this clip on the CPU.")
+    try:
+        return run(cpu_fallback_model())
+    except Exception as e:
+        logging.error(f"Whisper transcription failed on the CPU too: {e}")
+        return None, None
+
+
+_cpu_model = None        # loaded on the first GPU failure, then kept for later ones
+
+def cpu_fallback_model():
+    """A CPU copy of the speech model, for clips the graphics card could not take."""
+    global _cpu_model
+    if _cpu_model is None:
+        _cpu_model = WhisperModel(resolve_whisper_model(), device="cpu", compute_type="int8")
+        logging.info("Loaded a CPU copy of the speech model for graphics-card failures.")
+    return _cpu_model
 
 # =====================================================================
 # TEXT REFINEMENT & INJECTION
@@ -381,6 +468,14 @@ def checked_ai_output(output, original, lang):
     return ARABIC_MARKS.sub("", output) if lang == "ar" else output
 
 
+def _ai_unavailable(text):
+    """The AI gave no answer (why is in the log and the toast): say so, and paste
+    what was said rather than nothing."""
+    print(f"{ui.C_WARN}⚠️  AI unavailable — pasted your own words: {ui.C_RESET}{text}")
+    ui.play_tone("success_raw", ENABLE_AUDIO_CHIMES)
+    return text
+
+
 def refine_text(text, mode, context=""):
     """Apply the recording mode's operation. Raw modes pass straight through.
     `context` is the clipboard snapshot Polish mode hands the LLM."""
@@ -389,7 +484,10 @@ def refine_text(text, mode, context=""):
     if cfg["op"] == "polish":
         ui.update_console_title("OLLAMA PROCESSING")
         prompt = personas.ARABIC_POLISH_PROMPT if cfg["lang"] == "ar" else personas.STANDARD_SYSTEM_PROMPT
-        out = checked_ai_output(query_ollama(text, context, prompt), text, cfg["lang"])
+        answer = ask_ollama(text, context, prompt)
+        if answer is None:
+            return _ai_unavailable(text)
+        out = checked_ai_output(answer, text, cfg["lang"])
         print(f"✨ Polished: {ui.C_GOOD}{out}{ui.C_RESET}")
         ui.show_toast("✨ Polish Complete", "Cleaned prose injected.", ENABLE_TOASTS)
         ui.play_tone("success_polish", ENABLE_AUDIO_CHIMES)
@@ -402,7 +500,10 @@ def refine_text(text, mode, context=""):
             direction, prompt = "AR→EN", personas.TRANSLATE_TO_EN_PROMPT
         else:
             direction, prompt = "EN→AR", personas.TRANSLATE_TO_AR_PROMPT
-        out = checked_ai_output(query_ollama(text, None, prompt), text, cfg["to"])
+        answer = ask_ollama(text, None, prompt)
+        if answer is None:
+            return _ai_unavailable(text)
+        out = checked_ai_output(answer, text, cfg["to"])
         print(f"🌐 Translated [{direction}]: {ui.C_WARN}{out}{ui.C_RESET}")
         ui.show_toast("🌐 Translation Complete", f"{direction} prose injected.", ENABLE_TOASTS)
         ui.play_tone("success_translate", ENABLE_AUDIO_CHIMES)
@@ -525,41 +626,41 @@ def read_clipboard_context():
         return ""
 
 
-def process_recording(mode):
+def process_recording(capture):
     """Open the mic, capture until stopped, then transcribe → refine → inject.
 
-    `mode` is an argument rather than a global because the next capture can start
-    while this one is still transcribing, and must not change what this one does."""
-    global recording, cancel_flag
-    audio_queue.queue.clear()
-
+    Everything this recording needs travels in `capture`, because the next recording
+    can start while this one is still closing its microphone or transcribing."""
+    mode = capture.mode
     try:
         with sd.InputStream(samplerate=SAMPLE_RATE, channels=CHANNELS,
-                            callback=audio_callback, dtype='float32'):
-            while recording:
-                sd.sleep(40)
+                            callback=capture.callback, dtype='float32'):
+            if not capture.stopped.wait(MAX_RECORDING_SECONDS):
+                capture.stop()
+                logging.info(f"Recording reached {MAX_RECORDING_SECONDS:.0f} s and stopped by itself.")
+                print(f"\n{ui.C_WARN}⏱️  Recording stopped after {MAX_RECORDING_SECONDS:.0f} s "
+                      f"(MAX_RECORDING_SECONDS).{ui.C_RESET}")
+                ui.play_tone("stop", ENABLE_AUDIO_CHIMES)
     except Exception as e:
+        capture.stop(cancel=True)
         logging.error(f"Audio InputStream failed to open: {e}")
         print(f"\n{ui.C_ERR}🎙️ Could not open the microphone: {e}{ui.C_RESET}")
-        recording = False
-        ui.set_tray_state(False)
         ui.play_tone("cancel", ENABLE_AUDIO_CHIMES)
-        ui.update_console_title("ONLINE")
         return
     finally:
         # The mic closes the moment the `with` block exits — release the reader here
         # rather than after transcription, so it only stays quiet while we listen.
-        signals.set_recording(False)
+        _end_capture(capture)
+        if not is_recording():
+            ui.update_console_title("ONLINE")
 
     sys.stdout.write("\r" + " " * 50 + "\r")     # wipe the live meter line
 
-    if cancel_flag:
-        cancel_flag = False
+    if capture.cancelled:
         print(f"{ui.C_ERR}🛑 Audio flushed. Processing skipped.{ui.C_RESET}")
-        ui.update_console_title("ONLINE")
         return
 
-    audio = drain_audio_queue()
+    audio = capture.audio()
     if audio is None:
         ui.update_console_title("ONLINE")
         return
@@ -604,6 +705,11 @@ def transcribe_and_inject(audio, mode, context):
     if os.path.exists(TEMP_AUDIO_FILE):
         os.remove(TEMP_AUDIO_FILE)
 
+    if text is None:
+        logging.info("Transcription failed — nothing injected (the error is logged above).")
+        print(f"{ui.C_ERR}❌ Transcription failed — details in flow_debug.log.{ui.C_RESET}")
+        ui.play_tone("empty", ENABLE_AUDIO_CHIMES)
+        return
     if not text:
         logging.info("Empty transcription — nothing injected (silence / VAD dropped all audio).")
         ui.play_tone("empty", ENABLE_AUDIO_CHIMES)
@@ -619,44 +725,63 @@ def transcribe_and_inject(audio, mode, context):
 # =====================================================================
 def on_record_hotkey(mode_name):
     """A record key (F5–F10) was pressed: start a capture in that mode, or stop it."""
-    global recording, cancel_flag
+    global current_capture
 
-    if recording:
-        # Any record key stops the capture. The mode is locked in at the start — we
-        # never switch modes mid-recording (that used to cause surprise translations).
-        recording = False
+    with capture_lock:
+        capture = current_capture
+        if capture is None:
+            capture = current_capture = Capture(mode_name)
+            # Tell the reader to stop talking and stay quiet: a live mic would otherwise
+            # pick up the synthetic voice and Whisper would transcribe the engine
+            # reading to itself.
+            signals.request_reader_silence()
+            signals.set_recording(True)
+            ui.set_tray_state(True)
+            starting = True
+        else:
+            # Any record key stops the capture. The mode is locked in at the start —
+            # we never switch modes mid-recording (that caused surprise translations).
+            current_capture = None
+            starting = False
+    if starting:
+        print(f"\n{ui.C_ACCENT}🔴 [{MODES[mode_name]['label']}] Capturing audio...{ui.C_RESET}")
+        ui.play_tone("start", ENABLE_AUDIO_CHIMES)
+        threading.Thread(target=process_recording, args=(capture,)).start()
+    else:
+        capture.stop()
         ui.set_tray_state(False)
         ui.play_tone("stop", ENABLE_AUDIO_CHIMES)
-        return
-
-    cancel_flag = False
-    recording = True
-    # Tell the reader to stop talking and stay quiet: a live mic would otherwise pick
-    # up the synthetic voice and Whisper would transcribe the engine reading to itself.
-    signals.request_reader_silence()
-    signals.set_recording(True)
-    ui.set_tray_state(True)
-    print(f"\n{ui.C_ACCENT}🔴 [{MODES[mode_name]['label']}] Capturing audio...{ui.C_RESET}")
-    ui.play_tone("start", ENABLE_AUDIO_CHIMES)
-    threading.Thread(target=process_recording, args=(mode_name,)).start()
 
 def on_cancel_hotkey():
     """Esc — cancel an in-progress recording. (Does nothing when idle, so Esc keeps
     working normally in your apps; use the app's own Ctrl+Z to undo an injection.)"""
-    global recording, cancel_flag
-    if recording:
-        cancel_flag = True
-        recording = False
+    global current_capture
+    with capture_lock:
+        capture, current_capture = current_capture, None
+    if capture is not None:
+        capture.stop(cancel=True)
         ui.set_tray_state(False)
         print(f"\n{ui.C_ERR}🛑 Recording cancelled.{ui.C_RESET}")
         ui.play_tone("cancel", ENABLE_AUDIO_CHIMES)
 
+def wait_for_release(hotkey, timeout=1.0):
+    """Wait (briefly) until every key in `hotkey` ("shift+f3") is up, so keys we send
+    next are not combined with ones the user is still holding."""
+    keys = [k.strip() for k in hotkey.split("+")]
+    deadline = time.monotonic() + timeout
+    while any(keyboard.is_pressed(k) for k in keys) and time.monotonic() < deadline:
+        time.sleep(0.02)
+
+
 def correct_current_line():
     """Shift+F3 — grab the current line, fix it via the LLM, paste it back."""
-    if recording:
+    if is_recording():
         return
     print(f"\n{ui.C_ACCENT}⚡ Running contextual line refinement...{ui.C_RESET}")
     ui.play_tone("start", ENABLE_AUDIO_CHIMES)
+    # Still holding Shift from Shift+F3 would turn the Ctrl+C below into Ctrl+Shift+C
+    # (DevTools in a browser) — wait for the keys to come up first.
+    wait_for_release(HOTKEYS["fix"])
 
     # Copy the line under the clipboard lock, like every other clipboard sequence,
     # so the reader cannot copy a selection in between. The lock is not held across
@@ -673,7 +798,12 @@ def correct_current_line():
         ui.play_tone("empty", ENABLE_AUDIO_CHIMES)
         return
 
-    fixed = query_ollama(target_text, None, personas.LINE_CORRECTION_PROMPT)
+    lang = "ar" if ARABIC_LETTERS.search(target_text) else "en"
+    fixed = ask_ollama(target_text, None, personas.LINE_CORRECTION_PROMPT)
+    if fixed is None:
+        print(f"{ui.C_WARN}⚠️  AI unavailable — the line is left as it was.{ui.C_RESET}")
+    else:
+        fixed = checked_ai_output(fixed, target_text, lang)
     if fixed and fixed != target_text:
         print(f"✨ Optimized: '{ui.C_GOOD}{fixed}{ui.C_RESET}'")
         paste_text(fixed)                        # replaces the still-selected line
@@ -731,7 +861,19 @@ def register_hotkeys():
     keyboard.add_hotkey(HOTKEYS["panic"],       on_cancel_hotkey)
 
 
+def report_fatal_error(what):
+    """The engine cannot run. Log why, and say so where the user will see it —
+    started hidden, a console message alone is never seen."""
+    logging.critical(f"Fatal {what} crash: {traceback.format_exc()}")
+    print(f"{ui.C_ERR}❌ The {what} stopped with an error — details in flow_debug.log.{ui.C_RESET}")
+    ui.alert("Zero- Flow stopped", f"The {what} stopped with an error and is not running.\n\n"
+                                   f"The details are in flow_debug.log, in the program folder.")
+
+
 def main():
+    if not signals.claim_single_instance("dictation"):
+        ui.already_running()
+        return
     boot()
     ui.print_boot_sequence(get_ollama_model(), HOTKEYS,
                            speech=f"Whisper {WHISPER_MODEL_NAME} · {model_runtime}")
@@ -745,4 +887,5 @@ if __name__ == "__main__":
     try:
         main()
     except Exception:
-        logging.critical(f"Fatal engine crash: {traceback.format_exc()}")
+        report_fatal_error("dictation engine")
+        sys.exit(1)

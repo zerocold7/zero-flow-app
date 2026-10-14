@@ -19,6 +19,7 @@
 **Tuning and problems**
 - [It's too slow / my laptop gets hot](#its-too-slow--my-laptop-gets-hot)
 - [Polish or Translate gives me my words back unchanged](#polish-or-translate-gives-me-my-words-back-unchanged)
+- [It says "already running"](#it-says-already-running)
 - [Where are my settings, logs and learned words?](#where-are-my-settings-logs-and-learned-words)
 - [How do I update or uninstall it?](#how-do-i-update-or-uninstall-it)
 
@@ -96,14 +97,22 @@ each symptom) and [§6](HARDWARE.md#6-laptops-heat-battery-and-noise) (heat). Th
 win: use the raw modes `F5`/`F7`, which never run the AI model.
 
 ### Polish or Translate gives me my words back unchanged
-Either the AI model did not answer, or it answered in the wrong language and the
-engine pasted your own words rather than, say, Chinese. `flow_debug.log` says which:
+Either the AI model did not answer — the console then says **"AI unavailable"** — or it
+answered in the wrong language and the engine pasted your own words rather than, say,
+Chinese. `flow_debug.log` says which:
 - `Ollama request failed` — Ollama is not running (start it; its icon sits by the clock).
 - `Ollama returned HTTP 404` — no model by the name in `OLLAMA_MODEL_NAME`; check
   `ollama list`, or `ollama pull` it.
 - `The AI did not answer in 'ar'` — the model drifted out of Arabic. Some small models
   do this often; [HARDWARE.md](HARDWARE.md#ai-model--ollama_model_name) lists which
   ones stay in Arabic.
+
+### It says "already running"
+Only one copy of the engine runs at a time — two would paste every dictation twice. The
+first copy is probably running hidden (started with a `*_Silent.vbs` launcher or at
+sign-in): look for its icon by the clock, and use **Exit Engine** there before starting
+it another way. The same goes for running the full engine (`Launch_Zero`) beside one of
+its halves (`Launch_Flow` or `Launch_Reader`).
 
 ### Where are my settings, logs and learned words?
 All in the project folder, and none of it is uploaded anywhere:
