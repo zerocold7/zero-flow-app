@@ -16,4 +16,4 @@ Entry points stay at the top of the project: local_flow.py, zero_flow.py, and
 `python -m reader`. Nothing here imports torch or the voice model; only stt imports
 faster-whisper, so the reader process never loads Whisper's CUDA libraries.
 """
-__version__ = "2.0.0-alpha.4"
+__version__ = "2.0.0-alpha.4.2"
