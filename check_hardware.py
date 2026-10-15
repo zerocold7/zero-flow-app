@@ -183,6 +183,11 @@ def parse_env(text):
     return settings
 
 
+# Google's smaller Gemma 4, for a 4-5 GB laptop card or 8 GB of RAM.
+SMALLER_AI = {"AI_BUILTIN_REPO": "google/gemma-4-E2B-it-qat-q4_0-gguf",
+              "AI_BUILTIN_FILE": "gemma-4-E2B_q4_0-it.gguf"}
+
+
 def recommend(facts, tier=None):
     """(tier, settings, reasons). Picks the tier from the best graphics card, then
     adjusts the preset for how much memory the card — or the PC — actually has."""
@@ -215,23 +220,18 @@ def recommend(facts, tier=None):
                        f"(large-v3 3.9 GB -> 2.0 GB) to leave room for the AI model.")
     if tier == "nvidia-laptop" and vram < 5.5:
         settings["WHISPER_MODEL_NAME"] = "small"
-        settings["AI_BUILTIN_REPO"], settings["AI_BUILTIN_FILE"] = "google/gemma-4-E2B-it-qat-q4_0-gguf", "gemma-4-E2B_q4_0-it.gguf"
+        settings.update(SMALLER_AI)
         reasons.append(f"{vram} GB card: the 'small' speech model and the smaller AI model "
                        f"(Gemma 4 E2B) leave room for the voice.")
     if tier in ("cpu-only", "amd-intel-gpu") and ram and ram <= 9:
         settings["WHISPER_MODEL_NAME"] = "base"
-        settings["OLLAMA_MODEL_NAME"] = "gemma2:2b"
-        settings["AI_BUILTIN_REPO"], settings["AI_BUILTIN_FILE"] = "google/gemma-4-E2B-it-qat-q4_0-gguf", "gemma-4-E2B_q4_0-it.gguf"
+        settings.update(SMALLER_AI)
         reasons.append(f"{ram} GB of RAM: the lightest speech model and the smaller AI model "
                        f"(Gemma 4 E2B) keep Windows responsive.")
-    if tier == "amd-intel-gpu" and other and other["vram_gb"] >= 7.5:
-        reasons.append(f"{other['name']} ({other['vram_gb']} GB): if `ollama ps` shows '100% GPU' "
-                       f"after a Polish, try OLLAMA_MODEL_NAME=\"qwen2.5:7b\".")
     return tier, settings, reasons
 
 
-CHOSEN_BY_USER = {"AI_PROVIDER": "AI provider", "OLLAMA_MODEL_NAME": "AI model",
-                  "AI_BUILTIN_FILE": "built-in AI model"}
+CHOSEN_BY_USER = {"AI_PROVIDER": "AI provider", "AI_BUILTIN_FILE": "built-in AI model"}
 
 
 def keep_chosen_model(settings, env):
@@ -257,12 +257,9 @@ def keep_chosen_model(settings, env):
 # =====================================================================
 def engine_python():
     """The interpreter the launchers run the engine with — the same order as
-    Launch_*.bat: venv, then python_env, then whatever `python` is."""
-    for candidate in (os.path.join(BASE_DIR, "venv", "Scripts", "python.exe"),
-                      os.path.join(BASE_DIR, "python_env", "python.exe")):
-        if os.path.exists(candidate):
-            return candidate
-    return sys.executable
+    Launch_*.bat: the project's venv, else whatever `python` is."""
+    venv = os.path.join(BASE_DIR, "venv", "Scripts", "python.exe")
+    return venv if os.path.exists(venv) else sys.executable
 
 
 _VERSIONS_SCRIPT = """
@@ -342,7 +339,7 @@ def software_checks(tier, settings):
             notes.append((True, f"the built-in AI ({variant} build) is installed"))
         else:
             notes.append((False, f"the built-in AI ({variant} build) is not installed yet: "
-                                 f"python tools/get_llama.py"))
+                                 f"venv\\Scripts\\python.exe tools\\get_llama.py"))
         repo = settings.get("AI_BUILTIN_REPO", "google/gemma-4-E4B-it-qat-q4_0-gguf")
         if _cached(repo):
             notes.append((True, "the AI model is downloaded"))
@@ -351,9 +348,12 @@ def software_checks(tier, settings):
             notes.append((True, f"the AI model downloads on first start (about {size})"))
     elif provider == "ollama":
         models = _ollama_models(env)
-        wanted = settings["OLLAMA_MODEL_NAME"]
+        wanted = env.get("OLLAMA_MODEL_NAME", "").strip()
         if models is None:
             notes.append((False, "Ollama is not running (or not installed) — start it from the Start menu."))
+        elif not wanted:
+            notes.append((bool(models), f"Ollama is running; it will use {models[0]}" if models
+                          else "Ollama has no model yet: ollama pull <name>"))
         elif not any(m == wanted or m == wanted + ":latest" for m in models):
             notes.append((False, f"Ollama does not have {wanted} yet: ollama pull {wanted}"))
         else:

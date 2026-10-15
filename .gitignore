@@ -1,6 +1,3 @@
-# Local temporary audio captures
-flow_capture.wav
-
 # Local user memory & logs
 flow_vocabulary.txt*
 flow_history.md

@@ -137,6 +137,35 @@ its test fails.
 
 238 tests. Each new guard was broken on purpose to confirm its test fails.
 
+### 🧹 Checked and cleaned (phases 1–4)
+A top-to-bottom review before the app window, with nothing in it changing what you see
+except where noted.
+- **Your voice is never written to disk.** Each clip went to Whisper through a
+  temporary `flow_capture.wav`; it now goes from memory. Measured on 127 synthetic
+  clips and your own recordings: the same errors and no invented words either way,
+  0.05–0.15 s faster per synthetic clip. `SAMPLE_RATE` and `CHANNELS` are no longer
+  settings — Whisper's format is fixed, and another value would only have broken it.
+- **Phase 2's open question, settled:** capping the volume boost for quiet clips
+  (10×) made quiet Arabic worse (55% → 58% character errors) and invented nothing
+  less, so the full boost stays.
+- **One place for every AI answer.** The spinner, the empty-answer check and learning
+  a `[LEARN: …]` word happen once, in `zeroflow.llm.ask_ai`, instead of in each
+  provider. With the AI unreachable, `Shift+F1` now says so instead of "unchanged".
+- **Ollama leftovers gone:** the reader's banner named Ollama's setting (blank with
+  the built-in AI), window titles said "OLLAMA PROCESSING", and the presets picked an
+  Ollama model per tier — which made `check_hardware.py` print "Keeping your own AI
+  model…" to people not using Ollama.
+- **Launchers:** `Launch_All.bat` and its silent twin are gone — `Launch_Zero.bat`
+  runs both halves in one window, both on the graphics card. `Launch_Silent.vbs` is
+  now **`Launch_Flow_Silent.vbs`**, like its siblings (update a shortcut that used it).
+- Smaller: a one-function reader module folded into the reader, duplicated set-up in
+  the logs and Windows-signal modules removed, the version string says alpha.4, and
+  the deliberate-break checks (64, all caught) follow the moved code.
+
+244 tests. The engine was run end to end with the real models: Polish and Translate in
+both languages in 0.33–0.43 s, the AI ready 4.6 s after start, and no `llama-server`
+left after a crash.
+
 ---
 
 ## [1.5.1] — 2026-10-14 — A fresh install works again

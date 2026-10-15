@@ -14,23 +14,18 @@ Runs two ways, both of them as this process's `main()`:
 """
 import logging
 import os
-import sys
 import threading
+import time
 import traceback
 
 import keyboard
 import pystray
 from pystray import MenuItem
 
-try:
-    from zeroflow import settings, signals, ui
-    from reader import voice_engine
-    from reader.clipboard_tool import capture_highlighted_text
-    from reader.text_cleaner import clean_text_instant, clean_text_smart
-except ImportError as e:
-    print(f"❌ Critical error: Missing local module: {e}")
-    print("   Run the reader from the repository root: python -m reader")
-    sys.exit(1)
+from reader import voice_engine
+from reader.text_cleaner import clean_text_instant, clean_text_smart
+from zeroflow import llm, settings, signals, ui
+from zeroflow.clipboard import POLL_INTERVAL, copy_selection
 
 # =====================================================================
 # CONFIGURATION
@@ -70,7 +65,11 @@ def process_and_speak():
     try:
         voice_engine.interrupt_audio()           # a second press restarts, never overlaps
 
-        text = capture_highlighted_text(release_key=HOTKEY_READ)
+        # Release the read key before the synthetic Ctrl+C, or Windows sees it still
+        # held and the copy goes to the wrong place.
+        keyboard.release(HOTKEY_READ)
+        time.sleep(POLL_INTERVAL)
+        text = copy_selection()
         if not text:
             logging.info("Reader: nothing selected — nothing to read.")
             ui.play_tone("empty", settings.ENABLE_AUDIO_CHIMES)
@@ -80,7 +79,7 @@ def process_and_speak():
         logging.info(f"Reader captured {len(text)} chars (smart_mode={use_smart_mode}).")
 
         if use_smart_mode:
-            _title("OLLAMA PROCESSING")
+            _title("AI CLEANING")
             cleaned = clean_text_smart(text)
         else:
             cleaned = clean_text_instant(text)
@@ -197,9 +196,9 @@ def register_hotkeys():
 # CONSOLE
 # =====================================================================
 def print_boot_sequence():
-    llm = settings.OLLAMA_MODEL_NAME or "auto-discovered on first use"
     ui.print_banner("Z E R O -   F L O W   ·   R E A D E R",
-                    [("Voice model", "Kokoro-82M · warming in background"), ("Smart clean", llm)],
+                    [("Voice model", "Kokoro-82M · warming in background"),
+                     ("Smart clean", llm.model_name())],
                     [("ACTIONS", None, [
                         [(HOTKEY_READ, "read the highlighted text", ui.C_GOOD),
                          (HOTKEY_PANIC, "silence", ui.C_ERR)],

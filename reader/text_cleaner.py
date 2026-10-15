@@ -3,12 +3,11 @@ Clean captured text before it is spoken.
 
 Two levels:
     clean_text_instant  — regex only, no network, effectively free
-    clean_text_smart    — one pass through the shared local LLM, with an automatic
+    clean_text_smart    — one pass through the engine's AI model, with an automatic
                           fall back to the instant clean
 
-The LLM call goes through `zeroflow.llm.query_ai`, so the reader inherits the
-engine's model discovery, the `OLLAMA_MODEL_NAME` pin from `.env`, the offline
-fallback and the console spinner. There is no second Ollama client.
+The AI call goes through `zeroflow.llm.ask_ai`, the same as dictation's: whichever
+provider AI_PROVIDER names, with its failures reported the same way.
 """
 import logging
 import re
@@ -17,8 +16,8 @@ from zeroflow import personas, settings
 from zeroflow import llm
 from zeroflow.text import URL_PATTERN  # shared: also strips www. addresses
 
-# Above this length the LLM pass is skipped: a local 7B model needs several seconds
-# per thousand characters, which is longer than the wait for speech to simply start.
+# Above this length the AI pass is skipped: a local model needs several seconds per
+# thousand characters, which is longer than the wait for speech to simply start.
 SMART_MODE_MAX_CHARS = settings.READER_SMART_MAX_CHARS
 # The reader is interactive, so it waits less patiently than the dictation engine.
 READER_LLM_TIMEOUT = settings.READER_LLM_TIMEOUT
@@ -62,19 +61,17 @@ def clean_text_instant(raw_text):
 
 
 def clean_text_smart(raw_text):
-    """Let the local LLM strip page furniture, falling back to the instant clean.
-
-    `query_ai` returns its input unchanged when Ollama is unreachable or slow,
-    so an unchanged result is treated as a miss and cleaned with regex instead —
-    the reader always speaks something.
+    """Let the AI strip page furniture, falling back to the instant clean when it
+    gives no answer (unreachable, too slow) or hands the text back unchanged — the
+    reader always speaks something.
     """
     prepared = fix_pronunciation(raw_text)
     if len(prepared) > SMART_MODE_MAX_CHARS:
         logging.info(f"Reader: {len(prepared)} chars exceeds the smart-mode limit — regex clean only.")
         return clean_text_instant(raw_text)
 
-    output = llm.query_ai(prepared, None, personas.READER_CLEANUP_PROMPT,
-                                    timeout=READER_LLM_TIMEOUT)
+    output = llm.ask_ai(prepared, None, personas.READER_CLEANUP_PROMPT,
+                        timeout=READER_LLM_TIMEOUT)
     if not output or output.strip() == prepared.strip():
         logging.info("Reader: smart clean returned nothing new — falling back to regex clean.")
         return clean_text_instant(raw_text)

@@ -22,7 +22,7 @@ ARABIC_MARKS = re.compile(r'[\u064C-\u0652\u0670]')
 ARABIC_MARKS_ALL = re.compile(r'[\u064B-\u0652\u0670\u0640]')
 
 
-def _plain(text: str) -> list[str]:
+def plain_words(text: str) -> list[str]:
     """Words as compared with STOCK_ENDINGS: lower case, no punctuation, no Arabic vowel
     marks, one spelling for the alef, ya and ta marbuta variants."""
     text = ARABIC_MARKS_ALL.sub("", text.lower())
@@ -37,7 +37,7 @@ def checked_ai_output(output: str, original: str, lang: str) -> str:
     Better to paste what you said, unpolished, than to paste Chinese: qwen2.5:7b
     answered Arabic Polish in Chinese in 5 tries out of 5. Arabic output also loses the
     vowel marks models add unasked."""
-    if output == original:                       # the AI was unreachable: nothing to check
+    if output == original:                       # nothing changed: nothing to check
         return output
     wanted = ARABIC_LETTERS if lang == "ar" else LATIN_LETTERS
     if FOREIGN_SCRIPT.search(output) or not wanted.search(output):

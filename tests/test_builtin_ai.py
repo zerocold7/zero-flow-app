@@ -38,8 +38,6 @@ class BuiltinTestCase(unittest.TestCase):
             mock.patch.object(builtin, "_model_path", return_value="gemma.gguf"),
             mock.patch.object(builtin, "_variant", return_value="cuda"),
             mock.patch.object(builtin, "ENABLE_TOASTS", False),
-            mock.patch.object(builtin.ui, "start_processing_spinner"),
-            mock.patch.object(builtin.ui, "stop_processing_spinner"),
             mock.patch.dict(os.environ, self.env),
         ):
             patcher.start()

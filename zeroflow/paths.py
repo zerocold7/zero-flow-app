@@ -5,7 +5,6 @@ import os
 # the history all live there.
 BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 VOCAB_CACHE_FILE = os.path.join(BASE_DIR, "flow_vocabulary.txt")
-TEMP_AUDIO_FILE = os.path.join(BASE_DIR, "flow_capture.wav")
 HISTORY_FILE = os.path.join(BASE_DIR, "flow_history.md")
 
 

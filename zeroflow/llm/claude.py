@@ -11,8 +11,8 @@ dictate — and the clipboard text Polish uses as context — is sent to Anthrop
 import logging
 
 from zeroflow import ui
+from zeroflow.llm.base import user_message
 from zeroflow.settings import AI_API_KEY, AI_MODEL, ENABLE_TOASTS
-from zeroflow.vocabulary import _absorb_learned_word
 
 DEFAULT_MODEL = "claude-opus-5-5"
 # Re-run a request the model declines on another model, server-side; "default" routes
@@ -44,15 +44,12 @@ def ask(raw_text: str, context_text: str | None, instruction: str,
         timeout: float = 15.0) -> str | None:
     """Claude's answer, or None — with the reason logged and shown as a toast."""
     import anthropic
-    user = f"Context Window Data:\n{context_text}\n\n" if context_text else ""
-    user += f"Input Raw String: {raw_text}\nOutput String:"
-    ui.start_processing_spinner("AI Processing")
     try:
         response = _get_client().with_options(timeout=timeout).beta.messages.create(
             model=AI_MODEL or DEFAULT_MODEL,
             max_tokens=16000,
             system=instruction,
-            messages=[{"role": "user", "content": user}],
+            messages=[{"role": "user", "content": user_message(raw_text, context_text)}],
             output_config={"effort": "low"},
             betas=[FALLBACK_BETA],
             fallbacks="default",
@@ -68,15 +65,9 @@ def ask(raw_text: str, context_text: str | None, instruction: str,
         return _no_answer(f"HTTP {e.status_code}: {e.message}", f"Claude returned HTTP {e.status_code}.")
     except anthropic.APIConnectionError as e:
         return _no_answer(f"could not connect ({e})", "Could not reach Anthropic.")
-    finally:
-        ui.stop_processing_spinner()
     if response.stop_reason == "refusal":
         return _no_answer("the request was declined", "Claude declined this text.")
-    output = "".join(block.text for block in response.content if block.type == "text").strip()
-    if not output:
-        logging.warning("Claude returned an empty answer.")
-        return None
-    return _absorb_learned_word(output, heard=raw_text) or None
+    return "".join(block.text for block in response.content if block.type == "text")
 
 
 def warm_up() -> None:

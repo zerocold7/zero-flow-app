@@ -129,8 +129,6 @@ WHISPER_MODEL_NAME="small"
 WHISPER_DEVICE="cpu"        # no NVIDIA card: skip the GPU attempt
 AI_PROVIDER="builtin"       # the AI runs inside the engine (no Ollama)
 LLAMA_VARIANT="cpu"         # no NVIDIA card: run the AI on the CPU
-SAMPLE_RATE=16000
-CHANNELS=1
 
 # --- Recording mode keybindings (each FORCES its language) ---
 HOTKEY_EN_RAW="f5"          # English, raw

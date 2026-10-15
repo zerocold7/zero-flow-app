@@ -125,8 +125,6 @@ WHISPER_DEVICE = choice("WHISPER_DEVICE", "auto", ("auto", "cpu"))
 # measured 3.9 GB -> 2.0 GB on an RTX 4070, 0.9 s -> 1.1 s per 14 s clip. The CPU
 # fallback always uses int8, the only precision that is fast there.
 WHISPER_COMPUTE_TYPE = text("WHISPER_COMPUTE_TYPE", "float16").lower()
-SAMPLE_RATE = whole_number("SAMPLE_RATE", 16000, minimum=8000)
-CHANNELS = whole_number("CHANNELS", 1, minimum=1)
 # A recording left running stops by itself after this long, and is transcribed as
 # usual. Without a limit a forgotten one grew by ~4 MB a minute.
 MAX_RECORDING_SECONDS = number("MAX_RECORDING_SECONDS", 300, minimum=1)

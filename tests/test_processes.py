@@ -140,7 +140,7 @@ class TestTestsLeaveTheLogsAlone(unittest.TestCase):
     def test_the_suite_logs_outside_the_program_folder(self):
         """The tests' deliberate crashes and broken microphones used to land in the
         real flow_debug.log and reader_debug.log, where they read like real faults."""
-        opened = [h.baseFilename for h in logs._log_handlers.values()]
+        opened = [logs._handler.baseFilename] if logs._handler else []
         for path in opened + [paths.log_path("flow"), paths.log_path("reader")]:
             self.assertNotEqual(
                 os.path.dirname(os.path.abspath(path)), ROOT,

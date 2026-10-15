@@ -13,6 +13,8 @@ import sys
 import unittest
 from unittest import mock
 
+import numpy as np
+
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from zeroflow import clipboard
@@ -21,6 +23,7 @@ from zeroflow import hotkeys
 from zeroflow import personas
 from zeroflow import stt
 from zeroflow import ui
+from zeroflow import llm
 from zeroflow.llm import ollama
 from zeroflow.text import language
 from zeroflow.text import macros
@@ -54,11 +57,11 @@ class TestWhisperHint(unittest.TestCase):
     def test_transcribe_clip_passes_the_arabic_hint_to_whisper(self):
         seen = {}
 
-        def transcribe(path, **kwargs):
+        def transcribe(audio, **kwargs):
             seen.update(kwargs)
             return iter([]), mock.Mock(language="ar")
         with mock.patch.object(stt, "model", mock.Mock(transcribe=transcribe)):
-            stt.transcribe_clip("ar")
+            stt.transcribe_clip("ar", np.zeros(16000, np.float32))
         self.assertEqual(seen["language"], "ar")
         self.assertTrue(seen["initial_prompt"].startswith(personas.ARABIC_WHISPER_HINT))
 
@@ -190,7 +193,7 @@ class TestOllamaRequest(unittest.TestCase):
         """A reasoning model otherwise writes ~800 hidden tokens first: 5-9 s, not 0.8."""
         reply = mock.Mock(status_code=200, json=lambda: {"response": "Hello."})
         with mock.patch.object(ollama.requests, "post", return_value=reply) as post:
-            ollama.query_ollama("hello", None, "Polish this.")
+            ollama.ask("hello", None, "Polish this.")
         body = post.call_args.kwargs["json"]
         self.assertIs(body["think"], False)
         self.assertEqual(body["keep_alive"], ollama.OLLAMA_KEEP_ALIVE)
@@ -201,7 +204,7 @@ class TestOllamaRequest(unittest.TestCase):
         reply = mock.Mock(status_code=200, json=lambda: {"response": "Hello."})
         with mock.patch.object(ollama, "OLLAMA_NUM_CTX", 8192, create=True), \
              mock.patch.object(ollama.requests, "post", return_value=reply) as post:
-            ollama.query_ollama("hello", None, "Polish this.")
+            ollama.ask("hello", None, "Polish this.")
         self.assertEqual(post.call_args.kwargs["json"]["options"].get("num_ctx"), 8192)
 
     def test_warm_up_loads_the_model_exactly_as_requests_will_use_it(self):
@@ -210,8 +213,8 @@ class TestOllamaRequest(unittest.TestCase):
         reply = mock.Mock(status_code=200, json=lambda: {"response": "Hello."})
         with mock.patch.object(ollama, "OLLAMA_NUM_CTX", 8192, create=True), \
              mock.patch.object(ollama.requests, "post", return_value=reply) as post:
-            ollama.warm_up_llm()
-            ollama.query_ollama("hello", None, "Polish this.")
+            ollama.warm_up()
+            ollama.ask("hello", None, "Polish this.")
         warm, ask = (c.kwargs["json"] for c in post.call_args_list)
         self.assertEqual(warm.get("options"), ask["options"])
         self.assertEqual(warm["keep_alive"], ask["keep_alive"])
@@ -220,13 +223,13 @@ class TestOllamaRequest(unittest.TestCase):
         reply = mock.Mock(status_code=200, json=lambda: {"response": "Hello."})
         with mock.patch.object(ollama, "OLLAMA_NUM_CTX", 0, create=True), \
              mock.patch.object(ollama.requests, "post", return_value=reply) as post:
-            ollama.query_ollama("hello", None, "Polish this.")
+            ollama.ask("hello", None, "Polish this.")
         self.assertNotIn("num_ctx", post.call_args.kwargs["json"]["options"])
 
     def test_warm_up_stays_quiet_when_ollama_is_down(self):
         with mock.patch.object(ollama.requests, "post", side_effect=ConnectionError("refused")), \
              self.assertLogs(level="INFO") as logs:
-            ollama.warm_up_llm()                  # must not raise
+            ollama.warm_up()                  # must not raise
         self.assertIn("warm-up skipped", logs.output[-1])
 
     def test_warm_up_reports_a_model_ollama_does_not_have(self):
@@ -234,7 +237,7 @@ class TestOllamaRequest(unittest.TestCase):
         reply = mock.Mock(status_code=404, text='{"error":"model not found"}')
         with mock.patch.object(ollama.requests, "post", return_value=reply), \
              self.assertLogs(level="INFO") as logs:
-            ollama.warm_up_llm()
+            ollama.warm_up()
         self.assertNotIn("loaded ahead", "\n".join(logs.output))
         self.assertIn("404", "\n".join(logs.output))
 
@@ -242,9 +245,9 @@ class TestOllamaRequest(unittest.TestCase):
         """An empty reply would otherwise paste nothing at all."""
         reply = mock.Mock(status_code=200, json=lambda: {"response": "  "})
         with mock.patch.object(ollama.requests, "post", return_value=reply), \
+             mock.patch.object(llm, "provider", ollama), \
              self.assertLogs(level="WARNING") as logs:
-            self.assertIsNone(ollama.ask_ollama("hello", None, "Polish this."))
-            self.assertEqual(ollama.query_ollama("hello", None, "Polish this."), "hello")
+            self.assertIsNone(llm.ask_ai("hello", None, "Polish this."))
         self.assertIn("empty answer", logs.output[0])          # and the log says why
 
 
