@@ -8,7 +8,6 @@ import os
 import sys
 
 import numpy as np
-import soundfile as sf
 
 # CTranslate2 (faster-whisper's engine) imports torch and transformers on import, for
 # its model *converters* — about 6 s, on every start, for code this engine never runs.
@@ -27,8 +26,7 @@ finally:
 from huggingface_hub.utils import logging as hf_logging
 
 from zeroflow import personas, ui
-from zeroflow.paths import TEMP_AUDIO_FILE
-from zeroflow.settings import SAMPLE_RATE, WHISPER_COMPUTE_TYPE, WHISPER_DEVICE, WHISPER_MODEL_NAME
+from zeroflow.settings import WHISPER_COMPUTE_TYPE, WHISPER_DEVICE, WHISPER_MODEL_NAME
 from zeroflow.text.language import ARABIC_LETTERS, plain_words
 from zeroflow.vocabulary import load_vocabulary
 
@@ -36,6 +34,10 @@ from zeroflow.vocabulary import load_vocabulary
 # "set a HF_TOKEN" notice about rate limits. The models are public and fetched once;
 # the notice is noise. (Every later boot reads the cache and asks the Hub nothing.)
 hf_logging.set_verbosity_error()
+
+# What Whisper hears: mono at 16 kHz. The microphone records in exactly this format, so
+# a clip goes to Whisper as it is, from memory.
+SAMPLE_RATE = 16000
 
 model = None              # the faster-whisper model, loaded by load_whisper_model()
 model_runtime = ""        # where it runs, e.g. "GPU · float16" — shown in the banner
@@ -181,12 +183,13 @@ def trim_invented_ending(words: list, audio: np.ndarray) -> list:
     return said
 
 
-def transcribe_clip(language: str, audio: np.ndarray | None = None) -> tuple[str | None, str | None]:
-    """Decode TEMP_AUDIO_FILE → (text, language).
+def transcribe_clip(language: str, audio: np.ndarray,
+                    recorded: np.ndarray | None = None) -> tuple[str | None, str | None]:
+    """Decode `audio` (mono, at SAMPLE_RATE, as Whisper is to hear it) → (text, language).
 
     `language` ('en' or 'ar') forces the output language — no detection, so it can
-    never mishear English as Arabic. `audio` is the clip as recorded; with it, a stock
-    ending nobody said is dropped (trim_invented_ending).
+    never mishear English as Arabic. `recorded` is the clip as recorded, before any
+    volume change; with it, a stock ending nobody said is dropped (trim_invented_ending).
 
     Returns (None, None) when transcription failed — distinct from ("", lang), which
     means it ran and heard no speech. A failure on the graphics card (typically out of
@@ -197,7 +200,7 @@ def transcribe_clip(language: str, audio: np.ndarray | None = None) -> tuple[str
         # beam_size=5 gives steadier decoding on short clips; word timings are what
         # trim_invented_ending weighs.
         segments, _ = whisper.transcribe(
-            TEMP_AUDIO_FILE, beam_size=5, vad_filter=True,
+            audio, beam_size=5, vad_filter=True,
             condition_on_previous_text=False, language=language,
             initial_prompt=whisper_hint(language), word_timestamps=True,
             temperature=TEMPERATURES,
@@ -205,8 +208,8 @@ def transcribe_clip(language: str, audio: np.ndarray | None = None) -> tuple[str
         segments = list(segments)
         text = "".join(s.text for s in segments).strip()
         words = [w for s in segments if isinstance(s.words, (list, tuple)) for w in s.words]
-        if audio is not None and words:
-            kept = trim_invented_ending(words, audio)
+        if recorded is not None and words:
+            kept = trim_invented_ending(words, recorded)
             if len(kept) < len(words):
                 text = "".join(w.word for w in kept).strip()
         return text, language
@@ -223,6 +226,8 @@ def transcribe_clip(language: str, audio: np.ndarray | None = None) -> tuple[str
     except Exception as e:
         logging.error(f"Whisper transcription failed on the CPU too: {e}")
         return None, None
+
+
 _cpu_model = None        # loaded on the first GPU failure, then kept for later ones
 
 
@@ -238,14 +243,10 @@ def cpu_fallback_model() -> WhisperModel:
 def transcribe_audio(audio: np.ndarray, language: str) -> tuple[str | None, str | None]:
     """One captured clip → (text, language), by exactly the steps every dictation
     takes. Kept apart from the hotkey path so tools/bench_stt.py measures the same
-    thing you get."""
-    recorded = audio
-    peak = np.max(np.abs(audio))
+    thing you get. Whisper hears the clip straight from memory: your voice is never
+    written to disk."""
+    clip = (audio.mean(axis=1) if audio.ndim == 2 else audio).astype(np.float32)
+    peak = float(np.max(np.abs(clip))) if len(clip) else 0.0
     if peak > 0:
-        audio = audio / peak                     # normalise to full scale
-    sf.write(TEMP_AUDIO_FILE, audio, SAMPLE_RATE)
-    try:
-        return transcribe_clip(language, recorded)
-    finally:
-        if os.path.exists(TEMP_AUDIO_FILE):
-            os.remove(TEMP_AUDIO_FILE)
+        clip = clip / peak                       # normalise to full scale
+    return transcribe_clip(language, clip, recorded=audio)

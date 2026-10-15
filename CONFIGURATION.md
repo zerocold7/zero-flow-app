@@ -34,8 +34,6 @@ only set what you want to change.
 | `OLLAMA_HOST_URL` | `http://127.0.0.1:11434/api/generate` | `ollama` only: where Ollama listens |
 | `OLLAMA_MODEL_NAME` | *(blank)* | `ollama` only: pin an exact model, e.g. `qwen2.5:7b`. Blank = auto-pick the first model Ollama serves |
 | `FALLBACK_LLM` | `gemma2:27b` | `ollama` only: model name used if Ollama is unreachable |
-| `SAMPLE_RATE` | `16000` | Mic sample rate (Hz). Whisper expects 16000 — leave it |
-| `CHANNELS` | `1` | Mic channels (mono). Leave it |
 | `MAX_RECORDING_SECONDS` | `300` | A recording left running stops by itself after this many seconds, and is transcribed as usual |
 | `ENABLE_AUDIO_CHIMES` | `True` | Beeps on start/stop/success |
 | `ENABLE_TOAST_NOTIFICATIONS` | `True` | Windows toast pop-ups |
@@ -355,10 +353,10 @@ Also in **`zeroflow/personas.py`**:
 |------|------|---------|
 | `flow_vocabulary.txt` | learned terms | deduped on write; `Shift+F1` prunes it |
 | `flow_vocabulary.txt.bak` | the list before the last `Shift+F1` | replaced each run — copy it back to undo |
-| `flow_history.md` | history of injected text | trimmed at boot past ~500 KB |
+| `flow_history.md` | history of injected text | trimmed back past ~500 KB, after each write |
 | `flow_debug.log` | dictation diagnostics | auto-rotates (~3 MB cap) |
 | `reader_debug.log` | reader diagnostics | auto-rotates (~3 MB cap) |
-| `flow_capture.wav` | temp audio | deleted after each decode |
+| `builtin_ai.log` | the built-in AI's own output | appended; delete it any time |
 
 `Shift+F2` clears the dictation log + history instantly. None of these grow without
 bound. The reader keeps its own log (two processes cannot safely rotate one file);

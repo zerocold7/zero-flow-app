@@ -13,6 +13,8 @@ import sys
 import unittest
 from unittest import mock
 
+import numpy as np
+
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from zeroflow import clipboard
@@ -55,11 +57,11 @@ class TestWhisperHint(unittest.TestCase):
     def test_transcribe_clip_passes_the_arabic_hint_to_whisper(self):
         seen = {}
 
-        def transcribe(path, **kwargs):
+        def transcribe(audio, **kwargs):
             seen.update(kwargs)
             return iter([]), mock.Mock(language="ar")
         with mock.patch.object(stt, "model", mock.Mock(transcribe=transcribe)):
-            stt.transcribe_clip("ar")
+            stt.transcribe_clip("ar", np.zeros(16000, np.float32))
         self.assertEqual(seen["language"], "ar")
         self.assertTrue(seen["initial_prompt"].startswith(personas.ARABIC_WHISPER_HINT))
 

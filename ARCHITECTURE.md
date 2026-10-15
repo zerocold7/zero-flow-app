@@ -23,13 +23,13 @@ a local LLM to clean up or translate text.
 | `zeroflow/supervisor.py` | The whole engine: runs dictation and hosts the reader as a child sharing its console |
 | `zeroflow/stt.py` | Whisper: loading (GPU, CPU fallback), transcription, the invented-ending filter. The only module that imports faster-whisper |
 | `zeroflow/capture.py`, `clipboard.py`, `hotkeys.py` | One recording's audio; paste and copy through the clipboard; key helpers |
-| `zeroflow/llm/` | The AI model: `ask_ai` / `query_ai` route to the provider set by `AI_PROVIDER` — `builtin.py` (llama-server, run by the engine; installed by `llama_runtime.py`), `ollama.py`, `openai_compatible.py` or `claude.py` (interface in `base.py`) |
+| `zeroflow/llm/` | The AI model: `ask_ai` routes to the provider set by `AI_PROVIDER` — `builtin.py` (llama-server, run by the engine; installed by `llama_runtime.py`), `ollama.py`, `openai_compatible.py` or `claude.py` (interface in `base.py`) |
 | `zeroflow/text/` | `language.py` (which language a text is in; the AI-answer guard), `macros.py` (spoken commands and punctuation) |
 | `zeroflow/vocabulary.py`, `history.py` | The learned-word list and the dictation history |
 | `zeroflow/settings.py`, `paths.py`, `logs.py` | Every `.env` setting, checked; where files live; the debug and crash logs |
 | `zeroflow/signals.py` | Windows named objects shared by the two processes: events, the clipboard lock, one-copy claims, the Job Object |
 | `zeroflow/ui.py`, `zeroflow/personas.py` | Console, banner, tones, toasts, tray; prompts, base vocabulary, voice macros, punctuation, pronunciation |
-| `reader/`       | Reader: `app.py` (the half itself), `clipboard_tool.py`, `text_cleaner.py`, `voice_engine.py` |
+| `reader/`       | Reader: `app.py` (the half itself), `text_cleaner.py`, `voice_engine.py` |
 | `check_hardware.py` | Standalone (standard library only): detects the GPU/RAM, picks a hardware tier, writes its settings into `.env` |
 | `presets/`      | One `.env` fragment per hardware tier — the model and device settings `check_hardware.py` applies |
 | `docs/`         | User guides: install, hardware & tuning, FAQ, the beginner walkthrough (English + Arabic) |
@@ -156,7 +156,7 @@ starts and stops the capture over and over.
 
 Heavy handlers (LLM calls, key-sending) are dispatched to a **worker thread** so they
 never block the keyboard listener — a blocked listener freezes the whole keyboard.
-`_run_async` wraps the `Shift+F1..F3` handlers this way and logs any failure.
+`run_async` wraps the `Shift+F1..F3` handlers this way and logs any failure.
 
 ---
 
@@ -231,12 +231,14 @@ start makes no request at all, and the one-time download notice is silenced
 ---
 
 ## 6. The AI model (`zeroflow/llm`)
-- The engine and the reader call `zeroflow.llm` — `ask_ai`, `query_ai`, `warm_up_ai`,
-  `model_name` — which hands each call to the provider named by `AI_PROVIDER`:
+- The engine and the reader call `zeroflow.llm` — `ask_ai`, `warm_up_ai`, `model_name`
+  — which hands each call to the provider named by `AI_PROVIDER`:
   `builtin` (`llm/builtin.py`, the default), `ollama` (`llm/ollama.py`), `openai`
   (`llm/openai_compatible.py`, any server speaking the OpenAI chat format) or `claude`
   (`llm/claude.py`). A provider is a module with `ask`, `warm_up` and `model_name`
-  (`llm/base.py`), so a new one plugs in without touching the engine. An unknown name
+  (`llm/base.py`), so a new one plugs in without touching the engine. What every answer
+  goes through happens once, in `ask_ai`: the console spinner, the empty-answer check
+  and `[LEARN: …]` (below); a provider only sends the request. An unknown name
   — or `builtin` on a PC where its runtime is not installed — is reported at start-up
   (`settings.problems`: window, log and a pop-up) and Ollama used.
 
@@ -292,21 +294,21 @@ toast and return `None`.
   LLM. The fallback is **never** cached — with Ollama down at the first Polish, caching
   it bound the whole session to a model that may not exist, so every request after
   Ollama started got a 404.
-- `ask_ollama` sends `instruction + optional context + input` at `temperature 0.2`
+- Ollama's `ask` sends `instruction + optional context + input` at `temperature 0.2`
   (low, so Polish stays faithful instead of "creatively" translating) and returns the
-  answer, or `None` when there is none: unreachable, a non-200 reply (typically 404, a
-  model Ollama does not have) or an empty answer — each logged as a warning and shown
-  as a toast. Polish, Translate and `Shift+F3` then say **"AI unavailable"** and keep
-  your own words; they used to print "Polished" over the unchanged text.
-  `query_ai` is the same call for callers that carry on with the original either
-  way (the reader's Smart mode, vocabulary maintenance): it returns the input instead
-  of `None`. `warm_up_llm` checks the HTTP status too, so a 404 is not logged as loaded.
+  answer, or `None` when there is none: unreachable or a non-200 reply (typically 404,
+  a model Ollama does not have) — each logged as a warning and shown as a toast; an
+  empty answer is caught by `ask_ai`. Polish, Translate and `Shift+F3` then say **"AI
+  unavailable"** and keep your own words; they used to print "Polished" over the
+  unchanged text. Vocabulary maintenance writes nothing, and the reader's Smart mode
+  falls back to its regex clean. `warm_up` checks the HTTP status too, so a 404 is not
+  logged as loaded.
 - Every request carries **`think: false`**. Reasoning models (Gemma 4) otherwise write
   ~800 hidden tokens before a one-line answer — 5–9 s instead of ~1 s, for the same
   text. Models without reasoning accept and ignore it (checked on qwen2.5 and ALLaM).
 - Every request carries **`keep_alive`** (`OLLAMA_KEEP_ALIVE`, default 30 min), and
   `boot()` loads the model on a background thread while Whisper loads
-  (`warm_up_llm`). Ollama's own default unloads after 5 idle minutes, and reloading
+  (`warm_up`). Ollama's own default unloads after 5 idle minutes, and reloading
   made the next Polish wait 3–12 s. Measured: the AI is ready 6.5–8 s after start-up,
   and dictation is ready ≤0.7 s later than without the warm-up. Loading the AI *after*
   Whisper instead left it ready at 10–11 s.
@@ -316,7 +318,7 @@ toast and return `None`.
   asks for 131,072, which held 3.58 GB of graphics memory against 2.99 GB, with the
   same speed and answers (`tools/bench/bench_llm.py`). 4,096 saved no more, so the
   default leaves room for a five-minute dictation and its answer.
-- If the LLM tags a term as `[LEARN: word]`, `_absorb_learned_word` saves it to
+- If the LLM tags a term as `[LEARN: word]`, `absorb_learned_word` saves it to
   `flow_vocabulary.txt` and strips the tag — **but only if the term appears in what was
   said** (ignoring case and spacing), and never in Chinese, Japanese or Korean script.
   Learned words prime Whisper on every dictation. Before this rule, Arabic Polish had
@@ -436,7 +438,7 @@ Design notes:
   `BASE_VOCABULARY` — that list feeds Whisper's decoder hint and the casing pass,
   where a phonetic spelling would do damage.
 - **Smart mode** (tray menu / `READER_SMART_MODE`) sends the capture through
-  `zeroflow.llm.query_ai` with `personas.READER_CLEANUP_PROMPT`. It is off by
+  `zeroflow.llm.ask_ai` with `personas.READER_CLEANUP_PROMPT`. It is off by
   default, skipped for long selections, and always falls back to the regex clean —
   the reader never stays silent because the LLM was slow.
 
@@ -445,13 +447,17 @@ Design notes:
 ## 10. Files written at runtime (git-ignored)
 | File | Purpose |
 |------|---------|
-| `flow_capture.wav` | Temporary audio buffer (deleted after each decode) |
 | `flow_vocabulary.txt` | Learned proper nouns / tech terms (deduped on write, pruned by `Shift+F1`) |
 | `flow_vocabulary.txt.bak` | The list as it was before the last `Shift+F1` rewrite |
 | `flow_history.md` | Append-only log of injected text; trimmed after any write that takes it past ~500 KB, at an entry boundary |
 | `flow_debug.log` | Dictation diagnostics; auto-rotated at ~1 MB (×2 backups ≈ 3 MB cap) |
 | `reader_debug.log` | Reader diagnostics; rotated the same way |
 | `flow_crash.log`, `reader_crash.log` | Native crashes (e.g. a segfault in a CUDA library), written by `faulthandler`; normally empty |
+| `builtin_ai.log` | The built-in AI's own output (llama-server) |
+| `runtime/llama/<build>/` | The built-in AI's program, installed by `tools/get_llama.py` |
+
+Your voice is never written to disk: each clip goes from the microphone to Whisper in
+memory.
 
 Each half logs to its **own** file. That is deliberate: two processes sharing one
 `RotatingFileHandler` fight at rollover — on Windows the rename fails outright while

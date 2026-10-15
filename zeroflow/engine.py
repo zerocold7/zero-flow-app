@@ -34,9 +34,9 @@ from zeroflow.hotkeys import run_async, wait_for_release
 from zeroflow.llm import ask_ai, model_name, warm_up_ai
 from zeroflow.logs import init_logging
 from zeroflow.paths import HISTORY_FILE, VOCAB_CACHE_FILE, log_path
-from zeroflow.settings import (CHANNELS, ENABLE_AUDIO_CHIMES, ENABLE_TOASTS, HOTKEYS,
-                               MAX_RECORDING_SECONDS, SAMPLE_RATE, WHISPER_MODEL_NAME)
-from zeroflow.stt import transcribe_audio
+from zeroflow.settings import (ENABLE_AUDIO_CHIMES, ENABLE_TOASTS, HOTKEYS,
+                               MAX_RECORDING_SECONDS, WHISPER_MODEL_NAME)
+from zeroflow.stt import SAMPLE_RATE, transcribe_audio
 from zeroflow.text.language import ARABIC_LETTERS, checked_ai_output
 from zeroflow.text.macros import apply_macros
 from zeroflow.vocabulary import VOCAB_LOCK, load_vocabulary, vocabulary_terms
@@ -73,8 +73,8 @@ capture_lock = threading.Lock()     # guards current_capture and the reader's mi
 
 
 # One clip is transcribed → refined → pasted at a time. The next capture can start
-# while the last is still being processed; this keeps them from sharing the temp WAV
-# and makes them land in the order they were spoken.
+# while the last is still being processed; this makes them land in the order they
+# were spoken.
 processing_lock = threading.Lock()
 
 
@@ -230,7 +230,7 @@ def process_recording(capture: Capture) -> None:
     can start while this one is still closing its microphone or transcribing."""
     mode = capture.mode
     try:
-        with sd.InputStream(samplerate=SAMPLE_RATE, channels=CHANNELS,
+        with sd.InputStream(samplerate=SAMPLE_RATE, channels=1,
                             callback=capture.callback, dtype='float32'):
             if not capture.stopped.wait(MAX_RECORDING_SECONDS):
                 capture.stop()
