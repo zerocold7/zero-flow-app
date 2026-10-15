@@ -23,7 +23,7 @@ a local LLM to clean up or translate text.
 | `zeroflow/supervisor.py` | The whole engine: runs dictation and hosts the reader as a child sharing its console |
 | `zeroflow/stt.py` | Whisper: loading (GPU, CPU fallback), transcription, the invented-ending filter. The only module that imports faster-whisper |
 | `zeroflow/capture.py`, `clipboard.py`, `hotkeys.py` | One recording's audio; paste and copy through the clipboard; key helpers |
-| `zeroflow/llm/` | The AI model: `ask_ai` / `query_ai` route to the provider set by `AI_PROVIDER` — `ollama.py` or `openai_compatible.py` (interface in `base.py`) |
+| `zeroflow/llm/` | The AI model: `ask_ai` / `query_ai` route to the provider set by `AI_PROVIDER` — `builtin.py` (llama-server, run by the engine; installed by `llama_runtime.py`), `ollama.py`, `openai_compatible.py` or `claude.py` (interface in `base.py`) |
 | `zeroflow/text/` | `language.py` (which language a text is in; the AI-answer guard), `macros.py` (spoken commands and punctuation) |
 | `zeroflow/vocabulary.py`, `history.py` | The learned-word list and the dictation history |
 | `zeroflow/settings.py`, `paths.py`, `logs.py` | Every `.env` setting, checked; where files live; the debug and crash logs |
@@ -33,7 +33,8 @@ a local LLM to clean up or translate text.
 | `check_hardware.py` | Standalone (standard library only): detects the GPU/RAM, picks a hardware tier, writes its settings into `.env` |
 | `presets/`      | One `.env` fragment per hardware tier — the model and device settings `check_hardware.py` applies |
 | `docs/`         | User guides: install, hardware & tuning, FAQ, the beginner walkthrough (English + Arabic) |
-| `tools/`        | Rebuild the printable PDFs (`tools/README.md`); measure speech and AI changes (`tools/bench/`); prove the tests guard the fixes (`tools/mutation_check.py`) |
+| `tools/`        | Install the built-in AI (`tools/get_llama.py`); rebuild the printable PDFs (`tools/README.md`); measure speech and AI changes (`tools/bench/`); prove the tests guard the fixes (`tools/mutation_check.py`) |
+| `runtime/`      | *(git-ignored)* The built-in AI's llama.cpp build, one folder per variant (`runtime/llama/cuda/`…), written by `tools/get_llama.py` |
 | `tests/`        | `unittest` tests, run in the venv: text logic, recording and AI failure paths, playback threading, vocabulary and history files, process supervision (`.\venv\Scripts\python.exe -m unittest discover -s tests -t .`) |
 
 **How they are hosted.** `zero_flow.py` is a supervisor, not a merge: it runs the
@@ -232,11 +233,57 @@ start makes no request at all, and the one-time download notice is silenced
 ## 6. The AI model (`zeroflow/llm`)
 - The engine and the reader call `zeroflow.llm` — `ask_ai`, `query_ai`, `warm_up_ai`,
   `model_name` — which hands each call to the provider named by `AI_PROVIDER`:
-  `ollama` (`llm/ollama.py`, the default, described below) or `openai`
-  (`llm/openai_compatible.py`, any server speaking the OpenAI chat format). A provider
-  is a module with `ask`, `warm_up` and `model_name` (`llm/base.py`), so another one —
-  phase 4's built-in model — plugs in without touching the engine. An unknown name is
-  reported at start-up and Ollama used.
+  `builtin` (`llm/builtin.py`, the default), `ollama` (`llm/ollama.py`), `openai`
+  (`llm/openai_compatible.py`, any server speaking the OpenAI chat format) or `claude`
+  (`llm/claude.py`). A provider is a module with `ask`, `warm_up` and `model_name`
+  (`llm/base.py`), so a new one plugs in without touching the engine. An unknown name
+  — or `builtin` on a PC where its runtime is not installed — is reported at start-up
+  (`settings.problems`: window, log and a pop-up) and Ollama used.
+
+**The built-in AI** (`llm/builtin.py`, `llm/llama_runtime.py`)
+- llama.cpp's `llama-server` (build `b11619`), run as a hidden child process
+  (`CREATE_NO_WINDOW`) with Google's Gemma 4 E4B (QAT q4_0 GGUF, 5.15 GB, Apache 2.0;
+  E2B, 3.35 GB, for small cards and 8 GB of RAM). Flags: every layer on the card
+  (`-ngl 99`; `0` for the `cpu` build), `-c AI_NUM_CTX` (8,192), `-np 1` (dictation is
+  serial), `--reasoning off` (Gemma 4's thinking made a Polish 2.4–7.8 s instead of
+  0.26 s) and `--host 127.0.0.1`. Its output goes to `builtin_ai.log`.
+- **Why a child process, not `llama-cpp-python` in-process:** a separate process keeps
+  llama.cpp's CUDA libraries away from CTranslate2's in the same address space, needs no compiler, and a crash in it
+  cannot take the engine down. It speaks the OpenAI chat format, so `ask` reuses
+  `openai_compatible.chat`.
+- **One server for both halves.** It listens on a fixed local port
+  (`AI_BUILTIN_PORT`, 39281). `start()` first asks `/health`: whoever needs the AI
+  first starts it, and the other process — the reader is a separate one — finds it
+  answering and uses it, so the model is in memory once. The engine's `warm_up` starts
+  it on a background thread while Whisper loads; `start()` returns only once `/health`
+  answers (up to `START_TIMEOUT`, 120 s), and fails if the process exits first.
+- **It never outlives the engine.** The child is bound to a Job Object with
+  `KILL_ON_JOB_CLOSE` (`signals.bind_child_to_this_process`, as for the reader), so even
+  a hard crash of the engine ends it. If it stops while the engine runs, the next
+  `ask` sees `/health` fail, logs it and starts it again — once per request.
+- **Installing it.** `llama_runtime.install` (run by `tools/get_llama.py`) downloads the
+  pinned release archives from GitHub — `cuda` (with the CUDA 12.4 runtime, 625 MB),
+  `vulkan` (AMD/Intel cards, 31 MB) or `cpu` (19 MB) — checks each against a SHA-256
+  written in the code, refuses any archive entry that would land outside the target
+  folder (zip slip), unpacks into a staging folder and only then swaps it into
+  `runtime/llama/<variant>/`. `LLAMA_VARIANT=auto` picks the variant from the graphics
+  card with `check_hardware.classify_gpu`. The model downloads through
+  `huggingface_hub` the first time the server starts, and loads from the local cache
+  with no network request after that.
+- **Measured** on an RTX 4070 against Ollama with the same model family: loads in 3.1 s
+  (6.8–7.1 s), a Polish in 0.26 s median (0.37 s), the same English and Arabic answers,
+  about 3.2 GB of graphics memory — 9.3 GB of the card's 12.3 GB with Whisper and the
+  Kokoro voice. End to end, the AI is ready 5.4 s after boot begins, and a hard exit
+  leaves no `llama-server` behind.
+
+**Claude** (`llm/claude.py`) uses Anthropic's Python SDK, imported only when chosen:
+`claude-opus-5-5` unless `AI_MODEL` names another, effort `low` (clean-up needs
+little), and the server-side fallback beta so a declined request is retried on
+another model. A rejected key (401), a model the key may not use (403), a rate limit
+(429), other HTTP errors, a lost connection and a refusal each log the reason, show a
+toast and return `None`.
+
+**Ollama** (`llm/ollama.py`, with `AI_PROVIDER="ollama"`)
 - The engine picks the LLM in priority order: (1) `OLLAMA_MODEL_NAME` from
   `.env` if set — pins an exact model; (2) otherwise it queries Ollama's `/api/tags` and
   binds to the **first model installed**; (3) otherwise `FALLBACK_LLM` (Ollama unreachable).

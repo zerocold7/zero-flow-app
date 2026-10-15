@@ -18,9 +18,9 @@ Just follow the steps in order. Every command is copy-paste.
 
 ## What you need before you start
 - Your laptop, signed in to Windows 11.
-- An internet connection — you'll download about **6–8 GB** total (one time only).
+- An internet connection — you'll download about **9–11 GB** total (one time only).
 - About **30–45 minutes** (most of it is just waiting for downloads).
-- Roughly **10 GB** of free disk space.
+- Roughly **13 GB** of free disk space.
 - Your **built-in microphone** and speakers (no extra hardware needed).
 
 > 💡 **No NVIDIA GPU? That's completely fine.** This guide sets up **CPU mode**. It works exactly the same; your words just take about **1–4 seconds** to appear after you stop recording, instead of being instant.
@@ -38,21 +38,19 @@ You'll type (or paste) one command at a time and press **Enter** after each. To 
 
 ---
 
-## Step 2 — Install the three required programs
-You need three free programs: **Python** (runs the engine), **Git** (downloads the project), and **Ollama** (the local AI). Paste these three lines into PowerShell, pressing **Enter** after each:
+## Step 2 — Install the two required programs
+You need two free programs: **Python** (runs the engine) and **Git** (downloads the project). The AI that polishes and translates is **built into the engine** — you install it in Step 7, with no extra program. Paste these two lines into PowerShell, pressing **Enter** after each:
 
 ```powershell
 winget install Python.Python.3.12
 winget install Git.Git
-winget install Ollama.Ollama
 ```
 
-When they finish, **close PowerShell and open it again** (Step 1) so it notices the new programs. Then check they all installed:
+When they finish, **close PowerShell and open it again** (Step 1) so it notices the new programs. Then check they both installed:
 
 ```powershell
 python --version
 git --version
-ollama --version
 ```
 
 Each line should print a version number (for example `Python 3.12.x`).
@@ -111,13 +109,13 @@ Find these four lines and change them so they read exactly like this, then save 
 ```ini
 WHISPER_MODEL_NAME="small"
 WHISPER_DEVICE="cpu"
-OLLAMA_MODEL_NAME="qwen2.5:3b"
+LLAMA_VARIANT="cpu"
 READER_DEVICE="cpu"
 ```
 
-> 💡 **Why:** the default speech model (`large-v3`) is built for a big graphics card — on a laptop processor it takes longer than you took to speak. `small` for speech and `qwen2.5:3b` for the AI fit comfortably in a 16 GB laptop, and the two `cpu` lines tell the engine not to look for a graphics card.
+> 💡 **Why:** the default speech model (`large-v3`) is built for a big graphics card — on a laptop processor it takes longer than you took to speak. `small` for speech fits comfortably in a 16 GB laptop next to the built-in AI, and the three `cpu` lines tell the engine — the speech model, the AI and the voice — not to look for a graphics card.
 
-> 💡 **Shortcut:** instead of editing by hand, run `python check_hardware.py --apply`. It looks at your laptop and writes the right lines for you — and says so if yours has only 8 GB of memory and needs even lighter settings.
+> 💡 **Shortcut:** instead of editing by hand, run `python check_hardware.py --apply`. It looks at your laptop and writes the right lines for you — and if yours has only 8 GB of memory, it picks even lighter settings: the `base` speech model and the smaller AI model, Gemma 4 E2B.
 
 ---
 
@@ -132,14 +130,16 @@ python -m venv venv
 
 ---
 
-## Step 7 — Download the local AI model
-Ollama runs quietly in the background after install (look for its icon near the clock). Download a small bilingual model:
+## Step 7 — Install the built-in AI
+The AI behind Polish and Translate runs inside the engine — the engine starts it and stops it by itself. Install its program once, with this line:
 
 ```powershell
-ollama pull qwen2.5:3b
+.\venv\Scripts\python.exe tools\get_llama.py
 ```
 
-This is about 2 GB, one time only. Lighter option: `gemma2:2b`. Higher quality but slower: `qwen2.5:7b`. Whichever you pull, put the **same name** in `OLLAMA_MODEL_NAME` in your `.env` (Step 5).
+It picks the right version for your laptop (here: the small `cpu` one, about 19 MB), downloads it from the official llama.cpp project on GitHub, checks the download is genuine, and puts it in the `runtime` folder inside the project. Wait until it prints `installed:`.
+
+The **AI model** itself — Google's **Gemma 4 E4B**, about **5.15 GB** — downloads by itself the first time you start the engine (Step 8). No account and no extra command are needed. On a laptop with only 8 GB of memory, `check_hardware.py --apply` (Step 5) picks the smaller **Gemma 4 E2B** (3.35 GB) instead; its Arabic has not been tested yet.
 
 ---
 
@@ -149,7 +149,7 @@ This is about 2 GB, one time only. Lighter option: `gemma2:2b`. Higher quality b
 
 > ⚠️ **If Windows shows a blue "Windows protected your PC" box**, click **More info**, then **Run anyway**. This is just Windows being cautious about a new file — it's your own project file.
 
-A console window opens. The **first** launch downloads the speech model (~500 MB) and the reading voice (~350 MB) — let it finish. Later launches load everything from your own disk and don't need the internet at all.
+A console window opens. The **first** launch downloads the speech model (~500 MB), the reading voice (~350 MB) and the AI model (~5.15 GB) — let it finish; on a slow connection this can take a while. Later launches load everything from your own disk and don't need the internet at all.
 
 **Dictation is ready** when the window shows a box titled **`Z E R O -   F L O W   E N G I N E`** with the list of keys under it. **Reading aloud is ready** a little later, when this line appears:
 
@@ -210,7 +210,7 @@ Press the key, speak, press it again. The key **forces** the language, so it's n
 - **Start:** double-click `Launch_Zero.bat` and minimize the window. (`Launch_Flow.bat` starts dictation only, without `F4`.)
 - **Stop:** close that console window (click the **X**), or right-click the tray icon and choose **Exit Engine**.
 - **Find the tray icon:** click the small **^** arrow next to the clock; the Zero- Flow icon lives there.
-- **Ollama** starts automatically with Windows, so the AI features just work.
+- **The AI** starts and stops with the engine, so there is nothing else to start or keep running.
 
 > 💡 **Run it invisibly:** double-click `Launch_Zero_Silent.vbs` to start with no window at all. To stop it, right-click the tray icon and choose **Exit Engine**. Stick with the visible `.bat` until you're comfortable — its window shows you what the engine is doing.
 
@@ -237,23 +237,23 @@ Right-click the tray icon to switch voice, to pause the reader (**Suspend Reader
 | **`winget is not recognized`** | Update **App Installer** from the Microsoft Store, then reopen PowerShell. |
 | **It types in the wrong language** | Use the matching key: F5/F6 for English, F7/F8 for Arabic. The key decides the language. |
 | **Hotkeys do nothing in one specific app** | Right-click `Launch_Zero.bat` and choose **Run as administrator**. |
-| **Polish / Translate types my words unchanged** | Make sure Ollama is running: type `ollama list` and check that the name in `OLLAMA_MODEL_NAME` in your `.env` is listed exactly (Step 7). A mismatch shows up in `flow_debug.log` as `Ollama returned HTTP 404`. |
+| **Polish / Translate types my words unchanged** | Look at the console when the engine starts: if it says the built-in AI is not installed, do Step 7 and restart the engine. Otherwise open `flow_debug.log` and look for `Built-in AI unavailable` — the reason follows, and `builtin_ai.log` in `C:\local-voice-flow` has the AI's own messages. |
 | **`F4` does nothing** | Make sure the text is **highlighted** first, and that the window has shown `Voice model ready.` The reader won't speak while a dictation is recording. Check you started `Launch_Zero.bat`, not `Launch_Flow.bat`. |
 | **Everything feels too slow** | In `.env` set `WHISPER_MODEL_NAME="base"`, save, and restart the engine. |
 | **SmartScreen blocks the launcher** | Click **More info**, then **Run anyway**. |
 | **Pressing F5–F10 does nothing at all** | Your laptop's F-keys are in media mode. Press `Fn + Esc` to enable Fn-Lock (Step 9), or hold `Fn` together with the key. |
-| **The laptop gets hot / fans get loud** | Use the raw modes `F5`/`F7` (they skip the AI). Confirm `.env` has `small` + `qwen2.5:3b` (not `medium`/`7b`). Drop to `base` for more cooling. See below. |
+| **The laptop gets hot / fans get loud** | Use the raw modes `F5`/`F7` (they skip the AI). Confirm `.env` has `small` (not `medium`). Drop to `base`, or to the smaller AI model, for more cooling. See below. |
 | **Something else went wrong** | Open `flow_debug.log` (dictation) or `reader_debug.log` (reading) in `C:\local-voice-flow` with Notepad — the last lines say what happened. |
 
 ---
 
 ## Keeping your laptop cool & fast
-On a CPU laptop, **bigger models = more heat.** The biggest heat source is the AI model (Ollama), which works your CPU hard for a few seconds whenever you **polish** or **translate**. To stay cool:
+On a CPU laptop, **bigger models = more heat.** The biggest heat source is the AI model (the built-in Gemma), which works your CPU hard for a few seconds whenever you **polish** or **translate**. To stay cool:
 
 - **For the least heat, use the raw modes `F5` (English) and `F7` (Arabic).** They type exactly what you say **without** running the AI, so the CPU barely warms up. Only use `F6`/`F8` (polish) and `F9`/`F10` (translate) when you actually need them — those are what run the AI model.
 - **The heat is momentary.** The engine only works the CPU while it's processing (the few seconds after you stop a recording, or while it prepares speech). The rest of the time it sits idle and cool.
 - **Still warm or slow?** Set `WHISPER_MODEL_NAME="base"` in `.env` (faster and cooler), then restart.
-- **Keep `.env` light:** `small` + `qwen2.5:3b`. Avoid `medium` and `qwen2.5:7b` on a laptop — they're the usual cause of fan noise and heat.
+- **Keep `.env` light:** `small` for speech. Avoid `medium` on a laptop — it's the usual cause of fan noise and heat. For a lighter AI, switch to Gemma 4 E2B (see the table below).
 - **Airflow:** use the laptop on a hard surface (not a bed or cushion) so the vents aren't blocked.
 
 ---
@@ -269,13 +269,14 @@ After changing any of these in `.env`, **save the file and restart the engine** 
 | `small` | Recommended balance for a laptop (this guide's default). |
 | `medium` | Better Arabic accuracy, noticeably slower on CPU. |
 
-**AI model** (`OLLAMA_MODEL_NAME` — download it first with `ollama pull <name>`):
+**AI model** (two lines, `AI_BUILTIN_REPO` and `AI_BUILTIN_FILE` — the new one downloads by itself on the next start):
 
-| Value | Trade-off |
-|---|---|
-| `gemma2:2b` | Lightest, fastest. |
-| `qwen2.5:3b` | Recommended balance, good Arabic + English. |
-| `qwen2.5:7b` | Best quality, slower on CPU. |
+| Model | Lines in `.env` | Trade-off |
+|---|---|---|
+| Gemma 4 E4B (5.15 GB) | `AI_BUILTIN_REPO="google/gemma-4-E4B-it-qat-q4_0-gguf"`<br>`AI_BUILTIN_FILE="gemma-4-E4B_q4_0-it.gguf"` | Recommended — the default; good Arabic + English. |
+| Gemma 4 E2B (3.35 GB) | `AI_BUILTIN_REPO="google/gemma-4-E2B-it-qat-q4_0-gguf"`<br>`AI_BUILTIN_FILE="gemma-4-E2B_q4_0-it.gguf"` | Smaller and lighter, for 8 GB laptops. Its Arabic has not been tested yet. |
+
+Prefer Ollama or another AI service? See §6 of [CONFIGURATION.md](../CONFIGURATION.md).
 
 ---
 

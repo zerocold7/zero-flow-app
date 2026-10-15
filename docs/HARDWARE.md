@@ -8,7 +8,7 @@ Zero- Flow runs up to three AI models on your own PC. How fast it feels depends 
 | Model | Does | Runs on |
 |---|---|---|
 | **Whisper** (faster-whisper) | your speech → text | NVIDIA GPU, or the CPU |
-| **Ollama** (a local LLM) | Polish, Translate, fix-line — *only* those keys | whatever Ollama supports: NVIDIA, many AMD cards, or the CPU |
+| **Gemma 4** (the AI, built in) | Polish, Translate, fix-line — *only* those keys | NVIDIA GPU, AMD/Intel cards (Vulkan, untested), or the CPU |
 | **Kokoro** | text → the reading voice (`F4`) | NVIDIA GPU, or the CPU |
 
 Everything works on every tier — the difference is how long you wait. This guide
@@ -37,8 +37,9 @@ Recommended settings (presets/nvidia-desktop.env):
   WHISPER_MODEL_NAME="large-v3"
   ...
 Checks:
-  [ok] torch 2.5.1+cu121 (CUDA build)
-  [!!] Ollama does not have qwen2.5:7b yet: ollama pull qwen2.5:7b
+  [ok] packages installed (this Python); torch 2.5.1+cu121 (CUDA build)
+  [!!] the built-in AI (cuda build) is not installed yet: python tools/get_llama.py
+  [ok] the AI model downloads on first start (about 5.15 GB)
 ```
 
 Then write those settings into your `.env` (everything else you have set is kept, and
@@ -57,13 +58,14 @@ Or skip the script and copy the matching file from [`presets/`](../presets) to `
 
 | Tier | Typical hardware | Speech model | AI model | Voice | Words appear after* |
 |---|---|---|---|---|---|
-| [**NVIDIA desktop**](#nvidia-desktop--8-gb-or-more) | RTX 3060 12 GB, 3070, 4060 Ti, 4070+ | `large-v3` | `qwen2.5:7b` | GPU | **≈1 s** (measured) |
-| [**NVIDIA laptop**](#nvidia-laptop--4-to-7-gb) | RTX 3050, 3060/4050/4060 laptop | `medium` (`small` on 4 GB) | `qwen2.5:3b` | GPU | ≈1 s (estimate) |
-| [**CPU only**](#cpu-only--no-graphics-card) | any laptop/desktop with built-in graphics | `small` (`base` on 8 GB RAM) | `qwen2.5:3b` (`gemma2:2b`) | CPU | ≈2–4 s (estimate) |
-| [**AMD / Intel card**](#amd-radeon--intel-arc) | Radeon RX 6000–9000, Arc A/B | `small` | `qwen2.5:3b`, maybe `7b` | CPU | ≈2–4 s (estimate) |
+| [**NVIDIA desktop**](#nvidia-desktop--8-gb-or-more) | RTX 3060 12 GB, 3070, 4060 Ti, 4070+ | `large-v3` | Gemma 4 E4B, on the card | GPU | **≈1 s** (measured) |
+| [**NVIDIA laptop**](#nvidia-laptop--4-to-7-gb) | RTX 3050, 3060/4050/4060 laptop | `medium` (`small` on 4 GB) | Gemma 4 E4B (E2B on 4–5 GB) | GPU | ≈1 s (estimate) |
+| [**CPU only**](#cpu-only--no-graphics-card) | any laptop/desktop with built-in graphics | `small` (`base` on 8 GB RAM) | Gemma 4 E4B (E2B on 8 GB RAM), on the CPU | CPU | ≈2–4 s (estimate) |
+| [**AMD / Intel card**](#amd-radeon--intel-arc) | Radeon RX 6000–9000, Arc A/B | `small` | Gemma 4 E4B, on the card (Vulkan) | CPU | ≈2–4 s (estimate) |
 
 \* For about 14 seconds of speech, in the *raw* modes (`F5`/`F7`). Polish and Translate
-add the AI model's time on top — about 1–3 s on a GPU, several seconds on a CPU.
+add the AI model's time on top — about 0.3 s on the reference GPU, several seconds on a
+CPU (not yet measured).
 
 ### NVIDIA desktop — 8 GB or more
 [`presets/nvidia-desktop.env`](../presets/nvidia-desktop.env) — everything on the graphics card.
@@ -71,20 +73,23 @@ add the AI model's time on top — about 1–3 s on a GPU, several seconds on a 
 - **Install:** the CUDA build of torch *before* the rest (see [INSTALL.md](INSTALL.md#4-install-the-python-packages)),
   and keep the two `nvidia-` lines in `requirements.txt`.
 - **Graphics memory** (measured on a 12 GB RTX 4070): speech 3.9 GB + voice 1.1 GB +
-  `qwen2.5:7b` ≈ 5.5 GB ≈ **10.5 GB**. Fits 12 GB with room to spare.
+  the AI 3.2 GB — **9.3 GB** in use, with Windows. Fits 12 GB with room to spare.
 - **8–10 GB cards:** the checker switches `WHISPER_COMPUTE_TYPE` to `int8_float16`,
   which halves the speech model to **2.0 GB** for about 0.2 s more per clip (measured).
-- **16 GB and up:** room for a bigger AI model, e.g. `qwen2.5:14b` (≈9 GB) for better
-  Polish and Translate.
+- **16 GB and up:** room for a bigger AI model — through Ollama or LM Studio
+  ([CONFIGURATION.md §6](../CONFIGURATION.md#6-choosing-the-ai-provider)), e.g.
+  `qwen2.5:14b` (≈9 GB).
 
 ### NVIDIA laptop — 4 to 7 GB
 [`presets/nvidia-laptop.env`](../presets/nvidia-laptop.env) — everything on the GPU, with smaller models.
 
 - **Install:** same as the desktop tier (CUDA torch first).
 - **Graphics memory** (estimate): `medium` in `int8_float16` ≈ 1 GB + voice 1.1 GB +
-  `qwen2.5:3b` ≈ 2.5 GB ≈ **4.6 GB**. On 4–5 GB cards the checker picks `small`
-  (≈0.4 GB). If the AI model still does not fit, Ollama puts part of it on the CPU —
-  slower Polish, nothing breaks.
+  Gemma 4 E4B 3.2 GB ≈ **5.3 GB**. On 4–5 GB cards the checker picks `small` (≈0.4 GB)
+  and Gemma 4 E2B (≈2 GB) ≈ **3.5 GB**. Not yet tried on a real laptop card: if the AI
+  does not fit, `flow_debug.log` says *Built-in AI unavailable* and Polish pastes your
+  own words — set `LLAMA_VARIANT="cpu"` (then run `tools\get_llama.py --variant cpu`)
+  to run the AI on the processor instead.
 - **Plug the charger in.** Laptop GPUs slow down a lot on battery.
 
 ### CPU only — no graphics card
@@ -96,8 +101,10 @@ system memory and are no faster than the CPU for these models.
 - **Speed** (measured on an 8-core i7-11700): `large-v3` needs 12.8 s per 14 s clip on
   the CPU — too slow. `small` is about a sixth of its size (estimate: 2–3 s). The voice
   runs at 3× real time: it starts about a second after you press `F4`.
-- **8 GB of RAM:** the checker picks `base` and `gemma2:2b`, and the raw modes
-  (`F5`/`F7`) are the comfortable ones.
+- **The AI** runs on the processor too: a Polish takes a few seconds instead of a
+  fraction of one, and it holds about 5 GB of RAM while the engine runs (estimates).
+- **8 GB of RAM:** the checker picks `base` and the smaller Gemma 4 E2B, and the raw
+  modes (`F5`/`F7`) are the comfortable ones.
 - **Heat:** see [§6](#6-laptops-heat-battery-and-noise).
 - The complete beginner walkthrough for this tier: [SETUP-CPU-LAPTOP.md](SETUP-CPU-LAPTOP.md).
 
@@ -106,9 +113,10 @@ system memory and are no faster than the CPU for these models.
 
 - **Speech and voice run on the CPU**, like the CPU-only tier. On Windows, the speech
   engine (CTranslate2) and the voice (PyTorch) can only use NVIDIA cards.
-- **Ollama can use your card** — many Radeon cards are supported on Windows. After a
-  Polish, run `ollama ps`: if it says `100% GPU` and your card has 8 GB or more, try
-  `OLLAMA_MODEL_NAME="qwen2.5:7b"` for better Polish and Translate at no extra wait.
+- **The AI can use your card:** the checker picks llama.cpp's `vulkan` build, which
+  runs on Radeon and Arc cards. Not yet tried on one — if Polish fails,
+  `flow_debug.log` says why; `LLAMA_VARIANT="cpu"` (with `tools\get_llama.py
+  --variant cpu`) runs it on the processor instead.
 - **Install:** as the CPU-only tier (delete the two `nvidia-` lines).
 
 ---
@@ -167,24 +175,32 @@ words it invented), so it is never the default here.
 | `WHISPER_DEVICE` | `auto` (NVIDIA GPU, else CPU) · `cpu` | `cpu` on machines without an NVIDIA card skips a pointless GPU attempt at start-up. Also useful to leave all graphics memory to a big AI model. |
 | `WHISPER_COMPUTE_TYPE` | `float16` · `int8_float16` · `int8` | `int8_float16` halves graphics memory (measured 3.9 → 2.0 GB) for ≈0.2 s per clip. Use it on cards under 11 GB. The CPU always uses `int8`. |
 
-### AI model — `OLLAMA_MODEL_NAME`
+### AI model
 Used only by Polish (`F6`/`F8`), Translate (`F9`/`F10`), fix-line (`Shift+F3`),
 vocabulary clean-up (`Shift+F1`) and the reader's optional Smart Cleaning. The raw
-modes never touch it. Download it first: `ollama pull <name>`.
+modes never touch it.
 
-| Model | Download | Good for |
-|---|---|---|
-| `gemma2:2b` | ≈1.6 GB | 8 GB RAM machines; basic Polish |
-| `qwen2.5:3b` | ≈1.9 GB | laptops; English. Arabic untested — see below |
-| `qwen2.5:7b` | 4.7 GB | 8 GB+ graphics cards; good English, **unreliable Arabic** (below) |
-| `qwen2.5:14b` | ≈9 GB | 16 GB+ cards |
+It runs **inside the engine** (`AI_PROVIDER="builtin"`, the default): llama.cpp's
+`llama-server`, installed once with `tools\get_llama.py`, with one of two Google
+models. The model downloads by itself the first time the engine starts.
 
-Leave `OLLAMA_MODEL_NAME` blank and the engine uses whichever model Ollama lists first
-— pinning it avoids surprises. `check_hardware.py --apply` never replaces a model you
-have pinned yourself.
+| Model (`AI_BUILTIN_FILE`) | Download | Graphics memory | Good for |
+|---|---|---|---|
+| Gemma 4 E4B *(default)* | 5.15 GB | **3.2 GB** | every tier with room for it; the best Arabic we measured (below) |
+| Gemma 4 E2B | 3.35 GB | ≈2 GB (estimate) | 4–5 GB laptop cards and 8 GB RAM machines — the checker picks it there. Arabic untested |
+
+Switching is two lines in `.env` (`AI_BUILTIN_REPO` and `AI_BUILTIN_FILE` —
+[CONFIGURATION.md §6](../CONFIGURATION.md#a-the-built-in-ai-default)). `check_hardware.py
+--apply` never replaces a model or an AI provider you chose yourself. Which llama.cpp
+build runs it — `LLAMA_VARIANT`: `cuda` (NVIDIA), `vulkan` (AMD Radeon / Intel Arc) or
+`cpu` — is picked from your graphics card.
+
+**Ollama is still an option** (`AI_PROVIDER="ollama"`, then `OLLAMA_MODEL_NAME`, after
+`ollama pull <name>`), and so are other local servers and cloud services
+([CONFIGURATION.md §6](../CONFIGURATION.md#6-choosing-the-ai-provider)).
 
 **Arabic writing, measured.** Three local models, the engine's own prompts, dialect
-input with typical dictation slips, on the RTX 4070 reference PC:
+input with typical dictation slips, on the RTX 4070 reference PC (through Ollama):
 
 | Model | Arabic Polish / English → Arabic | Stays in Arabic | Speed |
 |---|---|---|---|
@@ -192,22 +208,24 @@ input with typical dictation slips, on the RTX 4070 reference PC:
 | `iKhalid/ALLaM:7b` | correct spelling, but keeps fillers and dialect | always | ≈0.4 s |
 | `qwen2.5:7b` | when it stays in Arabic, has slips | **Chinese in 10 of 15 tries** (old prompt), 3 of 15 (new prompt) | ≈0.5 s |
 
-The engine never pastes the Chinese: its language guard falls back to your own words
-(see [CONFIGURATION.md §7](../CONFIGURATION.md#7-customizing-the-ai-behavior-prompts)). But
-if you dictate a lot of Arabic, a model that stays in Arabic gives you polished text
-instead of that fallback. Gemma 4 is a *reasoning* model: without the engine's
-`think: false` it writes ~800 hidden tokens before each answer — 5–9 s instead of 1 s.
+The built-in Gemma 4 E4B (Google's own QAT build) gave the same English and Arabic
+answers as Ollama's in 0.26 s instead of 0.37 s. The engine never pastes the Chinese:
+its language guard falls back to your own words (see
+[CONFIGURATION.md §7](../CONFIGURATION.md#7-customizing-the-ai-behavior-prompts)). But if
+you dictate a lot of Arabic, a model that stays in Arabic gives you polished text
+instead of that fallback. Gemma 4 is a *reasoning* model: the engine switches the
+reasoning off, or it writes hundreds of hidden tokens before each answer — a Polish took
+2.4–7.8 s instead of 0.26 s.
 
-**Loaded before you need it.** The engine loads the AI model while Whisper loads and
-keeps it for `OLLAMA_KEEP_ALIVE` (default 30 minutes) after each use. Measured: the AI
-is ready 6.5–8 s after start-up, dictation ≤0.7 s later than without it, and the first
-Polish takes 0.8 s instead of a 7–12 s reload.
+**Loaded before you need it.** The engine starts the AI while Whisper loads, and it
+stays loaded until the engine exits. Measured: the built-in AI loads in 3.1 s (Ollama
+6.8–7.1 s) and is ready 5.4 s after start-up. (With Ollama, `OLLAMA_KEEP_ALIVE` —
+default 30 minutes — decides how long it stays.)
 
-**Sized for dictation.** The engine asks for an 8,192-token context
-(`OLLAMA_NUM_CTX`). A model file can ask for far more: gemma4-e4b's 131,072 held
-**3.58 GB** of graphics memory against **2.99 GB** — 0.6 GB freed for Whisper and the
-voice, with the same speed (0.37 s per Polish) and answers. Measure your own model
-with `tools/bench/bench_llm.py`.
+**Sized for dictation.** The engine gives the AI an 8,192-token context (`AI_NUM_CTX`;
+`OLLAMA_NUM_CTX` with Ollama) — enough for a five-minute dictation and its answer.
+Gemma 4's own setting, 131,072, held **3.58 GB** of graphics memory against **2.99 GB**
+in Ollama — 0.6 GB freed for Whisper and the voice, with the same speed and answers.
 
 ### Voice — `READER_DEVICE` and batch sizes
 
@@ -227,8 +245,9 @@ with `tools/bench/bench_llm.py`.
 - `flow_debug.log` has the same for every dictation: `…, 1.21s for 14.2s of audio): …`
 - The start-up banner shows where the speech model loaded, e.g.
   `Speech to text: [Whisper large-v3 · GPU · float16]`.
-- `ollama ps` (in PowerShell, right after a Polish) shows whether the AI model sits on
-  the GPU or the CPU.
+- The banner's *AI model* line names the AI and its build, e.g.
+  `Gemma 4 E4B · built in (cuda)`; `builtin_ai.log` (next to `flow_debug.log`) has its
+  own messages, including where it loaded.
 - `nvidia-smi` shows how much graphics memory is in use.
 
 **Symptom → fix**
@@ -237,12 +256,13 @@ with `tools/bench/bench_llm.py`.
 |---|---|---|
 | Words take more than ~3 s after you stop | speech model too big for the device | one size smaller (`large-v3` → `medium` → `small` → `base`) |
 | Banner says `CPU · int8` on an NVIDIA PC | CUDA libraries or driver missing | `flow_debug.log` says why; reinstall `nvidia-cublas-cu12` / `nvidia-cudnn-cu12`, update the NVIDIA driver |
-| Polish / Translate slow, `ollama ps` shows `CPU` | AI model does not fit the card | smaller `OLLAMA_MODEL_NAME`, or `WHISPER_COMPUTE_TYPE="int8_float16"` to free memory |
+| Polish / Translate paste your words unchanged; `flow_debug.log` says *Built-in AI unavailable* | its runtime is missing, or the AI did not fit the card | the reason follows in the log: run `tools\get_llama.py`, or use Gemma 4 E2B, or `WHISPER_COMPUTE_TYPE="int8_float16"` to free memory |
+| Polish / Translate slow on an NVIDIA PC | the AI runs the `cpu` build | the banner shows `built in (cpu)`: set `LLAMA_VARIANT="cuda"` and run `tools\get_llama.py --variant cuda` |
 | Voice takes several seconds to start | voice on the CPU | normal on CPU; lower `READER_FIRST_BATCH_CHARS`, read a paragraph at a time |
 | `reader_debug.log` says "CPU-only build of torch" on an NVIDIA PC | the CPU torch was installed | reinstall torch with the CUDA command in [INSTALL.md](INSTALL.md#4-install-the-python-packages) |
 | Arabic comes out wrong, English is fine | speech model too small for Arabic | `medium` or `large-v3` — Arabic gains the most from size |
 | Arabic Polish / Translate pastes your own words unchanged; `flow_debug.log` says *"The AI did not answer in 'ar'"* | the AI model drifted into another language (often Chinese) and the guard caught it | a model that stays in Arabic — see *Arabic writing, measured* above |
-| The first Polish after a pause takes several seconds | the AI model was unloaded and is reloading | raise `OLLAMA_KEEP_ALIVE` (default `30m`) |
+| With Ollama: the first Polish after a pause takes several seconds | the AI model was unloaded and is reloading | raise `OLLAMA_KEEP_ALIVE` (default `30m`) |
 | Whole PC sluggish while dictating | out of RAM | smaller speech and AI models; close other heavy apps |
 | Random phrases like "Thanks for watching!" from silence | Whisper hallucinating on near-silence | speak closer to the mic; stop recording right after you finish speaking |
 
@@ -256,7 +276,7 @@ with `tools/bench/bench_llm.py`.
   single biggest saving. Use Polish and Translate when you need them.
 - **Plug in** for best speed; on battery, Windows and the GPU both slow down.
 - Work on a hard surface so the vents can breathe.
-- Still too hot? One speech-model size down, and `gemma2:2b` for the AI model.
+- Still too hot? One speech-model size down, and Gemma 4 E2B for the AI model.
 
 ---
 

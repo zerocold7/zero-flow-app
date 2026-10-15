@@ -58,7 +58,7 @@ flowchart LR
         direction LR
         K["F5–F10"] --> M["Microphone"] --> W["Whisper<br/>speech → text"]
         W -->|raw| P["Pasted at<br/>your cursor"]
-        W -->|polish / translate| L["Local AI<br/>(Ollama)"] --> P
+        W -->|polish / translate| L["Built-in AI<br/>(Gemma 4)"] --> P
     end
     subgraph R["Reader"]
         direction LR
@@ -89,13 +89,16 @@ tiers are estimates. Full numbers and tuning: **[HARDWARE.md](docs/HARDWARE.md)*
 ## Quick start
 
 ```powershell
-winget install Python.Python.3.12 ; winget install Git.Git ; winget install Ollama.Ollama
+winget install Python.Python.3.12 ; winget install Git.Git
 cd C:\ ; git clone https://github.com/zerocold7/local-voice-flow.git ; cd local-voice-flow
 python check_hardware.py            # which tier am I?
 ```
 
-Then install the packages for your tier, write your settings, pull the AI model and
-start **`Launch_Zero.bat`** — every step, per tier, in **[docs/INSTALL.md](docs/INSTALL.md)**.
+Then install the packages for your tier, write your settings, install the built-in AI
+(`tools\get_llama.py`) and start **`Launch_Zero.bat`** — every step, per tier, in
+**[docs/INSTALL.md](docs/INSTALL.md)**. No Ollama needed: the AI runs inside the engine
+(Ollama, LM Studio or a cloud AI such as Claude remain options —
+[CONFIGURATION.md §6](CONFIGURATION.md#6-choosing-the-ai-provider)).
 Never done anything like this? The **[Beginner Guide](docs/SETUP-CPU-LAPTOP.md)** walks
 through every click (also as a [printable PDF](docs/Zero-Flow-Setup-Guide.pdf), and
 [in Arabic](docs/SETUP-CPU-LAPTOP.ar.md) · [PDF](docs/Zero-Flow-Setup-Guide.ar.pdf)).
@@ -164,10 +167,11 @@ the tray icon. To start with Windows, see the [FAQ](docs/FAQ.md#can-it-start-wit
 ## Privacy
 
 Audio never leaves the machine: transcription runs on-device (`faster-whisper`), the AI
-runs in your local Ollama, and the voice (`Kokoro`) is local too. The speech and voice
-models download once from Hugging Face — no account or `HF_TOKEN` needed — and after
-that the engine makes **no network requests at all**. The only exception is one you
-choose: pointing it at a cloud AI provider ([CONFIGURATION.md §6](CONFIGURATION.md#6-using-a-different-llm-provider-instead-of-ollama)).
+runs inside the engine (llama.cpp with Google's Gemma 4, listening on this PC only), and
+the voice (`Kokoro`) is local too. The speech, voice and AI models download once from
+Hugging Face — no account or `HF_TOKEN` needed — and after that the engine makes **no
+network requests at all**. The only exception is one you choose: pointing it at a cloud
+AI provider ([CONFIGURATION.md §6](CONFIGURATION.md#6-choosing-the-ai-provider)).
 
 ## For developers
 

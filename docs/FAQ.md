@@ -41,7 +41,7 @@ covers every kind of PC.
 Only to install and to download the models once. After that it runs fully offline:
 your voice, your text and your clipboard never leave the machine. The speech model and
 voice load from your disk with no network request at all. The one exception is if
-*you* point it at a cloud AI provider (see [CONFIGURATION.md §6](../CONFIGURATION.md#6-using-a-different-llm-provider-instead-of-ollama)).
+*you* point it at a cloud AI provider (see [CONFIGURATION.md §6](../CONFIGURATION.md#6-choosing-the-ai-provider)).
 
 ### Which Windows? Mac? Linux?
 Windows 10 or 11, 64-bit. macOS and Linux are not supported: the engine hooks the
@@ -105,12 +105,21 @@ win: use the raw modes `F5`/`F7`, which never run the AI model.
 Either the AI model did not answer — the console then says **"AI unavailable"** — or it
 answered in the wrong language and the engine pasted your own words rather than, say,
 Chinese. `flow_debug.log` says which:
-- `Ollama request failed` — Ollama is not running (start it; its icon sits by the clock).
-- `Ollama returned HTTP 404` — no model by the name in `OLLAMA_MODEL_NAME`; check
-  `ollama list`, or `ollama pull` it.
+- `Built-in AI unavailable: …` — the reason follows. *runtime is not installed*: run
+  `.\venv\Scripts\python.exe tools\get_llama.py` ([INSTALL.md step 6](INSTALL.md#6-install-the-built-in-ai))
+  and restart the engine. A download error: the AI model could not be fetched the
+  first time — check the internet connection and the free disk space (5.15 GB).
+- `AI request failed` / `AI server returned HTTP …` — the AI server did not answer.
+  The built-in AI restarts itself once; if this repeats, look higher in the log for
+  `The built-in AI stopped (code …)`. If the graphics card is short of memory, try the
+  smaller model ([CONFIGURATION.md §6](../CONFIGURATION.md#a-the-built-in-ai-default)).
+- With `AI_PROVIDER="ollama"`: `Ollama request failed` means Ollama is not running
+  (its icon sits by the clock); `Ollama returned HTTP 404` means no model by the name
+  in `OLLAMA_MODEL_NAME` — check `ollama list`, or `ollama pull` it.
+- `Claude gave no answer: …` — with `AI_PROVIDER="claude"`: the reason names a
+  rejected API key, a model the key may not use, or a rate limit.
 - `The AI did not answer in 'ar'` — the model drifted out of Arabic. Some small models
-  do this often; [HARDWARE.md](HARDWARE.md#ai-model--ollama_model_name) lists which
-  ones stay in Arabic.
+  do this often; [HARDWARE.md](HARDWARE.md#ai-model) lists which ones stay in Arabic.
 
 ### It says "already running"
 Only one copy of the engine runs at a time — two would paste every dictation twice. The
