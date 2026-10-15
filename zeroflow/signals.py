@@ -6,13 +6,15 @@ Python state. These are Windows named events in the per-session "Local" namespac
 creating one is free, setting one that nobody is listening to is a no-op, and each
 half works perfectly well when the other is not running at all.
 
-Three signals and one lock:
+Four signals and one lock:
 
     RECORDING       Set by Flow while the microphone is open. The reader refuses to
                     speak while it is set — otherwise the mic picks up the synthetic
                     voice and Whisper transcribes the engine talking to itself.
     SILENCE_READER  Pulsed by Flow when a recording starts, asking the reader to stop
                     speaking immediately.
+    UNLOAD_AI       Pulsed by the tray's "Unload AI model", asking Flow — which started
+                    the AI — to free its memory.
     EXIT            Set by whichever half the user quits from. Under `zero_flow.py`
                     the reader owns the tray icon, so "Exit Engine" is a child-process
                     event that the parent has to hear about.
@@ -38,6 +40,7 @@ INFINITE = 0xFFFFFFFF
 _RECORDING_NAME = "Local\\ZeroFlow.recording"
 _SILENCE_NAME = "Local\\ZeroFlow.silence_reader"
 _EXIT_NAME = "Local\\ZeroFlow.exit"
+_UNLOAD_AI_NAME = "Local\\ZeroFlow.unload_ai"
 _CLIPBOARD_MUTEX_NAME = "Local\\ZeroFlow.clipboard"
 
 try:
@@ -139,6 +142,23 @@ def wait_for_exit(timeout_ms: int = INFINITE) -> bool:
 def exit_requested() -> bool:
     """True if someone has already asked the engine to shut down."""
     return wait_for_exit(0)
+
+
+def request_ai_unload() -> None:
+    """Ask the dictation half to unload the AI model. Under zero_flow.py the tray menu
+    belongs to the reader, while the AI was started by the dictation half."""
+    handle = _event(_UNLOAD_AI_NAME, manual_reset=False)
+    if handle:
+        _kernel32.SetEvent(handle)
+
+
+def wait_for_ai_unload(timeout_ms: int = INFINITE) -> bool:
+    """Dictation: block until someone asks for the AI to be unloaded. False on timeout,
+    and False forever when signalling is unavailable."""
+    handle = _event(_UNLOAD_AI_NAME, manual_reset=False)
+    if not handle:
+        return False
+    return _kernel32.WaitForSingleObject(handle, timeout_ms) == WAIT_OBJECT_0
 
 
 # =====================================================================

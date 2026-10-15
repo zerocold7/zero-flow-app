@@ -137,6 +137,17 @@ its test fails.
 
 238 tests. Each new guard was broken on purpose to confirm its test fails.
 
+### 🧠 Unload the AI when you do not need it
+- **Tray → Unload AI model** frees the AI's memory at once — 3.2 GB of graphics memory
+  with the built-in AI, measured (Ollama is told to drop its model; a cloud AI has
+  nothing on your PC to free). The next Polish, Translate, line fix or Smart clean
+  loads it again by itself: that one takes ~4.5 s instead of ~0.5 s, and the window
+  says "Loading the AI model...".
+- **`AI_LOAD_AT_START="False"`** keeps the AI out of memory when the engine starts,
+  until the first Polish needs it. The default (`True`) still loads it with Whisper.
+
+257 tests; the five new guards were each broken on purpose and caught.
+
 ### 🧹 Checked and cleaned (phases 1–4)
 A top-to-bottom review before the app window, with nothing in it changing what you see
 except where noted.

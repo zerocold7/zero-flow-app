@@ -100,6 +100,7 @@ def start() -> bool:
             ]
         except Exception as e:
             return _unavailable(e)
+        print(f"{ui.C_ACCENT}🧠 Loading the AI model...{ui.C_RESET}", flush=True)
         log = open(os.path.join(log_dir(), "builtin_ai.log"), "a", encoding="utf-8")
         try:
             _process = subprocess.Popen(command, stdout=log, stderr=subprocess.STDOUT,
@@ -158,6 +159,17 @@ def ask(raw_text: str, context_text: str | None, instruction: str,
 
 def warm_up() -> None:
     start()
+
+
+def unload() -> bool:
+    """Stop the server this process started, freeing the model's memory (~3.2 GB of
+    graphics memory for Gemma 4 E4B). The next request starts it again."""
+    with _lock:
+        running = _process is not None and _process.poll() is None
+        stop()
+    if running:
+        logging.info("Built-in AI unloaded; it loads again on the next request.")
+    return running
 
 
 def _model_label() -> str:

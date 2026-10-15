@@ -1,8 +1,8 @@
 """What an AI provider gives the engine.
 
 The engine never calls a provider directly: it calls zeroflow.llm (ask_ai, warm_up_ai,
-model_name), which hands the call to the active provider. A provider is a module with
-these three functions, so adding one changes nothing in the engine.
+unload_ai, model_name), which hands the call to the active provider. A provider is a
+module with these four functions, so adding one changes nothing in the engine.
 """
 from typing import Protocol
 
@@ -16,6 +16,10 @@ class Provider(Protocol):
 
     def warm_up(self) -> None:
         """Load the model ahead of the first request; quiet if that is not possible."""
+
+    def unload(self) -> bool:
+        """Free the model's memory now; the next request loads it again by itself.
+        True if something was unloaded (a cloud AI has nothing on this PC to free)."""
 
     def model_name(self) -> str:
         """The model in use, as shown in the start-up banner."""

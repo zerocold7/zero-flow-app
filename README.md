@@ -127,7 +127,8 @@ Arabic: *"سطر جديد"*, *"قائمة"* (bullet), *"تنسيق كود"* (cod
 *"نقطة"*, *"فاصلة"*, *"علامة استفهام"* for **.** **،** **؟**
 
 **Tray menu** (by the clock): choose the voice, turn on Smart Cleaning for the reader,
-suspend the reader, or **Exit Engine**. Windows hides new tray icons — click `^` by the
+suspend the reader, **Unload AI model** (frees its memory; the next Polish loads it
+again), or **Exit Engine**. Windows hides new tray icons — click `^` by the
 clock to find it.
 
 ## Launchers

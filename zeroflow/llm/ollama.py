@@ -108,5 +108,21 @@ def warm_up() -> None:
                         f"{response.text[:200]}")
 
 
+def unload() -> bool:
+    """Ask Ollama to drop the model from memory now (keep_alive 0); its next request
+    loads it again."""
+    model = get_ollama_model()
+    try:
+        response = requests.post(OLLAMA_HOST_URL, json={"model": model, "keep_alive": 0},
+                                 timeout=10)
+    except Exception as e:
+        logging.info(f"Ollama unload skipped: {e}")
+        return False
+    if response.status_code == 200:
+        logging.info(f"Ollama unloaded '{model}'.")
+        return True
+    return False
+
+
 def model_name() -> str:
     return get_ollama_model()

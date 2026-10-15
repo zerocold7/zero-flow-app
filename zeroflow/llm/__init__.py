@@ -1,6 +1,6 @@
 """The AI model, whichever provider runs it.
 
-The engine and the reader call ask_ai, warm_up_ai and model_name; each hands the call
+The engine and the reader call ask_ai, warm_up_ai, unload_ai and model_name; each hands the call
 to the active provider (zeroflow.llm.base.Provider), chosen with AI_PROVIDER in .env:
 
     builtin  llama-server, run by the engine itself (llm.builtin) — the default
@@ -55,6 +55,11 @@ def ask_ai(raw_text: str, context_text: str | None, instruction: str,
 
 def warm_up_ai() -> None:
     provider.warm_up()
+
+
+def unload_ai() -> bool:
+    """Free the AI model's memory until the next request loads it again."""
+    return provider.unload()
 
 
 def model_name() -> str:

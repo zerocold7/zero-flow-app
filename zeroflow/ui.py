@@ -203,12 +203,14 @@ def exit_action(icon, item):
     os._exit(0)
 
 
-def setup_system_tray() -> None:
+def setup_system_tray(on_unload_ai=None) -> None:
+    """The dictation half's own tray icon (when it runs without the reader)."""
     global tray_icon
     icon_image = load_tray_icon("logo_tray.ico", 'white')
-
+    items = [pystray.MenuItem("Unload AI model", lambda icon, item: on_unload_ai()),
+             pystray.Menu.SEPARATOR] if on_unload_ai else []
     tray_icon = pystray.Icon("ZeroFlow", icon_image, "Zero- Flow Engine", menu=pystray.Menu(
-        pystray.MenuItem("Exit Engine", exit_action)
+        *items, pystray.MenuItem("Exit Engine", exit_action)
     ))
     threading.Thread(target=tray_icon.run, daemon=True).start()
 
