@@ -104,6 +104,39 @@ its test fails.
 
 196 tests.
 
+### 🧠 The AI built in (phase 4)
+- **No Ollama needed.** The engine runs llama.cpp's `llama-server` itself, as a hidden
+  child process tied to the engine (a crash or End task takes it down too), with
+  Google's **Gemma 4 E4B** (Apache 2.0), downloaded once on first start (5.15 GB). It is
+  the new default (`AI_PROVIDER="builtin"`); Ollama stays one setting away.
+- **Faster than Ollama, the same answers.** Measured on an RTX 4070: loads in 3.1 s
+  (Ollama 6.8–7.1 s), a Polish takes 0.26 s (0.37 s), 3.2 GB of graphics memory — 9.3 of
+  12.3 GB with Whisper and the voice. Through the real engine the AI is ready 5.4 s after
+  start-up. Gemma's "thinking" is switched off: with it on, Polish took 2.4–7.8 s.
+- **`tools/get_llama.py`** installs the runtime for the PC's graphics: `cuda` (NVIDIA,
+  625 MB), `vulkan` (AMD Radeon / Intel Arc, 31 MB) or `cpu` (19 MB), from the pinned
+  llama.cpp release b11619. Every archive is checked against its published SHA-256 and
+  refused if it differs or would write outside its folder. Without it, the engine says
+  so at start-up and uses Ollama.
+- **One server for both halves:** it listens on a fixed local port, so the reader uses
+  the engine's server instead of loading the model a second time. A server that stops is
+  restarted on the next request, and the log says so (`builtin_ai.log`).
+- **Hardware tiers** pick the build, and Google's smaller **Gemma 4 E2B** (3.35 GB) for a
+  4–5 GB laptop card or 8 GB of RAM; the banner names whichever model runs. Not yet
+  tried on real hardware: the Vulkan build, and E2B's Arabic.
+- **Your own API key:** `AI_PROVIDER="claude"` uses Anthropic's Claude (`AI_API_KEY`;
+  `claude-opus-5-5` unless `AI_MODEL` names another), through Anthropic's SDK, with the
+  server-side refusal fallback on. `AI_PROVIDER="openai"` covers OpenAI-format services.
+  A rejected key, a refusal or an outage pastes your own words, and says why.
+- `check_hardware.py` reports whether the built-in AI is installed and its model
+  downloaded, and asks Ollama only when it is the provider; `--apply` keeps an AI
+  provider or model you chose.
+
+- **Docs:** the install guides, both beginner guides (and their PDFs), HARDWARE,
+  CONFIGURATION §6 (every provider), the FAQ and ARCHITECTURE describe the built-in AI.
+
+238 tests. Each new guard was broken on purpose to confirm its test fails.
+
 ---
 
 ## [1.5.1] — 2026-10-14 — A fresh install works again

@@ -6,6 +6,7 @@ flow_vocabulary.txt*
 flow_history.md
 flow_debug.log*
 reader_debug.log*
+builtin_ai.log*
 *_crash.log
 
 # Doc-tool dependencies (tools/README.md)
@@ -32,3 +33,6 @@ docs/*.docx
 tools/bench/clips/
 tools/bench/mine/
 tools/bench/results/
+
+# The built-in AI runtime (tools/get_llama.py)
+runtime/

@@ -21,13 +21,20 @@ from zeroflow.vocabulary import _absorb_learned_word
 def ask(raw_text: str, context_text: str | None, instruction: str,
         timeout: float = 15.0) -> str | None:
     """The model's answer, or None — with the reason logged and shown as a toast."""
+    return chat(AI_URL, AI_MODEL, AI_API_KEY, raw_text, context_text, instruction, timeout)
+
+
+def chat(url: str, model: str, api_key: str, raw_text: str, context_text: str | None,
+         instruction: str, timeout: float = 15.0) -> str | None:
+    """One request to a chat/completions server at `url` — also used by the built-in
+    provider, whose llama-server speaks this format."""
     user = f"Context Window Data:\n{context_text}\n\n" if context_text else ""
     user += f"Input Raw String: {raw_text}\nOutput String:"
-    headers = {"Authorization": f"Bearer {AI_API_KEY}"} if AI_API_KEY else {}
+    headers = {"Authorization": f"Bearer {api_key}"} if api_key else {}
     ui.start_processing_spinner("AI Processing")
     try:
-        response = requests.post(AI_URL, headers=headers, timeout=timeout, json={
-            "model": AI_MODEL,
+        response = requests.post(url, headers=headers, timeout=timeout, json={
+            "model": model,
             "messages": [{"role": "system", "content": instruction},
                          {"role": "user", "content": user}],
             "temperature": 0.2,

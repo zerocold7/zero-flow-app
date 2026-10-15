@@ -25,10 +25,15 @@ only set what you want to change.
 | `WHISPER_MODEL_NAME` | `large-v3` | Speech model — accuracy vs. speed/VRAM (see §3) |
 | `WHISPER_DEVICE` | `auto` | `auto` = NVIDIA GPU, falling back to CPU · `cpu` = skip the GPU (see §5) |
 | `WHISPER_COMPUTE_TYPE` | `float16` | GPU precision; `int8_float16` halves graphics memory (see §5) |
-| `AI_PROVIDER` | `ollama` | Which AI server: `ollama`, or `openai` for any server speaking the OpenAI chat format — then `AI_URL`, `AI_MODEL`, `AI_API_KEY` (see §6) |
-| `OLLAMA_HOST_URL` | `http://127.0.0.1:11434/api/generate` | Where the LLM lives (see §6) |
-| `OLLAMA_MODEL_NAME` | *(blank)* | Pin an exact model, e.g. `qwen2.5:7b`. Blank = auto-pick the first model Ollama serves |
-| `FALLBACK_LLM` | `gemma2:27b` | Model name used only if Ollama is unreachable |
+| `AI_PROVIDER` | `builtin` | Which AI runs Polish and Translate: `builtin` (inside the engine), `ollama`, `openai` (any server speaking the OpenAI chat format) or `claude` (see §6) |
+| `LLAMA_VARIANT` | `auto` | The built-in AI's build: `auto` (from the graphics card), `cuda`, `vulkan` or `cpu` |
+| `AI_BUILTIN_REPO` / `AI_BUILTIN_FILE` | Gemma 4 E4B | The built-in AI's model on Hugging Face (Gemma 4 E2B is smaller — see §6) |
+| `AI_NUM_CTX` | `8192` | The built-in AI's working memory, in tokens |
+| `AI_BUILTIN_PORT` | `39281` | The local port the built-in AI listens on (this PC only) |
+| `AI_URL` / `AI_MODEL` / `AI_API_KEY` | *(blank)* | For `openai` and `claude` (see §6) |
+| `OLLAMA_HOST_URL` | `http://127.0.0.1:11434/api/generate` | `ollama` only: where Ollama listens |
+| `OLLAMA_MODEL_NAME` | *(blank)* | `ollama` only: pin an exact model, e.g. `qwen2.5:7b`. Blank = auto-pick the first model Ollama serves |
+| `FALLBACK_LLM` | `gemma2:27b` | `ollama` only: model name used if Ollama is unreachable |
 | `SAMPLE_RATE` | `16000` | Mic sample rate (Hz). Whisper expects 16000 — leave it |
 | `CHANNELS` | `1` | Mic channels (mono). Leave it |
 | `MAX_RECORDING_SECONDS` | `300` | A recording left running stops by itself after this many seconds, and is transcribed as usual |
@@ -41,8 +46,8 @@ only set what you want to change.
 | `READER_SMART_MAX_CHARS` | `1000` | Selections longer than this skip the LLM pass |
 | `READER_LLM_TIMEOUT` | `10` | Seconds to wait for the LLM before speaking anyway |
 | `READER_DEVICE` | `auto` | `auto` / `cpu` / `cuda` for the voice model (see §10) |
-| `OLLAMA_KEEP_ALIVE` | `30m` | How long the AI model stays loaded after use. The engine also loads it at start-up, so the first Polish is instant. `0` unloads at once (frees memory) |
-| `OLLAMA_NUM_CTX` | `8192` | The AI model's working memory, in tokens. Enough for a five-minute dictation and its answer; gemma4-e4b's own setting (131,072) held 0.6 GB more graphics memory for nothing. `0` keeps the model's own |
+| `OLLAMA_KEEP_ALIVE` | `30m` | `ollama` only: how long the AI model stays loaded after use. The engine also loads it at start-up, so the first Polish is instant. `0` unloads at once (frees memory) |
+| `OLLAMA_NUM_CTX` | `8192` | `ollama` only: the AI model's working memory, in tokens. Enough for a five-minute dictation and its answer; gemma4-e4b's own setting (131,072) held 0.6 GB more graphics memory for nothing. `0` keeps the model's own |
 | `READER_FIRST_BATCH_CHARS` | `120` | Size of the first chunk of text sent to the voice (see §10) |
 | `READER_BATCH_CHARS` | `300` | Size of every chunk after the first (see §10) |
 
@@ -189,49 +194,97 @@ in `reader_debug.log`. `READER_DEVICE` (§10) chooses the device explicitly.
 
 ---
 
-## 6. Using a different LLM provider (instead of Ollama)
-The LLM is only used for **Polish**, **Translate**, the **line-fix / maintenance**
+## 6. Choosing the AI provider
+The AI model is only used for **Polish**, **Translate**, the **line-fix / maintenance**
 actions and the reader's optional **Smart LLM Cleaning** — transcription itself is
 always local Whisper. Both halves reach it through `zeroflow/llm`, which hands every
 request to the provider named by `AI_PROVIDER` in `.env`:
 
 | `AI_PROVIDER` | Talks to | Settings |
 |---|---|---|
-| `ollama` *(default)* | a local Ollama server | `OLLAMA_HOST_URL`, `OLLAMA_MODEL_NAME`, `OLLAMA_KEEP_ALIVE`, `OLLAMA_NUM_CTX` |
-| `openai` | any server speaking the OpenAI `chat/completions` format — LM Studio, the llama.cpp server, vLLM, or a cloud service such as OpenAI or Groq | `AI_URL`, `AI_MODEL`, `AI_API_KEY` |
+| `builtin` *(default)* | llama.cpp's `llama-server`, started and stopped by the engine itself, with Google's Gemma 4 E4B | `LLAMA_VARIANT`, `AI_BUILTIN_REPO`, `AI_BUILTIN_FILE`, `AI_NUM_CTX`, `AI_BUILTIN_PORT` |
+| `ollama` | a local Ollama server | `OLLAMA_HOST_URL`, `OLLAMA_MODEL_NAME`, `FALLBACK_LLM`, `OLLAMA_KEEP_ALIVE`, `OLLAMA_NUM_CTX` |
+| `openai` | any server speaking the OpenAI `chat/completions` format — LM Studio, a llama.cpp server you run yourself, vLLM, or a cloud service such as OpenAI or Groq | `AI_URL`, `AI_MODEL`, `AI_API_KEY` |
+| `claude` | Anthropic's Claude, with your API key | `AI_API_KEY`, `AI_MODEL` |
 
-### A) A local server (LM Studio, llama.cpp server, vLLM)
+An unknown name is reported at start-up (in the window, the log and a pop-up) and Ollama
+is used. Whatever the provider, an unreachable server, an error or an empty answer makes
+Polish and Translate say **"AI unavailable"** and paste your own words.
+
+### A) The built-in AI (default)
+Nothing to run by hand: the engine starts `llama-server` as a hidden child process the
+first time the AI is needed (at start-up, while Whisper loads), and it stops with the
+engine — even after a crash. The reader uses the same server, so the model is in memory
+once. Install the server once with `.\venv\Scripts\python.exe tools\get_llama.py`
+([docs/INSTALL.md step 6](docs/INSTALL.md#6-install-the-built-in-ai)); the model downloads
+from Hugging Face the first time the engine starts, then loads from the local cache.
+
+```ini
+AI_PROVIDER="builtin"
+LLAMA_VARIANT="auto"     # auto = from your graphics card: cuda (NVIDIA), vulkan (AMD Radeon /
+                         # Intel Arc — not tested yet), otherwise cpu
+AI_BUILTIN_REPO="google/gemma-4-E4B-it-qat-q4_0-gguf"
+AI_BUILTIN_FILE="gemma-4-E4B_q4_0-it.gguf"
+AI_NUM_CTX=8192          # working memory in tokens: a five-minute dictation and its answer
+AI_BUILTIN_PORT=39281    # the local port it listens on (127.0.0.1, this PC only)
+```
+
+| Model | Download | When |
+|---|---|---|
+| Gemma 4 E4B (`google/gemma-4-E4B-it-qat-q4_0-gguf`, `gemma-4-E4B_q4_0-it.gguf`) | 5.15 GB | the default; English and Arabic tested |
+| Gemma 4 E2B (`google/gemma-4-E2B-it-qat-q4_0-gguf`, `gemma-4-E2B_q4_0-it.gguf`) | 3.35 GB | `check_hardware.py` picks it for 4–5 GB laptop cards and 8 GB of RAM or less; its Arabic has not been tested yet |
+
+Both are Google's own quantised builds, under the Apache 2.0 licence. Measured on an
+RTX 4070 against Ollama: it loads in 3.1 s (Ollama 6.8–7.1 s), answers a Polish in
+0.26 s (0.37 s) with the same English and Arabic, and holds about 3.2 GB of graphics
+memory. If `runtime\llama\<build>\` is missing, the engine says so at start-up — naming
+`tools/get_llama.py` — and uses Ollama instead. If the server stops while the engine
+runs, the next request starts it again.
+
+### B) Ollama
+```ini
+AI_PROVIDER="ollama"
+OLLAMA_MODEL_NAME="qwen2.5:7b"    # as `ollama list` names it; blank = the first one Ollama serves
+```
+Install Ollama from [ollama.com](https://ollama.com) and `ollama pull` the model first.
+
+### C) A local server you run (LM Studio, llama.cpp server, vLLM)
 ```ini
 AI_PROVIDER="openai"
 AI_URL="http://localhost:1234/v1/chat/completions"   # LM Studio; llama.cpp's server uses port 8080
 AI_MODEL="your-model-id"                             # as the server names it
 ```
 
-### B) A cloud service (OpenAI, Groq, Together…)
+### D) A cloud service with an API key
+OpenAI, Groq, Together and others speak the OpenAI format:
 ```ini
 AI_PROVIDER="openai"
 AI_URL="https://api.openai.com/v1/chat/completions"
 AI_MODEL="the-model-id"
 AI_API_KEY="sk-..."
 ```
-Cloud round-trips are slower than a local model. Whatever the provider, an
-unreachable server, an error or an empty answer makes Polish and Translate say
-**"AI unavailable"** and paste your own words.
+Anthropic's Claude has its own provider:
+```ini
+AI_PROVIDER="claude"
+AI_API_KEY="sk-ant-..."    # blank = the key in ANTHROPIC_API_KEY
+AI_MODEL=""                # blank = claude-opus-5-5; claude-sonnet-5-5 or claude-haiku-5-5 cost less
+```
+It answers a declined request on another model automatically, and reports a rejected
+key, a model your key may not use, or a rate limit as a pop-up. Cloud round-trips are
+slower than a local model. (The app window, phase 5, will keep the key in Windows
+Credential Manager instead of `.env`.)
 
-### C) Another kind of API (Anthropic / Claude, anything else)
+### E) Anything else
 Write a provider: a module in `zeroflow/llm/` with the three functions described in
 `zeroflow/llm/base.py` — `ask(raw_text, context_text, instruction, timeout)` returning
 the answer or `None`, `warm_up()`, and `model_name()`. `zeroflow/llm/openai_compatible.py`
 is a complete example to copy (about 50 lines). Add it to `PROVIDERS` in
-`zeroflow/llm/__init__.py`, then set `AI_PROVIDER` to its name. For Claude, the request
-goes to `https://api.anthropic.com/v1/messages` with the headers `x-api-key` and
-`anthropic-version: 2023-06-01`, the instruction as `"system"`, the text as the one
-`"user"` message, and `"max_tokens"`; the answer is in `response.json()["content"][0]["text"]`.
+`zeroflow/llm/__init__.py`, then set `AI_PROVIDER` to its name.
 
-> ⚠️ **Privacy:** with a **cloud** provider, the text you dictate (and clipboard
-> context in Polish mode) is sent to that company's servers. Local servers (Ollama,
-> LM Studio, llama.cpp) keep everything on your machine. Your `AI_API_KEY` lives only
-> in `.env`, which is git-ignored.
+> ⚠️ **Privacy:** with a **cloud** provider (`claude`, or `openai` pointed at a cloud
+> service), the text you dictate (and clipboard context in Polish mode) is sent to that
+> company's servers. The built-in AI, Ollama, LM Studio and llama.cpp keep everything on
+> your machine. Your `AI_API_KEY` lives only in `.env`, which is git-ignored.
 
 ---
 
@@ -258,7 +311,7 @@ wrong language it pastes your own words instead, and `flow_debug.log` records wh
 model said. Arabic answers also lose any vowel marks the model adds unasked (tanween on
 alif stays: *جدًا*). Some small models need this: `qwen2.5:7b` answered Arabic Polish in
 Chinese in 5 tries out of 5 with the old prompt. Which models write the best Arabic:
-[docs/HARDWARE.md §4](docs/HARDWARE.md#ai-model--ollama_model_name).
+[docs/HARDWARE.md §4](docs/HARDWARE.md#ai-model).
 
 **Only the English prompt teaches words.** `[LEARN: …]` is in `STANDARD_SYSTEM_PROMPT`
 alone, and a word is only learned if it appears in what you actually said — models
@@ -339,7 +392,7 @@ cookie notices and footnote markers. It never summarises, and if the LLM is slow
 unreachable, or the selection is longer than `READER_SMART_MAX_CHARS`, the reader
 falls back to the instant regex clean — it never goes silent waiting for the model.
 
-> **Cold-model note:** Ollama unloads an idle model after a few minutes. The first
+> **Cold-model note (Ollama only):** Ollama unloads an idle model after `OLLAMA_KEEP_ALIVE`. The first
 > smart read after that spends its whole timeout waiting for the model to load and
 > falls back to the regex clean; the next one is warm and works. Raise
 > `READER_LLM_TIMEOUT` if you would rather wait than fall back.
