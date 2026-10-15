@@ -60,8 +60,8 @@ def _model_path() -> str:
     try:
         return hf_hub_download(AI_BUILTIN_REPO, AI_BUILTIN_FILE, local_files_only=True)
     except Exception:
-        print(f"{ui.C_ACCENT}⬇️  Downloading the AI model {AI_BUILTIN_FILE} "
-              f"(5 GB, first run only)...{ui.C_RESET}")
+        print(f"{ui.C_ACCENT}⬇️  Downloading the AI model, {_model_label()} "
+              f"(3–5 GB, first run only)...{ui.C_RESET}")
         logging.info(f"Downloading the built-in AI model {AI_BUILTIN_REPO}/{AI_BUILTIN_FILE}.")
         return hf_hub_download(AI_BUILTIN_REPO, AI_BUILTIN_FILE)
 
@@ -160,5 +160,13 @@ def warm_up() -> None:
     start()
 
 
+def _model_label() -> str:
+    """'Gemma 4 E4B' for Google's Gemma 4 files, otherwise the file's own name."""
+    for size in ("E4B", "E2B"):
+        if AI_BUILTIN_FILE.startswith(f"gemma-4-{size}"):
+            return f"Gemma 4 {size}"
+    return AI_BUILTIN_FILE.removesuffix(".gguf")
+
+
 def model_name() -> str:
-    return f"Gemma 4 E4B · built in ({_variant()})"
+    return f"{_model_label()} · built in ({_variant()})"

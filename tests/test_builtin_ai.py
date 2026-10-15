@@ -152,5 +152,23 @@ class TestChoosingTheBuiltinProvider(unittest.TestCase):
             self.assertFalse(builtin.available())
 
 
+class TestNamingTheModel(unittest.TestCase):
+    """The banner and the first-run download name the model actually configured."""
+
+    def test_the_default_model_is_named_e4b(self):
+        with mock.patch.object(builtin, "_variant", return_value="cuda"):
+            self.assertEqual(builtin.model_name(), "Gemma 4 E4B · built in (cuda)")
+
+    def test_the_smaller_model_is_named_e2b(self):
+        with mock.patch.object(builtin, "AI_BUILTIN_FILE", "gemma-4-E2B_q4_0-it.gguf"), \
+             mock.patch.object(builtin, "_variant", return_value="cpu"):
+            self.assertEqual(builtin.model_name(), "Gemma 4 E2B · built in (cpu)")
+
+    def test_another_model_is_named_by_its_file(self):
+        with mock.patch.object(builtin, "AI_BUILTIN_FILE", "Qwen3-4B-Q4_K_M.gguf"), \
+             mock.patch.object(builtin, "_variant", return_value="cuda"):
+            self.assertEqual(builtin.model_name(), "Qwen3-4B-Q4_K_M · built in (cuda)")
+
+
 if __name__ == "__main__":
     unittest.main()

@@ -84,8 +84,8 @@ def choice(name: str, default: str, allowed: tuple[str, ...]) -> str:
 
 # ---------------------------------------------------------------- the AI model
 # Which provider runs it (zeroflow/llm): "builtin" (llama-server, run by the engine), "ollama",
-# or "openai" for any server speaking the OpenAI chat format — then AI_URL, AI_MODEL and,
-# for a cloud service, AI_API_KEY.
+# "openai" for any server speaking the OpenAI chat format — then AI_URL, AI_MODEL and, for a
+# cloud service, AI_API_KEY — or "claude" (Anthropic, with AI_API_KEY and optionally AI_MODEL).
 AI_PROVIDER = text("AI_PROVIDER", "builtin").lower()
 AI_URL = text("AI_URL", "http://127.0.0.1:8080/v1/chat/completions")
 AI_MODEL = text("AI_MODEL", "")
