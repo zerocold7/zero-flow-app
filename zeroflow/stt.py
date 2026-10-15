@@ -247,6 +247,8 @@ def transcribe_audio(audio: np.ndarray, language: str) -> tuple[str | None, str 
     written to disk."""
     clip = (audio.mean(axis=1) if audio.ndim == 2 else audio).astype(np.float32)
     peak = float(np.max(np.abs(clip))) if len(clip) else 0.0
+    # Normalised to full scale, however quiet. Capping the boost at 10x was measured: quiet
+    # Arabic got worse (55% -> 58% character errors) and no fewer words were invented.
     if peak > 0:
-        clip = clip / peak                       # normalise to full scale
+        clip = clip / peak
     return transcribe_clip(language, clip, recorded=audio)
