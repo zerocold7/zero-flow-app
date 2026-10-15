@@ -82,7 +82,6 @@ class CaptureTestCase(unittest.TestCase):
         self.mic = FakeMicrophone()
         self.transcribed = []                 # (mode, audio) for every clip processed
         self.recording_signal = []            # what the reader was told, in order
-        self.done = threading.Event()
 
         def transcribe(audio, mode, context):
             self.transcribed.append((mode, audio.copy()))
