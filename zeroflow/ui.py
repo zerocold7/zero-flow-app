@@ -11,22 +11,23 @@ Chimes and toasts run on their own threads: a blocking call on a keyboard-hook t
 freezes the whole keyboard. `win11toast` is imported lazily for a load-order reason
 explained in show_toast().
 """
+import ctypes
 import logging
 import os
 import sys
+import threading
 import time
 import winsound
-import ctypes
-import threading
-from colorama import init, Fore, Style
+
 import pystray
+from colorama import Fore, Style, init
 from PIL import Image, ImageDraw
 
 from zeroflow.paths import BASE_DIR
 
 init()
 
-# Vibe Colors
+# Console colours
 C_ACCENT = Fore.CYAN
 C_GOOD = Fore.GREEN
 C_WARN = Fore.YELLOW
@@ -36,11 +37,13 @@ C_RESET = Style.RESET_ALL
 spinner_active = False
 tray_icon = None
 
+
 def update_console_title(status: str) -> None:
     try:
         ctypes.windll.kernel32.SetConsoleTitleW(f"Zero- Core [{status}]")
     except Exception:                            # no console (started hidden)
         pass
+
 
 def set_window_icon(filename: str = "logo_tray.ico") -> None:
     """Apply the logo to the console window (title bar + taskbar entry)."""
@@ -56,10 +59,12 @@ def set_window_icon(filename: str = "logo_tray.ico") -> None:
     except Exception:
         pass
 
+
 MB_ICONERROR = 0x10
 MB_ICONINFORMATION = 0x40
 MB_SETFOREGROUND = 0x10000
 MB_TOPMOST = 0x40000
+
 
 def alert(title: str, text: str, icon: int = MB_ICONERROR) -> None:
     """A Windows message box, which blocks until dismissed. For the few things that
@@ -69,6 +74,7 @@ def alert(title: str, text: str, icon: int = MB_ICONERROR) -> None:
         ctypes.windll.user32.MessageBoxW(None, text, title, icon | MB_SETFOREGROUND | MB_TOPMOST)
     except Exception:
         pass
+
 
 def report_setting_problems(problems: list[str], enable_toasts: bool = True) -> None:
     """Say which .env settings were ignored, and why — in the console, the log and a
@@ -81,6 +87,7 @@ def report_setting_problems(problems: list[str], enable_toasts: bool = True) -> 
                    f"{len(problems)} setting(s) in .env were ignored — the defaults are "
                    f"used. Details in the log.", enable_toasts)
 
+
 def already_running(what: str = "Zero- Flow") -> None:
     """Tell the user a second copy was not started, and why."""
     print(f"{C_WARN}{what} is already running — look for its icon by the clock. "
@@ -88,6 +95,7 @@ def already_running(what: str = "Zero- Flow") -> None:
     alert(what, f"{what} is already running — look for its icon by the clock.\n\n"
                 f"Running two copies would paste every dictation twice, so this one "
                 f"has not started.", MB_ICONINFORMATION)
+
 
 def show_toast(title: str, body: str = "", enable_toasts: bool = True) -> None:
     if enable_toasts:
@@ -110,6 +118,7 @@ def show_toast(title: str, body: str = "", enable_toasts: bool = True) -> None:
                 pass
         threading.Thread(target=_fire, daemon=True).start()
 
+
 def play_tone(tone_type: str, enable_chimes: bool = True) -> None:
     if not enable_chimes:
         return
@@ -128,6 +137,7 @@ def play_tone(tone_type: str, enable_chimes: bool = True) -> None:
         for f, d in seq:
             winsound.Beep(f, d)
     threading.Thread(target=_beep, daemon=True).start()
+
 
 def print_banner(title: str, about: list[tuple[str, str]], sections: list) -> None:
     """The start-up banner, for all three ways of running the engine.
@@ -152,6 +162,7 @@ def print_banner(title: str, about: list[tuple[str, str]], sections: list) -> No
         print(line)
         time.sleep(0.03)
 
+
 def start_processing_spinner(message: str = "AI Processing") -> None:
     global spinner_active
     spinner_active = True
@@ -166,10 +177,12 @@ def start_processing_spinner(message: str = "AI Processing") -> None:
         sys.stdout.write("\r" + " " * 50 + "\r")
     threading.Thread(target=spin, daemon=True).start()
 
+
 def stop_processing_spinner() -> None:
     global spinner_active
     spinner_active = False
     time.sleep(0.15)
+
 
 def create_image(color1: str, color2: str) -> Image.Image:
     image = Image.new('RGB', (64, 64), color1)
@@ -177,15 +190,18 @@ def create_image(color1: str, color2: str) -> Image.Image:
     dc.rectangle((16, 16, 48, 48), fill=color2)
     return image
 
+
 def load_tray_icon(filename: str, fallback_fg: str = 'white') -> Image.Image:
     try:
         return Image.open(os.path.join(BASE_DIR, filename))
     except Exception:
         return create_image('black', fallback_fg)
 
+
 def exit_action(icon, item):
     icon.stop()
     os._exit(0)
+
 
 def setup_system_tray() -> None:
     global tray_icon
@@ -196,8 +212,8 @@ def setup_system_tray() -> None:
     ))
     threading.Thread(target=tray_icon.run, daemon=True).start()
 
+
 def set_tray_state(is_recording: bool) -> None:
-    global tray_icon
     if tray_icon:
         # Single transparent icon; recording state is shown in the tooltip title.
         tray_icon.title = "Zero- Flow Engine  ●  RECORDING" if is_recording else "Zero- Flow Engine"

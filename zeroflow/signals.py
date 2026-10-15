@@ -29,10 +29,10 @@ existed.
 import ctypes
 import logging
 import subprocess
+import threading
 
 WAIT_OBJECT_0 = 0x00000000
 WAIT_ABANDONED = 0x00000080
-WAIT_TIMEOUT = 0x00000102
 INFINITE = 0xFFFFFFFF
 
 _RECORDING_NAME = "Local\\ZeroFlow.recording"
@@ -41,16 +41,24 @@ _EXIT_NAME = "Local\\ZeroFlow.exit"
 _CLIPBOARD_MUTEX_NAME = "Local\\ZeroFlow.clipboard"
 
 try:
-    _kernel32 = ctypes.windll.kernel32
+    # Our own handle on kernel32 (not the shared ctypes.windll one, whose function
+    # signatures other code may rely on), with the error code kept for each call.
+    _kernel32 = ctypes.WinDLL("kernel32", use_last_error=True)
     _kernel32.CreateEventW.restype = ctypes.c_void_p
     _kernel32.CreateEventW.argtypes = [ctypes.c_void_p, ctypes.c_bool, ctypes.c_bool,
                                        ctypes.c_wchar_p]
     _kernel32.CreateMutexW.restype = ctypes.c_void_p
     _kernel32.CreateMutexW.argtypes = [ctypes.c_void_p, ctypes.c_bool, ctypes.c_wchar_p]
     _kernel32.ReleaseMutex.argtypes = [ctypes.c_void_p]
+    _kernel32.CloseHandle.argtypes = [ctypes.c_void_p]
     _kernel32.SetEvent.argtypes = [ctypes.c_void_p]
     _kernel32.ResetEvent.argtypes = [ctypes.c_void_p]
     _kernel32.WaitForSingleObject.argtypes = [ctypes.c_void_p, ctypes.c_uint32]
+    _kernel32.CreateJobObjectW.restype = ctypes.c_void_p
+    _kernel32.CreateJobObjectW.argtypes = [ctypes.c_void_p, ctypes.c_wchar_p]
+    _kernel32.SetInformationJobObject.argtypes = [ctypes.c_void_p, ctypes.c_int,
+                                                  ctypes.c_void_p, ctypes.c_uint32]
+    _kernel32.AssignProcessToJobObject.argtypes = [ctypes.c_void_p, ctypes.c_void_p]
 except Exception:                                # not Windows, or no ctypes
     _kernel32 = None
 
@@ -151,15 +159,12 @@ def claim_single_instance(role: str) -> bool:
         return True                              # no way to tell: behave as before
     if role in _instance_handles:
         return False
-    k32 = ctypes.WinDLL("kernel32", use_last_error=True)
-    k32.CreateMutexW.restype = ctypes.c_void_p
-    k32.CreateMutexW.argtypes = [ctypes.c_void_p, ctypes.c_bool, ctypes.c_wchar_p]
-    handle = k32.CreateMutexW(None, False, f"Local\\ZeroFlow.instance.{role}")
+    handle = _kernel32.CreateMutexW(None, False, f"Local\\ZeroFlow.instance.{role}")
     if not handle:
         logging.warning(f"Single-instance check unavailable for '{role}'.")
         return True
     if ctypes.get_last_error() == ERROR_ALREADY_EXISTS:
-        k32.CloseHandle(ctypes.c_void_p(handle))
+        _kernel32.CloseHandle(handle)
         return False
     _instance_handles[role] = handle             # held until this process ends
     return True
@@ -212,22 +217,16 @@ def bind_child_to_this_process(process: subprocess.Popen) -> bool:
     if _kernel32 is None:
         return False
     try:
-        k32 = ctypes.WinDLL("kernel32", use_last_error=True)
-        k32.CreateJobObjectW.restype = ctypes.c_void_p
-        k32.CreateJobObjectW.argtypes = [ctypes.c_void_p, ctypes.c_wchar_p]
-        k32.SetInformationJobObject.argtypes = [ctypes.c_void_p, ctypes.c_int,
-                                                ctypes.c_void_p, ctypes.c_uint32]
-        k32.AssignProcessToJobObject.argtypes = [ctypes.c_void_p, ctypes.c_void_p]
         if _job is None:
-            job = k32.CreateJobObjectW(None, None)
+            job = _kernel32.CreateJobObjectW(None, None)
             limits = _ExtendedLimits()
             limits.BasicLimitInformation.LimitFlags = JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE
-            if not job or not k32.SetInformationJobObject(
+            if not job or not _kernel32.SetInformationJobObject(
                     job, JOB_OBJECT_EXTENDED_LIMIT_INFORMATION,
                     ctypes.byref(limits), ctypes.sizeof(limits)):
                 raise OSError(ctypes.get_last_error(), "could not set up the job")
             _job = job                           # never closed: closing it kills the child
-        if not k32.AssignProcessToJobObject(_job, int(process._handle)):
+        if not _kernel32.AssignProcessToJobObject(_job, int(process._handle)):
             raise OSError(ctypes.get_last_error(), "could not add the process to the job")
         return True
     except Exception as e:
@@ -262,7 +261,6 @@ def _clipboard_primitive() -> None:
         except Exception as e:
             logging.warning(f"Cross-process clipboard lock unavailable ({e}); "
                             f"falling back to an in-process lock.")
-    import threading
     _clipboard_fallback = threading.RLock()
 
 
@@ -308,6 +306,6 @@ class _ClipboardLock:
 
 
 def clipboard_lock() -> _ClipboardLock:
-    """The engine-wide clipboard lock: `with flow_signals.clipboard_lock(): ...`"""
+    """The engine-wide clipboard lock: `with signals.clipboard_lock(): ...`"""
     _clipboard_primitive()
     return _ClipboardLock()

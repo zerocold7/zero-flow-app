@@ -82,11 +82,8 @@ class TestCopySelection(ClipboardTestCase):
 
 class TestCallers(ClipboardTestCase):
     def test_the_reader_uses_it(self):
-        from reader import clipboard_tool
-        self.use(FakeClipboard())
-        with mock.patch.object(clipboard_tool.keyboard, "release"):
-            self.assertEqual(clipboard_tool.capture_highlighted_text(release_key="f4"),
-                             "selected text")
+        from reader import app
+        self.assertIs(app.copy_selection, clipboard.copy_selection)
 
 
 if __name__ == "__main__":

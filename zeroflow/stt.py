@@ -29,7 +29,7 @@ from huggingface_hub.utils import logging as hf_logging
 from zeroflow import personas, ui
 from zeroflow.paths import TEMP_AUDIO_FILE
 from zeroflow.settings import SAMPLE_RATE, WHISPER_COMPUTE_TYPE, WHISPER_DEVICE, WHISPER_MODEL_NAME
-from zeroflow.text.language import ARABIC_LETTERS, _plain
+from zeroflow.text.language import ARABIC_LETTERS, plain_words
 from zeroflow.vocabulary import load_vocabulary
 
 # A first-run model download is an anonymous Hub request, which the Hub answers with a
@@ -117,7 +117,7 @@ def whisper_hint(language: str | None) -> str | None:
 # Whisper learned from subtitled videos, and a breath or a keystroke after you stop
 # talking is where it writes how those videos end. Only these phrases are ever dropped,
 # only at the very end, and only when the audio says they were not said.
-STOCK_ENDINGS = sorted({tuple(_plain(p)) for p in (
+STOCK_ENDINGS = sorted({tuple(plain_words(p)) for p in (
     "thank you", "thank you very much", "thank you so much", "thanks", "thanks a lot",
     "thank you for watching", "thanks for watching", "thank you for listening",
     "thanks for listening", "please subscribe", "subscribe to the channel",
@@ -155,7 +155,7 @@ def trim_invented_ending(words: list, audio: np.ndarray) -> list:
     or Whisper scored its own words below INVENTED_MAX_PROBABILITY. If the phrase is all
     there is, it must be quieter than INVENTED_ALONE_MAX_DBFS or unsure. A clearly
     spoken "thank you" passes every one of these and stays."""
-    tokens = [_plain(w.word) for w in words]
+    tokens = [plain_words(w.word) for w in words]
     flat = [(i, t) for i, ts in enumerate(tokens) for t in ts]
     for phrase in STOCK_ENDINGS:
         if len(phrase) <= len(flat) and tuple(t for _, t in flat[-len(phrase):]) == phrase:

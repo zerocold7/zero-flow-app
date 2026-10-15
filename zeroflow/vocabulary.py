@@ -49,7 +49,7 @@ def append_vocabulary_word(word: str) -> None:
         f.write(("\n" if needs_newline else "") + f"{word}\n")
 
 
-def _absorb_learned_word(output: str, heard: str | None = None) -> str:
+def absorb_learned_word(output: str, heard: str | None = None) -> str:
     """If the LLM tagged a new term as `[LEARN: word]`, persist it and strip the tag.
 
     `heard` is what was actually said. A term is only learned if it appears there

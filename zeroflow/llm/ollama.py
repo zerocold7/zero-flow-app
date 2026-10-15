@@ -1,12 +1,13 @@
-"""The single client for a local Ollama server: model discovery, requests, warm-up."""
+"""An AI provider for a local Ollama server: model discovery, requests, warm-up."""
 import logging
 
 import requests
 
 from zeroflow import ui
+from zeroflow.llm.base import user_message
 from zeroflow.settings import (ENABLE_TOASTS, FALLBACK_LLM, OLLAMA_HOST_URL,
                                OLLAMA_KEEP_ALIVE, OLLAMA_MODEL_NAME, OLLAMA_NUM_CTX)
-from zeroflow.vocabulary import _absorb_learned_word
+
 _ollama_model = None      # resolved once, on first use
 
 
@@ -55,28 +56,15 @@ def _ollama_options() -> dict:
     return options
 
 
-def query_ollama(raw_text: str, context_text: str | None, instruction: str,
-                 timeout: float = 15.0) -> str:
-    """The LLM's answer, or `raw_text` when there is none — for callers that carry on
-    with the original either way. Callers that must tell the user use ask_ollama."""
-    return ask_ollama(raw_text, context_text, instruction, timeout) or raw_text
-
-
-def ask_ollama(raw_text: str, context_text: str | None, instruction: str,
-               timeout: float = 15.0) -> str | None:
-    """Send text to the local LLM with a task instruction; return its output, or None
-    when it did not answer (unreachable, an HTTP error, or an empty reply). Honours an
-    inline `[LEARN: word]` request."""
-    prompt = f"{instruction}\n\n"
-    if context_text:
-        prompt += f"Context Window Data:\n{context_text}\n\n"
-    prompt += f"Input Raw String: {raw_text}\nOutput String:"
-
-    ui.start_processing_spinner("AI Processing")
+def ask(raw_text: str, context_text: str | None, instruction: str,
+        timeout: float = 15.0) -> str | None:
+    """Ollama's answer, or None when it did not answer (unreachable or an HTTP error)."""
     try:
         response = requests.post(
             OLLAMA_HOST_URL,
-            json={"model": get_ollama_model(), "prompt": prompt, "stream": False,
+            json={"model": get_ollama_model(),
+                  "prompt": f"{instruction}\n\n{user_message(raw_text, context_text)}",
+                  "stream": False,
                   "options": _ollama_options(),
                   # Reasoning models (gemma4) otherwise write ~800 hidden tokens before
                   # a one-line answer: 5-9 s instead of 0.8 s, same result. Models
@@ -85,25 +73,20 @@ def ask_ollama(raw_text: str, context_text: str | None, instruction: str,
                   "keep_alive": OLLAMA_KEEP_ALIVE},
             timeout=timeout,
         )
-        ui.stop_processing_spinner()
-        if response.status_code == 200:
-            output = (response.json().get("response") or "").strip()
-            if not output:
-                logging.warning("Ollama returned an empty answer.")
-                return None
-            return _absorb_learned_word(output, heard=raw_text) or None
-        # Typically a model name Ollama does not have (404). Without this the text
-        # just comes back unpolished and nothing anywhere says why.
-        logging.warning(f"Ollama returned HTTP {response.status_code}: {response.text[:200]}")
-        ui.show_toast("⚠️ LLM Error", f"Ollama returned HTTP {response.status_code}.", ENABLE_TOASTS)
     except Exception as e:
-        ui.stop_processing_spinner()
         logging.warning(f"Ollama request failed: {e}")
         ui.show_toast("⚠️ LLM Offline", "Ollama API failed to respond.", ENABLE_TOASTS)
+        return None
+    if response.status_code == 200:
+        return response.json().get("response") or ""
+    # Typically a model name Ollama does not have (404). Without this the text just
+    # comes back unpolished and nothing anywhere says why.
+    logging.warning(f"Ollama returned HTTP {response.status_code}: {response.text[:200]}")
+    ui.show_toast("⚠️ LLM Error", f"Ollama returned HTTP {response.status_code}.", ENABLE_TOASTS)
     return None
 
 
-def warm_up_llm() -> None:
+def warm_up() -> None:
     """Load the model into Ollama ahead of the first Polish or Translate, so that one
     is not the 3-12 s reload. Run on a background thread; stays quiet if Ollama is
     not running (the first real request then reports it)."""
@@ -123,17 +106,6 @@ def warm_up_llm() -> None:
     else:                                        # typically 404: no model by that name
         logging.warning(f"LLM warm-up failed for '{model}': HTTP {response.status_code} "
                         f"{response.text[:200]}")
-
-
-# ---------------------------------------------------------------- the provider interface
-# (zeroflow/llm/base.py) — what zeroflow.llm calls.
-def ask(raw_text: str, context_text: str | None, instruction: str,
-        timeout: float = 15.0) -> str | None:
-    return ask_ollama(raw_text, context_text, instruction, timeout)
-
-
-def warm_up() -> None:
-    warm_up_llm()
 
 
 def model_name() -> str:

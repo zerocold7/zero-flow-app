@@ -1,5 +1,5 @@
-"""zeroflow.llm hands every call to the active provider — so a second provider (the
-built-in model of phase 4) needs no change in the engine or the reader."""
+"""zeroflow.llm hands every call to the active provider — so a new provider needs no
+change in the engine or the reader — and treats every answer the same way."""
 import os
 import sys
 import unittest
@@ -43,10 +43,35 @@ class TestRouting(unittest.TestCase):
         self.assertTrue(fake.warmed)
         self.assertEqual(llm.model_name(), "fake-model")
 
-    def test_query_falls_back_to_the_original_when_there_is_no_answer(self):
+    def test_no_answer_is_none(self):
         self.use(None)
         self.assertIsNone(llm.ask_ai("raw", None, "Polish."))
-        self.assertEqual(llm.query_ai("raw", None, "Polish."), "raw")
+
+    def test_an_empty_answer_is_no_answer_and_says_why(self):
+        """An empty reply would otherwise paste nothing at all."""
+        self.use("   ")
+        with self.assertLogs(level="WARNING") as logs:
+            self.assertIsNone(llm.ask_ai("raw", None, "Polish."))
+        self.assertIn("empty answer", logs.output[0])
+
+    def test_the_answer_is_trimmed(self):
+        self.use("  Polished.\n")
+        self.assertEqual(llm.ask_ai("raw", None, "Polish."), "Polished.")
+
+    def test_learned_words_are_taken_from_any_providers_answer(self):
+        self.use("Ask Tamara. [LEARN: Tamara]")
+        with mock.patch.object(llm, "absorb_learned_word",
+                               side_effect=lambda out, heard: "Ask Tamara.") as absorb:
+            self.assertEqual(llm.ask_ai("ask tamara", None, "Polish."), "Ask Tamara.")
+        self.assertEqual(absorb.call_args.kwargs["heard"], "ask tamara")
+
+    def test_the_spinner_stops_even_if_the_provider_fails(self):
+        fake = self.use(None)
+        fake.ask = mock.Mock(side_effect=RuntimeError("boom"))
+        with mock.patch.object(llm.ui, "stop_processing_spinner") as stop, \
+             self.assertRaises(RuntimeError):
+            llm.ask_ai("raw", None, "Polish.")
+        stop.assert_called_once()
 
     def test_the_provider_is_the_one_set_in_env(self):
         self.assertIs(llm.provider, llm.choose(llm.settings.AI_PROVIDER))
@@ -79,9 +104,7 @@ class TestOpenAICompatible(unittest.TestCase):
         for patcher in (mock.patch.object(provider, "AI_URL", "http://127.0.0.1:8080/v1/chat/completions"),
                         mock.patch.object(provider, "AI_MODEL", "local-model"),
                         mock.patch.object(provider, "AI_API_KEY", ""),
-                        mock.patch.object(provider, "ENABLE_TOASTS", False),
-                        mock.patch.object(provider.ui, "start_processing_spinner"),
-                        mock.patch.object(provider.ui, "stop_processing_spinner")):
+                        mock.patch.object(provider, "ENABLE_TOASTS", False)):
             patcher.start()
             self.addCleanup(patcher.stop)
 
@@ -107,19 +130,11 @@ class TestOpenAICompatible(unittest.TestCase):
         self.assertEqual(post.call_args.kwargs["headers"]["Authorization"], "Bearer sk-test")
 
     def test_no_answer_is_none_with_the_reason_logged(self):
-        for outcome in (self.reply(status=500), self.reply(content="   "), ConnectionError("refused")):
+        for outcome in (self.reply(status=500), ConnectionError("refused")):
             kwargs = {"side_effect": outcome} if isinstance(outcome, Exception) else {"return_value": outcome}
             with mock.patch.object(self.provider.requests, "post", **kwargs), \
                  self.assertLogs(level="WARNING"):
                 self.assertIsNone(self.provider.ask("hello", None, "Polish this."))
-
-    def test_learned_words_are_taken_from_the_answer(self):
-        reply = self.reply(content="Ask Tamara. [LEARN: Tamara]")
-        with mock.patch.object(self.provider.requests, "post", return_value=reply), \
-             mock.patch.object(self.provider, "_absorb_learned_word",
-                               side_effect=lambda out, heard: "Ask Tamara.") as absorb:
-            self.assertEqual(self.provider.ask("ask tamara", None, "Polish this."), "Ask Tamara.")
-        self.assertEqual(absorb.call_args.kwargs["heard"], "ask tamara")
 
 
 if __name__ == "__main__":

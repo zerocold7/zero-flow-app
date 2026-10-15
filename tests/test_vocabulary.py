@@ -45,27 +45,27 @@ class VocabularyTestCase(unittest.TestCase):
 class TestAbsorbLearnedWord(VocabularyTestCase):
     def test_tag_is_stripped_from_the_output(self):
         """The tag is an instruction to us, not something to inject or speak."""
-        out = vocabulary._absorb_learned_word("Some prose [LEARN: ChromaDB]")
+        out = vocabulary.absorb_learned_word("Some prose [LEARN: ChromaDB]")
         self.assertNotIn("LEARN", out)
         self.assertEqual(out, "Some prose")
 
     def test_new_word_is_persisted(self):
-        vocabulary._absorb_learned_word("text [LEARN: Kokoro]")
+        vocabulary.absorb_learned_word("text [LEARN: Kokoro]")
         self.assertIn("Kokoro", self.read_vocab_file())
 
     def test_untagged_output_is_returned_unchanged(self):
-        self.assertEqual(vocabulary._absorb_learned_word("nothing to learn"),
+        self.assertEqual(vocabulary.absorb_learned_word("nothing to learn"),
                          "nothing to learn")
 
     def test_word_already_known_is_not_duplicated(self):
-        vocabulary._absorb_learned_word("a [LEARN: Kokoro]")
-        vocabulary._absorb_learned_word("b [LEARN: Kokoro]")
+        vocabulary.absorb_learned_word("a [LEARN: Kokoro]")
+        vocabulary.absorb_learned_word("b [LEARN: Kokoro]")
         self.assertEqual(self.read_vocab_file().count("Kokoro"), 1)
 
     def test_base_vocabulary_is_not_rewritten_to_the_file(self):
         """BASE_VOCABULARY lives in personas.py; re-learning it would be noise."""
         known = personas.BASE_VOCABULARY[0]
-        vocabulary._absorb_learned_word(f"x [LEARN: {known}]")
+        vocabulary.absorb_learned_word(f"x [LEARN: {known}]")
         self.assertNotIn(known, self.read_vocab_file())
 
 
@@ -75,17 +75,17 @@ class TestLearnOnlyWhatWasSaid(VocabularyTestCase):
     misheard words; a model answering in Chinese tagged a Chinese one."""
 
     def test_a_word_nobody_said_is_not_learned(self):
-        out = vocabulary._absorb_learned_word("Polished text [LEARN: Kubernetes]",
+        out = vocabulary.absorb_learned_word("Polished text [LEARN: Kubernetes]",
                                              heard="please restart the server")
         self.assertEqual(out, "Polished text")
         self.assertNotIn("Kubernetes", self.read_vocab_file())
 
     def test_a_word_that_was_said_is_learned_despite_spacing(self):
-        vocabulary._absorb_learned_word("x [LEARN: KokoroTTS]", heard="the kokoro tts voice")
+        vocabulary.absorb_learned_word("x [LEARN: KokoroTTS]", heard="the kokoro tts voice")
         self.assertIn("KokoroTTS", self.read_vocab_file())
 
     def test_chinese_is_never_learned(self):
-        vocabulary._absorb_learned_word("x [LEARN: 会议]", heard="会议")
+        vocabulary.absorb_learned_word("x [LEARN: 会议]", heard="会议")
         self.assertEqual(self.read_vocab_file(), [])
 
 
@@ -97,14 +97,14 @@ class TestSafeAppend(VocabularyTestCase):
         straight onto it produced "VisaKokoro" — one wrong word instead of two."""
         with open(self.vocab_path, "w", encoding="utf-8") as f:
             f.write("Docker\nVisa")
-        vocabulary._absorb_learned_word("text [LEARN: Kokoro]", heard="kokoro")
+        vocabulary.absorb_learned_word("text [LEARN: Kokoro]", heard="kokoro")
         self.assertEqual(self.read_vocab_file(), ["Docker", "Visa", "Kokoro"])
 
     def test_writers_wait_for_the_vocabulary_lock(self):
         """Shift+F1 rewrites the whole file while a dictation may be appending to it;
         both go through one lock so neither loses the other's change."""
         vocabulary.VOCAB_LOCK.acquire()
-        writer = threading.Thread(target=vocabulary._absorb_learned_word,
+        writer = threading.Thread(target=vocabulary.absorb_learned_word,
                                   args=("x [LEARN: Kokoro]",), kwargs={"heard": "kokoro"})
         try:
             writer.start()
@@ -154,7 +154,7 @@ class TestMemoryMaintenance(VocabularyTestCase):
         return self.vocab_path + ".bak"
 
     def run_maintenance(self, llm_output):
-        with mock.patch.object(engine, "query_ai", return_value=llm_output):
+        with mock.patch.object(engine, "ask_ai", return_value=llm_output):
             engine.run_memory_maintenance()
 
     def test_list_markers_are_stripped(self):
@@ -175,9 +175,14 @@ class TestMemoryMaintenance(VocabularyTestCase):
             self.assertEqual(f.read(), "Manhwa\n")
 
     def test_unchanged_output_writes_nothing(self):
-        """query_ai returns its input when Ollama is down — that is not a success."""
         current = "\n".join(sorted(vocabulary.load_vocabulary()))
         self.run_maintenance(current)
+        self.assertEqual(self.read_vocab_file(), ["Manhwa"])
+        self.assertFalse(os.path.exists(self.backup))
+
+    def test_no_answer_writes_nothing(self):
+        """The AI unreachable must not empty the list you built up."""
+        self.run_maintenance(None)
         self.assertEqual(self.read_vocab_file(), ["Manhwa"])
         self.assertFalse(os.path.exists(self.backup))
 

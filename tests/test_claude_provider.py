@@ -34,9 +34,7 @@ class ClaudeTestCase(unittest.TestCase):
                         mock.patch.object(claude, "_clients", {}),
                         mock.patch.object(claude, "AI_MODEL", ""),
                         mock.patch.object(claude, "AI_API_KEY", "sk-ant-test"),
-                        mock.patch.object(claude, "ENABLE_TOASTS", False),
-                        mock.patch.object(claude.ui, "start_processing_spinner"),
-                        mock.patch.object(claude.ui, "stop_processing_spinner")):
+                        mock.patch.object(claude, "ENABLE_TOASTS", False)):
             patcher.start()
             self.addCleanup(patcher.stop)
         self.create = self.client.beta.messages.create
@@ -81,12 +79,10 @@ class TestRequest(ClaudeTestCase):
         claude._get_client()
         claude._make_client.assert_called_with("sk-ant-test")
 
-    def test_learned_words_are_taken_from_the_answer(self):
-        self.create.return_value = reply("Ask Tamara. [LEARN: Tamara]")
-        with mock.patch.object(claude, "_absorb_learned_word",
-                               side_effect=lambda out, heard: "Ask Tamara.") as absorb:
-            self.assertEqual(claude.ask("ask tamara", None, "Polish."), "Ask Tamara.")
-        self.assertEqual(absorb.call_args.kwargs["heard"], "ask tamara")
+    def test_only_the_text_is_the_answer(self):
+        """The reply also carries the model's (empty) thinking block."""
+        self.create.return_value = reply("The meeting ", "is at ten.")
+        self.assertEqual(claude.ask("hello", None, "Polish."), "The meeting is at ten.")
 
 
 class TestNoAnswer(ClaudeTestCase):
@@ -112,7 +108,10 @@ class TestNoAnswer(ClaudeTestCase):
 
     def test_an_empty_answer_is_no_answer(self):
         self.create.return_value = reply("   ")
-        self.assert_no_answer("empty")
+        with mock.patch.object(llm, "provider", claude), \
+             self.assertLogs(level="WARNING") as logs:
+            self.assertIsNone(llm.ask_ai("hello", None, "Polish this."))
+        self.assertIn("empty", "\n".join(logs.output))
 
 
 class TestChoosing(unittest.TestCase):

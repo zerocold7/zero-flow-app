@@ -30,8 +30,8 @@ from zeroflow import personas, settings, signals, ui
 from zeroflow.capture import Capture
 from zeroflow.clipboard import copy_selection, paste_text, read_clipboard_context
 from zeroflow.history import cap_history_file, log_to_history
-from zeroflow.hotkeys import _run_async, wait_for_release
-from zeroflow.llm import ask_ai, model_name, query_ai, warm_up_ai
+from zeroflow.hotkeys import run_async, wait_for_release
+from zeroflow.llm import ask_ai, model_name, warm_up_ai
 from zeroflow.logs import init_logging
 from zeroflow.paths import HISTORY_FILE, VOCAB_CACHE_FILE, log_path
 from zeroflow.settings import (CHANNELS, ENABLE_AUDIO_CHIMES, ENABLE_TOASTS, HOTKEYS,
@@ -88,11 +88,11 @@ def run_memory_maintenance() -> None:
 
     before = sorted(load_vocabulary())
     current_vocab = "\n".join(before)
-    cleaned = "\n".join(vocabulary_terms(
-        query_ai(current_vocab, None, personas.MEMORY_MAINTENANCE_PROMPT)))
-    if not cleaned or cleaned == current_vocab:
-        # query_ai hands back its input when the LLM is unreachable, so an
-        # unchanged list is not a success worth rewriting the file for.
+    answer = ask_ai(current_vocab, None, personas.MEMORY_MAINTENANCE_PROMPT)
+    cleaned = "\n".join(vocabulary_terms(answer))
+    if answer is None:
+        print(f"{ui.C_WARN}⚠️  AI unavailable — the vocabulary is left as it was.{ui.C_RESET}")
+    elif not cleaned or cleaned == current_vocab:
         print(f"{ui.C_WARN}🧹 Vocabulary unchanged — nothing written.{ui.C_RESET}")
     else:
         try:
@@ -178,7 +178,7 @@ def refine_text(text: str, mode: str, context: str = "") -> str:
     cfg = MODES[mode]
 
     if cfg["op"] == "polish":
-        ui.update_console_title("OLLAMA PROCESSING")
+        ui.update_console_title("AI POLISHING")
         prompt = personas.ARABIC_POLISH_PROMPT if cfg["lang"] == "ar" else personas.STANDARD_SYSTEM_PROMPT
         answer = ask_ai(text, context, prompt)
         if answer is None:
@@ -190,7 +190,7 @@ def refine_text(text: str, mode: str, context: str = "") -> str:
         return out
 
     if cfg["op"] == "translate":
-        ui.update_console_title("OLLAMA TRANSLATING")
+        ui.update_console_title("AI TRANSLATING")
         # Direction is fixed by the mode (not detected), so it's always correct.
         if cfg["to"] == "en":
             direction, prompt = "AR→EN", personas.TRANSLATE_TO_EN_PROMPT
@@ -412,9 +412,9 @@ def register_hotkeys() -> None:
 
     # Action keys do heavy work (LLM calls, key-sending), so dispatch each to a worker
     # thread — never block the keyboard listener (that froze the whole keyboard).
-    keyboard.add_hotkey(HOTKEYS["fix"],         _run_async(correct_current_line), suppress=True)
-    keyboard.add_hotkey(HOTKEYS["maintenance"], _run_async(run_memory_maintenance), suppress=True)
-    keyboard.add_hotkey(HOTKEYS["purge"],       _run_async(purge_diagnostic_files), suppress=True)
+    keyboard.add_hotkey(HOTKEYS["fix"],         run_async(correct_current_line), suppress=True)
+    keyboard.add_hotkey(HOTKEYS["maintenance"], run_async(run_memory_maintenance), suppress=True)
+    keyboard.add_hotkey(HOTKEYS["purge"],       run_async(purge_diagnostic_files), suppress=True)
     keyboard.add_hotkey(HOTKEYS["panic"],       on_cancel_hotkey)
 
 

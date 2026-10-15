@@ -1,16 +1,22 @@
 """The AI model, whichever provider runs it.
 
-The engine and the reader call these four functions; each hands the call to the active
-provider (zeroflow.llm.base.Provider), chosen with AI_PROVIDER in .env:
+The engine and the reader call ask_ai, warm_up_ai and model_name; each hands the call
+to the active provider (zeroflow.llm.base.Provider), chosen with AI_PROVIDER in .env:
 
     builtin  llama-server, run by the engine itself (llm.builtin) — the default
     ollama   a local Ollama server (llm.ollama)
     openai   any server speaking the OpenAI chat format (llm.openai_compatible):
              LM Studio, the llama.cpp server, vLLM, or a cloud service
     claude   Anthropic's Claude, with an API key (llm.claude)
+
+What every answer goes through, whoever gave it, happens here once: the console
+spinner, the empty-answer check, and learning a word the model tagged `[LEARN: …]`.
 """
-from zeroflow import settings
+import logging
+
+from zeroflow import settings, ui
 from zeroflow.llm import builtin, claude, ollama, openai_compatible
+from zeroflow.vocabulary import absorb_learned_word
 
 PROVIDERS = {"builtin": builtin, "ollama": ollama, "openai": openai_compatible, "claude": claude}
 
@@ -33,15 +39,18 @@ provider = choose(settings.AI_PROVIDER)
 
 def ask_ai(raw_text: str, context_text: str | None, instruction: str,
            timeout: float = 15.0) -> str | None:
-    """The model's answer, or None when there is none (the reason is logged)."""
-    return provider.ask(raw_text, context_text, instruction, timeout)
-
-
-def query_ai(raw_text: str, context_text: str | None, instruction: str,
-             timeout: float = 15.0) -> str:
-    """The model's answer, or `raw_text` when there is none — for callers that carry
-    on with the original either way. Callers that must tell the user use ask_ai."""
-    return ask_ai(raw_text, context_text, instruction, timeout) or raw_text
+    """The model's answer, or None when there is none (the reason is logged and shown)."""
+    ui.start_processing_spinner("AI Processing")
+    try:
+        answer = provider.ask(raw_text, context_text, instruction, timeout)
+    finally:
+        ui.stop_processing_spinner()
+    if answer is None:
+        return None
+    if not answer.strip():
+        logging.warning("The AI returned an empty answer.")
+        return None
+    return absorb_learned_word(answer.strip(), heard=raw_text) or None
 
 
 def warm_up_ai() -> None:
