@@ -6,8 +6,9 @@
 
 <p align="center">
   <b>Speak and it types. Highlight and it reads.</b><br/>
-  A private, fully local voice engine for Windows — English and Arabic dictation into
-  any app, and a natural voice that reads any text back to you.
+  A private voice engine for Windows that runs entirely on your PC: English and Arabic
+  dictation into any app, an AI that polishes and translates what you say, and a natural
+  voice that reads any text back to you.
 </p>
 
 <p align="center">
@@ -29,26 +30,39 @@
 
 ## What it does
 
-**🎙️ Dictation — speech → text.** Click where you want to type, tap `F5`, speak, tap
-`F5` again: your words appear at the cursor in Word, a browser, a chat app, a code
-editor — anywhere `Ctrl+V` works.
-- **English or Arabic**, each on its own key, so it never mishears one as the other.
-- **Polish** (`F6`/`F8`): a local AI removes "um"s, repetitions and slips.
-- **Translate** (`F9`/`F10`): speak English, get Arabic — or the other way round.
-- **Fix a line** (`Shift+F3`): with the cursor at the end of a line you typed, press it
-  and the line is corrected in place.
-- **Spoken commands:** *"new line"*, *"bullet"*, *"format code"*, *"… and send"*,
-  *"period"*, *"comma"*, *"question mark"* — and their Arabic equivalents.
-- **Learns your words:** names and technical terms the AI meets while polishing are
-  remembered, and spelled right next time.
+Zero- Flow Engine sits in the system tray and answers to the function keys. It has two
+halves that share one window and one tray icon.
 
-**🔊 Reader — text → speech.** Highlight any text — a web page, a PDF, an email — and
-press `F4`: a natural voice reads it aloud, starting after the first sentence. `Esc`
-stops it. An optional AI pass strips menus and cookie banners first.
+**🎙️ Dictation (speech → text).** Click where you want to type, tap `F5`, speak, and tap
+`F5` again. Your words are pasted at the cursor in Word, a browser, a chat app or a code
+editor: anywhere `Ctrl+V` works.
+- **English or Arabic**, each on its own key. The key sets the language, so one is
+  never mistaken for the other.
+- **Polish** (`F6` English, `F8` Arabic): the built-in AI removes "um"s, repeats and
+  slips before pasting.
+- **Translate** (`F9` English → Arabic, `F10` Arabic → English): speak one language,
+  get the other.
+- **Fix a line** (`Shift+F3`): with the cursor at the end of a line you typed, press it and
+  the AI corrects that line in place.
+- **Spoken commands:** start with *"new line"*, *"bullet"* or *"format code"*; end with
+  *"and send"*, *"period"*, *"comma"* or *"question mark"*. Arabic has its own set
+  ([Keys](#keys)).
+- **Learns your words:** names and technical terms the AI picks up are saved to a
+  vocabulary file, so they are spelled right next time.
 
-**🔒 Private by design.** Speech recognition, the AI and the voice all run on your PC.
-After a one-time model download it works with no internet at all — nothing you say,
-type or read ever leaves the machine.
+**🔊 Reader (text → speech).** Highlight any text (a web page, a PDF, an email) and
+press `F4`. A natural voice (Kokoro) starts reading after the first sentence, and `Esc`
+stops it. Turn on *Smart LLM Cleaning* in the tray and the AI first strips menus, cookie
+notices and other page clutter.
+
+**🔒 Private by design.** Speech recognition (Whisper), the AI (Google's Gemma 4 via
+llama.cpp) and the voice all run on your PC. Each model downloads once from Hugging
+Face; after that the engine needs no internet, and nothing you say, type or read leaves
+the machine. The one exception is your choice: pointing it at a cloud AI instead
+([CONFIGURATION.md §6](CONFIGURATION.md#6-choosing-the-ai-provider)).
+
+> **Status:** version 2.0 is in alpha, so expect changes between releases; see the
+> [CHANGELOG](CHANGELOG.md).
 
 ## How it works
 
@@ -83,8 +97,9 @@ and writes the matching settings for you:
 | No graphics card | `small` / `base` | ≈2–4 s | [CPU only](docs/HARDWARE.md#cpu-only--no-graphics-card) |
 | AMD Radeon / Intel Arc | `small` | ≈2–4 s | [AMD / Intel](docs/HARDWARE.md#amd-radeon--intel-arc) |
 
-\* For about 14 s of speech. Measured on an RTX 4070 and an 8-core i7; the smaller
-tiers are estimates. Full numbers and tuning: **[HARDWARE.md](docs/HARDWARE.md)**.
+\* For about 14 s of speech in the raw modes (`F5`/`F7`); Polish and Translate add the
+AI's time. Only the NVIDIA desktop figure is measured (on an RTX 4070); the others are
+estimates. Full numbers and tuning: **[HARDWARE.md](docs/HARDWARE.md)**.
 
 ## Quick start
 
@@ -126,7 +141,7 @@ Laptop F-keys changing the volume instead? Press `Fn + Esc`.
 Arabic: *"سطر جديد"*, *"قائمة"* (bullet), *"تنسيق كود"* (code), *"انتر"*, and at the end
 *"نقطة"*, *"فاصلة"*, *"علامة استفهام"* for **.** **،** **؟**
 
-**Tray menu** (by the clock): choose the voice, turn on Smart Cleaning for the reader,
+**Tray menu** (by the clock): choose the voice, turn on Smart LLM Cleaning for the reader,
 suspend the reader, **Unload AI model** (frees its memory; the next Polish loads it
 again), or **Exit Engine**. Windows hides new tray icons — click `^` by the
 clock to find it.
@@ -180,7 +195,7 @@ AI provider ([CONFIGURATION.md §6](CONFIGURATION.md#6-choosing-the-ai-provider)
 
 Run them in the engine's venv: the tests use the standard library's `unittest`, but
 import the engine, so its packages must be installed. No models are loaded and nothing
-plays; about five seconds. They cover what breaks quietly: voice macros and spoken
+plays; about half a minute. They cover what breaks quietly: voice macros and spoken
 punctuation, quick start/stop/cancel of recordings, AI failures, the vocabulary and
 history files, sentence batching, the reader's audio-thread safety and supervision,
 one-copy-at-a-time, hardware tiers and presets. A few start real Python processes, to
