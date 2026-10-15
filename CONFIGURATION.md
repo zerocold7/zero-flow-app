@@ -367,9 +367,8 @@ it rotates itself and only writes a few lines per read.
 ---
 
 ## 10. The reader (text → speech)
-Start it with **`Launch_Reader.bat`** (or `python -m reader`) on its own, alongside
-dictation in a second window with **`Launch_All.bat`**, or in the same window as
-dictation with **`Launch_Zero.bat`** (recommended).
+Start it with **`Launch_Reader.bat`** (or `python -m reader`) on its own, or in the
+same window as dictation with **`Launch_Zero.bat`** (recommended).
 
 ```ini
 HOTKEY_READ="f4"            # read the highlighted text aloud

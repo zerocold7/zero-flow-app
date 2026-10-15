@@ -137,11 +137,9 @@ clock to find it.
 | **`Launch_Zero.bat`** | **Both halves in one window, one tray icon — use this** |
 | `Launch_Flow.bat` | Dictation only |
 | `Launch_Reader.bat` | Reader only |
-| `Launch_All.bat` | Both halves, each in its own window |
 
 Each has a twin that starts with no window — `Launch_Zero_Silent.vbs`,
-`Launch_Silent.vbs`, `Launch_Reader_Silent.vbs`, `Launch_All_Silent.vbs` — stopped from
-the tray icon. To start with Windows, see the [FAQ](docs/FAQ.md#can-it-start-with-windows).
+`Launch_Flow_Silent.vbs`, `Launch_Reader_Silent.vbs` — stopped from the tray icon. To start with Windows, see the [FAQ](docs/FAQ.md#can-it-start-with-windows).
 
 ## Documentation
 

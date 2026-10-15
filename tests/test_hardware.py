@@ -75,7 +75,7 @@ class TestRecommend(unittest.TestCase):
     def test_8gb_ram_gets_the_lightest_models(self):
         _, settings, _ = hw.recommend(pc(("Intel(R) UHD Graphics", 0.5), ram=8))
         self.assertEqual(settings["WHISPER_MODEL_NAME"], "base")
-        self.assertEqual(settings["OLLAMA_MODEL_NAME"], "gemma2:2b")
+        self.assertEqual(settings["AI_BUILTIN_FILE"], "gemma-4-E2B_q4_0-it.gguf")
 
     def test_amd_card_runs_speech_on_the_cpu(self):
         tier, settings, _ = hw.recommend(pc(("AMD Radeon RX 7600", 8.0),
@@ -147,27 +147,40 @@ class TestBuiltinAI(unittest.TestCase):
         ollama.assert_called_once()
         self.assertTrue(any("Ollama is not running" in msg for _, msg in notes))
 
+    def test_ollama_without_a_pinned_model_uses_its_first(self):
+        """The presets no longer pick an Ollama model: that is the user's own choice."""
+        settings = dict(hw.load_preset("cpu-only"), AI_PROVIDER="ollama")
+        with mock.patch.object(hw, "installed_versions", return_value=dict.fromkeys(
+                 ["faster-whisper", "kokoro", "torch", "nvidia-cublas-cu12"])), \
+             mock.patch.object(hw, "_cached", return_value=True), \
+             mock.patch.object(hw, "parse_env", return_value={}), \
+             mock.patch.object(hw, "_ollama_models", return_value=["gemma4:e4b"]):
+            notes = hw.software_checks("cpu-only", settings)
+        self.assertIn((True, "Ollama is running; it will use gemma4:e4b"), notes)
+
 
 class TestKeepChosenModel(unittest.TestCase):
     """--apply must not swap out an AI model the user picked for a preset's."""
 
     def test_the_users_model_wins(self):
-        settings = {"OLLAMA_MODEL_NAME": "qwen2.5:7b"}
-        note = hw.keep_chosen_model(settings, {"OLLAMA_MODEL_NAME": "gemma4-e4b:latest"})
-        self.assertEqual(settings["OLLAMA_MODEL_NAME"], "gemma4-e4b:latest")
-        self.assertIn("Keeping your own AI model", note)
+        settings = dict(hw.SMALLER_AI)
+        note = hw.keep_chosen_model(settings, {"AI_BUILTIN_FILE": "gemma-4-E4B_q4_0-it.gguf",
+                                               "AI_BUILTIN_REPO": "google/gemma-4-E4B-it-qat-q4_0-gguf"})
+        self.assertEqual(settings["AI_BUILTIN_FILE"], "gemma-4-E4B_q4_0-it.gguf")
+        self.assertEqual(settings["AI_BUILTIN_REPO"], "google/gemma-4-E4B-it-qat-q4_0-gguf")
+        self.assertIn("Keeping your own built-in AI model", note)
 
     def test_the_users_ai_provider_wins(self):
         """Someone who switched to Ollama or Claude keeps it."""
-        settings = {"AI_PROVIDER": "builtin", "OLLAMA_MODEL_NAME": "qwen2.5:7b"}
+        settings = {"AI_PROVIDER": "builtin"}
         note = hw.keep_chosen_model(settings, {"AI_PROVIDER": "claude"})
         self.assertEqual(settings["AI_PROVIDER"], "claude")
         self.assertIn("claude", note)
 
     def test_a_blank_choice_takes_the_preset(self):
-        settings = {"OLLAMA_MODEL_NAME": "qwen2.5:7b"}
-        self.assertIsNone(hw.keep_chosen_model(settings, {"OLLAMA_MODEL_NAME": ""}))
-        self.assertEqual(settings["OLLAMA_MODEL_NAME"], "qwen2.5:7b")
+        settings = {"AI_PROVIDER": "builtin"}
+        self.assertIsNone(hw.keep_chosen_model(settings, {"AI_PROVIDER": ""}))
+        self.assertEqual(settings["AI_PROVIDER"], "builtin")
 
 
 class TestPresets(unittest.TestCase):
@@ -182,7 +195,7 @@ class TestPresets(unittest.TestCase):
     def test_every_preset_names_its_models(self):
         for tier in hw.TIERS:
             preset = hw.load_preset(tier)
-            for key in ("WHISPER_MODEL_NAME", "OLLAMA_MODEL_NAME", "READER_DEVICE"):
+            for key in ("WHISPER_MODEL_NAME", "READER_DEVICE", "AI_PROVIDER", "LLAMA_VARIANT"):
                 self.assertIn(key, preset, f"{tier} lacks {key}")
 
 
