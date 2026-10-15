@@ -4,7 +4,7 @@ title ZERO- FLOW ENGINE RUNNER
 cls
 
 echo =========================================================
-echo  STARTING LOCAL VOICE FLOW PIPELINE
+echo  STARTING THE ZERO- FLOW DICTATION HALF
 echo =========================================================
 echo.
 

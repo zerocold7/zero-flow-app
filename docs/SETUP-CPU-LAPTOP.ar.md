@@ -4,7 +4,7 @@
 
 **نسخة اللابتوب — خفيفة على المعالج وباردة فعلاً (بدون كرت شاشة NVIDIA)**
 
-ويندوز 11 · لينوفو IdeaPad Slim 5 (i7-13620H، 16 جيجابايت، Intel UHD) · المستودع: github.com/zerocold7/local-voice-flow
+ويندوز 11 · لينوفو IdeaPad Slim 5 (i7-13620H، 16 جيجابايت، Intel UHD) · المستودع: github.com/zerocold7/zero-flow-app
 
 > 🌍 In English: **[Read this guide in English](SETUP-CPU-LAPTOP.md)** · نسخة PDF: [PDF](Zero-Flow-Setup-Guide.ar.pdf)
 
@@ -55,13 +55,13 @@ cd C:\
 3. انسخ المشروع من GitHub:
 
 ```powershell
-git clone https://github.com/zerocold7/local-voice-flow.git
+git clone https://github.com/zerocold7/zero-flow-app.git
 ```
 
 4. ادخل إلى المجلد الذي تم تحميله:
 
 ```powershell
-cd local-voice-flow
+cd zero-flow-app
 ```
 
 ## 📌 رابعاً: إعداد البيئة المعزولة والمكتبات
@@ -114,14 +114,14 @@ pip install ((Get-Content requirements.txt) | Where-Object { $_ -match '^[A-Za-z
 Copy-Item .env.example .env
 ```
 
-**2.** افتح مستكشف الملفات واذهب إلى القرص C ثم مجلد `local-voice-flow`.
+**2.** افتح مستكشف الملفات واذهب إلى القرص C ثم مجلد `zero-flow-app`.
 
 **3.** جد ملفاً اسمه `.env`، اضغط عليه كليك يمين وافتحه بواسطة Notepad (المفكرة).
 
 **4.** امسح كل المحتوى بالداخل، والصق هذا النص بالكامل:
 
 ```ini
-# Local Voice Flow Configuration
+# Zero- Flow Engine configuration
 # Optimized (light + cool) config for Laptop CPU
 
 # --- Core AI Settings ---
@@ -165,7 +165,7 @@ ENABLE_TOAST_NOTIFICATIONS="True"
 
 لست بحاجة لفتح PowerShell بعد اليوم. للتشغيل في أي وقت:
 
-**1.** اذهب إلى المجلد `C:\local-voice-flow`.
+**1.** اذهب إلى المجلد `C:\zero-flow-app`.
 
 **2.** اضغط مرتين على ملف `Launch_Zero.bat` للحصول على الإملاء **والقراءة الصوتية** معاً (أما `Launch_Flow.bat` فللإملاء فقط). ستفتح شاشة سوداء — اتركها مفتوحة لأنها محركك.
 
@@ -263,7 +263,7 @@ AI_BUILTIN_FILE="gemma-4-E2B_q4_0-it.gguf"
 
 **المشكلة 6: التلميع أو الترجمة يكتب كلامي كما هو دون تغيير.**
 
-الحل: انظر إلى الشاشة السوداء عند تشغيل المحرك: إن قالت إن الذكاء المدمج غير مثبّت، نفّذ الخطوة 5 من القسم الرابع ثم أعد تشغيل المحرك. وإلا افتح `flow_debug.log` وابحث عن `Built-in AI unavailable` — السبب مكتوب بعدها، وملف `builtin_ai.log` داخل `C:\local-voice-flow` فيه رسائل الذكاء نفسه.
+الحل: انظر إلى الشاشة السوداء عند تشغيل المحرك: إن قالت إن الذكاء المدمج غير مثبّت، نفّذ الخطوة 5 من القسم الرابع ثم أعد تشغيل المحرك. وإلا افتح `flow_debug.log` وابحث عن `Built-in AI unavailable` — السبب مكتوب بعدها، وملف `builtin_ai.log` داخل `C:\zero-flow-app` فيه رسائل الذكاء نفسه.
 
 **المشكلة 7: زر `F4` لا يقرأ شيئاً.**
 
@@ -271,7 +271,7 @@ AI_BUILTIN_FILE="gemma-4-E2B_q4_0-it.gguf"
 
 **المشكلة 8: مشكلة أخرى لا أفهمها.**
 
-الحل: افتح الملف `flow_debug.log` (للإملاء) أو `reader_debug.log` (للقراءة) داخل `C:\local-voice-flow` بالمفكرة — آخر الأسطر فيه تشرح ما حدث.
+الحل: افتح الملف `flow_debug.log` (للإملاء) أو `reader_debug.log` (للقراءة) داخل `C:\zero-flow-app` بالمفكرة — آخر الأسطر فيه تشرح ما حدث.
 
 ---
 

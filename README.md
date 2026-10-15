@@ -90,7 +90,7 @@ tiers are estimates. Full numbers and tuning: **[HARDWARE.md](docs/HARDWARE.md)*
 
 ```powershell
 winget install Python.Python.3.12 ; winget install Git.Git
-cd C:\ ; git clone https://github.com/zerocold7/local-voice-flow.git ; cd local-voice-flow
+cd C:\ ; git clone https://github.com/zerocold7/zero-flow-app.git ; cd zero-flow-app
 python check_hardware.py            # which tier am I?
 ```
 

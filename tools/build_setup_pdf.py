@@ -136,7 +136,7 @@ lines = open(SRC, encoding="utf-8").read().splitlines()
 story = [
     Paragraph("Zero- Flow Engine", S["title"]),
     Paragraph("Beginner Setup Guide — Laptop / CPU Mode (no NVIDIA GPU)", S["subtitle"]),
-    Paragraph("Windows 11 · CPU mode, no graphics card needed · github.com/zerocold7/local-voice-flow",
+    Paragraph("Windows 11 · CPU mode, no graphics card needed · github.com/zerocold7/zero-flow-app",
               S["meta"]),
 ]
 i = 0

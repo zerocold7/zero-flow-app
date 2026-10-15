@@ -42,8 +42,8 @@ Keep it out of OneDrive-synced folders (Desktop, Documents) — put it on `C:\`:
 
 ```powershell
 cd C:\
-git clone https://github.com/zerocold7/local-voice-flow.git
-cd local-voice-flow
+git clone https://github.com/zerocold7/zero-flow-app.git
+cd zero-flow-app
 ```
 
 ## 3. Check your hardware
@@ -160,7 +160,7 @@ sign-in; stop it from its tray icon (**Exit Engine**).
 ## Updating
 
 ```powershell
-cd C:\local-voice-flow
+cd C:\zero-flow-app
 git pull
 .\venv\Scripts\python.exe -m pip install -r requirements.txt -c constraints.txt
 ```
@@ -173,7 +173,7 @@ Your `.env`, vocabulary and history are never touched by an update. Re-run
 `python check_hardware.py` to see whether the recommendations changed.
 
 ## Uninstalling
-1. Exit the engine (tray icon → **Exit Engine**) and delete `C:\local-voice-flow` —
+1. Exit the engine (tray icon → **Exit Engine**) and delete `C:\zero-flow-app` —
    the built-in AI's `runtime\` folder goes with it.
 2. Downloaded models: delete the `models--Systran--faster-whisper-*`,
    `models--hexgrad--Kokoro-82M` and `models--google--gemma-4-E4B-it-qat-q4_0-gguf` (or

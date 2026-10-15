@@ -75,12 +75,12 @@ Windows hides the microphone from desktop apps by default. If you skip this, the
 
 > ⚠️ **Avoid OneDrive.** New laptops often sync your **Desktop** and **Documents** folders to OneDrive, which can break file paths with confusing red errors during install. Put the project on the **`C:\` drive** directly instead.
 
-Back in PowerShell, run these lines. They put the project in a folder at the root of your C: drive (`C:\local-voice-flow`):
+Back in PowerShell, run these lines. They put the project in a folder at the root of your C: drive (`C:\zero-flow-app`):
 
 ```powershell
 cd C:\
-git clone https://github.com/zerocold7/local-voice-flow.git
-cd local-voice-flow
+git clone https://github.com/zerocold7/zero-flow-app.git
+cd zero-flow-app
 ```
 
 ---
@@ -144,7 +144,7 @@ The **AI model** itself — Google's **Gemma 4 E4B**, about **5.15 GB** — down
 ---
 
 ## Step 8 — Start it for the first time
-1. Open **File Explorer** and go to **`C:\local-voice-flow`**.
+1. Open **File Explorer** and go to **`C:\zero-flow-app`**.
 2. Double-click **`Launch_Zero.bat`**.
 
 > ⚠️ **If Windows shows a blue "Windows protected your PC" box**, click **More info**, then **Run anyway**. This is just Windows being cautious about a new file — it's your own project file.
@@ -237,13 +237,13 @@ Right-click the tray icon to switch voice, to pause the reader (**Suspend Reader
 | **`winget is not recognized`** | Update **App Installer** from the Microsoft Store, then reopen PowerShell. |
 | **It types in the wrong language** | Use the matching key: F5/F6 for English, F7/F8 for Arabic. The key decides the language. |
 | **Hotkeys do nothing in one specific app** | Right-click `Launch_Zero.bat` and choose **Run as administrator**. |
-| **Polish / Translate types my words unchanged** | Look at the console when the engine starts: if it says the built-in AI is not installed, do Step 7 and restart the engine. Otherwise open `flow_debug.log` and look for `Built-in AI unavailable` — the reason follows, and `builtin_ai.log` in `C:\local-voice-flow` has the AI's own messages. |
+| **Polish / Translate types my words unchanged** | Look at the console when the engine starts: if it says the built-in AI is not installed, do Step 7 and restart the engine. Otherwise open `flow_debug.log` and look for `Built-in AI unavailable` — the reason follows, and `builtin_ai.log` in `C:\zero-flow-app` has the AI's own messages. |
 | **`F4` does nothing** | Make sure the text is **highlighted** first, and that the window has shown `Voice model ready.` The reader won't speak while a dictation is recording. Check you started `Launch_Zero.bat`, not `Launch_Flow.bat`. |
 | **Everything feels too slow** | In `.env` set `WHISPER_MODEL_NAME="base"`, save, and restart the engine. |
 | **SmartScreen blocks the launcher** | Click **More info**, then **Run anyway**. |
 | **Pressing F5–F10 does nothing at all** | Your laptop's F-keys are in media mode. Press `Fn + Esc` to enable Fn-Lock (Step 9), or hold `Fn` together with the key. |
 | **The laptop gets hot / fans get loud** | Use the raw modes `F5`/`F7` (they skip the AI). Confirm `.env` has `small` (not `medium`). Drop to `base`, or to the smaller AI model, for more cooling. See below. |
-| **Something else went wrong** | Open `flow_debug.log` (dictation) or `reader_debug.log` (reading) in `C:\local-voice-flow` with Notepad — the last lines say what happened. |
+| **Something else went wrong** | Open `flow_debug.log` (dictation) or `reader_debug.log` (reading) in `C:\zero-flow-app` with Notepad — the last lines say what happened. |
 
 ---
 

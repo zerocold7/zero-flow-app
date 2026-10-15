@@ -25,7 +25,7 @@ Separate processes have separate DLL namespaces, so the conflict simply does not
 arise: Whisper keeps the GPU here, Kokoro gets the GPU over there, and time to first
 word drops to ~0.2 s. A crash in either half also stops being fatal to the other.
 
-The two coordinate over named Windows objects in `flow_signals.py` — the microphone
+The two coordinate over named Windows objects in `zeroflow/signals.py` — the microphone
 interlock and the clipboard mutex both work across the process boundary.
 
 Both halves still run standalone: `local_flow.py` and `python -m reader`.

@@ -1,6 +1,6 @@
 """The self-evolving vocabulary: [LEARN: word] absorption and the store behind it.
 
-Each test redirects flow_core at a temporary vocabulary file, so the real
+Each test redirects zeroflow.vocabulary at a temporary vocabulary file, so the real
 flow_vocabulary.txt is never touched.
 """
 import os

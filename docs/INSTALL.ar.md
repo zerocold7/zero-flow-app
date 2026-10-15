@@ -36,8 +36,8 @@ winget install Git.Git
 
 ```powershell
 cd C:\
-git clone https://github.com/zerocold7/local-voice-flow.git
-cd local-voice-flow
+git clone https://github.com/zerocold7/zero-flow-app.git
+cd zero-flow-app
 ```
 
 ## 3. افحص جهازك
@@ -129,7 +129,7 @@ python check_hardware.py --apply
 ## التحديث
 
 ```powershell
-cd C:\local-voice-flow
+cd C:\zero-flow-app
 git pull
 .\venv\Scripts\python.exe -m pip install -r requirements.txt -c constraints.txt
 ```
@@ -137,7 +137,7 @@ git pull
 (في فئتَي `cpu-only` و `amd-intel-gpu` استخدم أمر الخطوة 4 بدل السطر الأخير.) تحدّث من نسخة كانت تستخدم Ollama؟ نفّذ أيضاً الخطوة 6 (`.\venv\Scripts\python.exe tools\get_llama.py`) — وإلى أن تفعل يبقى المحرك على Ollama ويقول ذلك عند التشغيل. التحديث لا يمسّ أبداً ملف `.env` ولا المفردات ولا السجل. أعد تشغيل `python check_hardware.py` لترى إن تغيّرت التوصيات.
 
 ## الإزالة
-1. أغلق المحرك (أيقونته ← **Exit Engine**) واحذف المجلد `C:\local-voice-flow` — ويُحذف معه مجلد `runtime\` الخاص بالذكاء المدمج.
+1. أغلق المحرك (أيقونته ← **Exit Engine**) واحذف المجلد `C:\zero-flow-app` — ويُحذف معه مجلد `runtime\` الخاص بالذكاء المدمج.
 2. النماذج المحمّلة: احذف المجلدات `models--Systran--faster-whisper-*` و `models--hexgrad--Kokoro-82M` و `models--google--gemma-4-E4B-it-qat-q4_0-gguf` (أو `…-E2B-…`) داخل `%USERPROFILE%\.cache\huggingface\hub`.
 3. يُزال Python و Git من *الإعدادات ← التطبيقات*. وإن كنت استخدمت Ollama أيضاً، احذف نموذجه أولاً (`ollama rm <الاسم>`) ثم أزِل Ollama نفسه بالطريقة ذاتها.
 
