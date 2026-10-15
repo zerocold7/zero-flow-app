@@ -78,7 +78,7 @@ class TestRouting(unittest.TestCase):
 
     def test_every_provider_offers_the_interface(self):
         for name, module in llm.PROVIDERS.items():
-            for function in ("ask", "warm_up", "model_name"):
+            for function in ("ask", "warm_up", "unload", "model_name"):
                 self.assertTrue(callable(getattr(module, function, None)), f"{name}.{function}")
 
 

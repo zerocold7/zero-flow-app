@@ -30,6 +30,7 @@ only set what you want to change.
 | `AI_BUILTIN_REPO` / `AI_BUILTIN_FILE` | Gemma 4 E4B | The built-in AI's model on Hugging Face (Gemma 4 E2B is smaller — see §6) |
 | `AI_NUM_CTX` | `8192` | The built-in AI's working memory, in tokens |
 | `AI_BUILTIN_PORT` | `39281` | The local port the built-in AI listens on (this PC only) |
+| `AI_LOAD_AT_START` | `True` | Load the AI while Whisper loads, so the first Polish is instant. `False` keeps it out of memory until the first Polish or Translate needs it (that one waits ~4 s). Tray → **Unload AI model** frees it at any time |
 | `AI_URL` / `AI_MODEL` / `AI_API_KEY` | *(blank)* | For `openai` and `claude` (see §6) |
 | `OLLAMA_HOST_URL` | `http://127.0.0.1:11434/api/generate` | `ollama` only: where Ollama listens |
 | `OLLAMA_MODEL_NAME` | *(blank)* | `ollama` only: pin an exact model, e.g. `qwen2.5:7b`. Blank = auto-pick the first model Ollama serves |
@@ -238,6 +239,11 @@ RTX 4070 against Ollama: it loads in 3.1 s (Ollama 6.8–7.1 s), answers a Polis
 memory. If `runtime\llama\<build>\` is missing, the engine says so at start-up — naming
 `tools/get_llama.py` — and uses Ollama instead. If the server stops while the engine
 runs, the next request starts it again.
+
+**Unload it when you do not need it.** Tray icon → **Unload AI model** frees its memory
+(3.2 GB of graphics memory, measured); the next Polish or Translate loads it again by
+itself, waiting about 4 s that once. `AI_LOAD_AT_START="False"` in `.env` keeps it out of
+memory from the start, until the first Polish needs it.
 
 ### B) Ollama
 ```ini

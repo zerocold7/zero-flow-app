@@ -144,6 +144,14 @@ def change_voice(icon, item):
     voice_engine.set_voice(item.text)
 
 
+def unload_ai_model(icon, item):
+    """Free the AI's memory until the next request needs it. The dictation half
+    usually started the AI, so ask it too; a standalone reader frees its own."""
+    if llm.unload_ai():
+        print(f"{ui.C_ACCENT}🔵 [Settings]{ui.C_RESET} AI model unloaded.")
+    signals.request_ai_unload()
+
+
 def exit_application(icon, item):
     """Quit. This is the engine's only exit control when running as the child, so it
     has to bring the parent down too. A standalone reader only quits itself: the exit
@@ -168,6 +176,8 @@ def tray_items():
         MenuItem("Smart LLM Cleaning", toggle_smart_mode, checked=lambda item: use_smart_mode),
         pystray.Menu.SEPARATOR,
         *voice_items,
+        pystray.Menu.SEPARATOR,
+        MenuItem("Unload AI model", unload_ai_model),
     )
 
 

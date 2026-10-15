@@ -74,5 +74,10 @@ def warm_up() -> None:
     """Nothing to load: the model runs at Anthropic."""
 
 
+def unload() -> bool:
+    """Nothing to unload: the model runs at Anthropic."""
+    return False
+
+
 def model_name() -> str:
     return f"{AI_MODEL or DEFAULT_MODEL} (Anthropic)"

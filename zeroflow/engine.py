@@ -31,10 +31,10 @@ from zeroflow.capture import Capture
 from zeroflow.clipboard import copy_selection, paste_text, read_clipboard_context
 from zeroflow.history import cap_history_file, log_to_history
 from zeroflow.hotkeys import run_async, wait_for_release
-from zeroflow.llm import ask_ai, model_name, warm_up_ai
+from zeroflow.llm import ask_ai, model_name, unload_ai, warm_up_ai
 from zeroflow.logs import init_logging
 from zeroflow.paths import HISTORY_FILE, VOCAB_CACHE_FILE, log_path
-from zeroflow.settings import (ENABLE_AUDIO_CHIMES, ENABLE_TOASTS, HOTKEYS,
+from zeroflow.settings import (AI_LOAD_AT_START, ENABLE_AUDIO_CHIMES, ENABLE_TOASTS, HOTKEYS,
                                MAX_RECORDING_SECONDS, WHISPER_MODEL_NAME)
 from zeroflow.stt import SAMPLE_RATE, transcribe_audio
 from zeroflow.text.language import ARABIC_LETTERS, checked_ai_output
@@ -396,11 +396,31 @@ def boot() -> None:
     # Clear any stale recording flag left behind if a previous run was force-killed
     # mid-capture — otherwise a running reader would keep refusing to speak.
     signals.set_recording(False)
-    # Load the AI model alongside Whisper rather than on the first Polish (3-12 s).
-    threading.Thread(target=warm_up_ai, daemon=True).start()
+    # Load the AI model alongside Whisper rather than on the first Polish (~3 s) —
+    # unless AI_LOAD_AT_START=False keeps it out of memory until it is needed.
+    if AI_LOAD_AT_START:
+        threading.Thread(target=warm_up_ai, daemon=True).start()
+    threading.Thread(target=watch_for_unload_requests, daemon=True).start()
     stt.model = stt.load_whisper_model()
     cap_history_file()
     ui.update_console_title("ONLINE")
+
+
+def unload_ai_model() -> None:
+    """Tray → "Unload AI model": free the AI's memory. The next Polish, Translate or
+    line fix loads it again by itself."""
+    if unload_ai():
+        print(f"\n{ui.C_GOOD}🧠 AI model unloaded — its memory is free. The next Polish or "
+              f"Translate loads it again.{ui.C_RESET}")
+    else:
+        print(f"\n{ui.C_WARN}🧠 The AI model is not loaded — nothing to unload.{ui.C_RESET}")
+
+
+def watch_for_unload_requests() -> None:
+    """The full engine's tray menu lives in the reader process; its "Unload AI model"
+    reaches this process, which started the AI, as a signal."""
+    while signals.wait_for_ai_unload():
+        unload_ai_model()
 
 
 def register_hotkeys() -> None:
@@ -467,7 +487,7 @@ def main() -> None:
     boot()
     show_banner()
     ui.show_toast("🚀 Zero- Flow Online", "Background engine is active and listening.", ENABLE_TOASTS)
-    ui.setup_system_tray()
+    ui.setup_system_tray(on_unload_ai=unload_ai_model)
     ui.set_window_icon()
     register_hotkeys()
     keyboard.wait()

@@ -77,6 +77,7 @@ class TestStartUp(SettingsTestCase):
         console = io.StringIO()
         with mock.patch.object(engine.stt, "load_whisper_model"), \
              mock.patch.object(engine, "warm_up_ai"), \
+             mock.patch.object(engine, "watch_for_unload_requests"), \
              mock.patch.object(engine, "cap_history_file"), \
              mock.patch.object(engine.signals, "set_recording"), \
              mock.patch.object(engine.ui, "update_console_title"), \

@@ -222,6 +222,11 @@ stays loaded until the engine exits. Measured: the built-in AI loads in 3.1 s (O
 6.8–7.1 s) and is ready 5.4 s after start-up. (With Ollama, `OLLAMA_KEEP_ALIVE` —
 default 30 minutes — decides how long it stays.)
 
+**Unload it when you do not need it.** Tray icon → **Unload AI model** frees its memory
+(3.2 GB of graphics memory, measured); the next Polish or Translate loads it again by
+itself, waiting about 4 s that once. `AI_LOAD_AT_START="False"` in `.env` keeps it out of
+memory from the start, until the first Polish needs it.
+
 **Sized for dictation.** The engine gives the AI an 8,192-token context (`AI_NUM_CTX`;
 `OLLAMA_NUM_CTX` with Ollama) — enough for a five-minute dictation and its answer.
 Gemma 4's own setting, 131,072, held **3.58 GB** of graphics memory against **2.99 GB**

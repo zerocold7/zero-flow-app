@@ -55,5 +55,10 @@ def warm_up() -> None:
     """Nothing to do: such a server loads its model itself."""
 
 
+def unload() -> bool:
+    """Nothing to do: the server manages its own memory."""
+    return False
+
+
 def model_name() -> str:
     return AI_MODEL or "(the server's default model)"

@@ -83,6 +83,9 @@ def choice(name: str, default: str, allowed: tuple[str, ...]) -> str:
 
 
 # ---------------------------------------------------------------- the AI model
+# Load the AI while Whisper loads, so the first Polish is instant. False leaves it out
+# of memory until the first Polish or Translate needs it (that one waits ~3 s).
+AI_LOAD_AT_START = switch("AI_LOAD_AT_START", True)
 # Which provider runs it (zeroflow/llm): "builtin" (llama-server, run by the engine), "ollama",
 # "openai" for any server speaking the OpenAI chat format — then AI_URL, AI_MODEL and, for a
 # cloud service, AI_API_KEY — or "claude" (Anthropic, with AI_API_KEY and optionally AI_MODEL).
