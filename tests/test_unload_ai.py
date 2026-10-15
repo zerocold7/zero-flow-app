@@ -115,6 +115,16 @@ class TestTheTrayItem(unittest.TestCase):
         own.assert_called_once()
         ask_engine.assert_called_once()
 
+    def test_a_reader_that_started_the_ai_unloads_it_alone(self):
+        """With AI_LOAD_AT_START=False the reader's Smart clean can be the first to start
+        the AI. Asking the engine too made it answer "not loaded" right after."""
+        from reader import app
+        with mock.patch.object(app.llm, "unload_ai", return_value=True), \
+             mock.patch.object(app.signals, "request_ai_unload") as ask_engine, \
+             contextlib.redirect_stdout(io.StringIO()):
+            app.unload_ai_model(None, None)
+        ask_engine.assert_not_called()
+
 
 if __name__ == "__main__":
     unittest.main()

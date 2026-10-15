@@ -145,11 +145,13 @@ def change_voice(icon, item):
 
 
 def unload_ai_model(icon, item):
-    """Free the AI's memory until the next request needs it. The dictation half
-    usually started the AI, so ask it too; a standalone reader frees its own."""
+    """Free the AI's memory until the next request needs it. Whichever half started
+    the AI unloads it: this one if its Smart clean did, otherwise the dictation half,
+    asked by a signal — so only one of them answers."""
     if llm.unload_ai():
         print(f"{ui.C_ACCENT}🔵 [Settings]{ui.C_RESET} AI model unloaded.")
-    signals.request_ai_unload()
+    else:
+        signals.request_ai_unload()
 
 
 def exit_application(icon, item):

@@ -396,7 +396,7 @@ def boot() -> None:
     # Clear any stale recording flag left behind if a previous run was force-killed
     # mid-capture — otherwise a running reader would keep refusing to speak.
     signals.set_recording(False)
-    # Load the AI model alongside Whisper rather than on the first Polish (~3 s) —
+    # Load the AI model alongside Whisper rather than on the first Polish (~4 s) —
     # unless AI_LOAD_AT_START=False keeps it out of memory until it is needed.
     if AI_LOAD_AT_START:
         threading.Thread(target=warm_up_ai, daemon=True).start()

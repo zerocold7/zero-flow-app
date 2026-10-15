@@ -248,9 +248,11 @@ MUTATIONS = [
      "    threading.Thread(target=watch_for_unload_requests, daemon=True).start()\n", "",
      "tests.test_unload_ai.TestTheEngine.test_the_engine_listens_for_unload_requests"),
     ("unload: the reader's tray reaches the engine",
-     "        print(f\"{ui.C_ACCENT}🔵 [Settings]{ui.C_RESET} AI model unloaded.\")\n    signals.request_ai_unload()\n",
-     "        print(f\"{ui.C_ACCENT}🔵 [Settings]{ui.C_RESET} AI model unloaded.\")\n",
+     "    else:\n        signals.request_ai_unload()\n", "",
      "tests.test_unload_ai.TestTheTrayItem.test_the_reader_unloads_its_own_and_asks_the_engine"),
+    ("unload: only one half answers",
+     "    else:\n        signals.request_ai_unload()\n", "    signals.request_ai_unload()\n",
+     "tests.test_unload_ai.TestTheTrayItem.test_a_reader_that_started_the_ai_unloads_it_alone"),
 ]
 
 only = sys.argv[1] if len(sys.argv) > 1 else ""
