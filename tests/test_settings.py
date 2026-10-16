@@ -71,6 +71,40 @@ class TestMistakes(SettingsTestCase):
         self.assertIn('"gpu"', settings.problems[0])
 
 
+class TestSafeguards(SettingsTestCase):
+    def test_a_number_above_its_maximum_is_reported(self):
+        """A port above 65535 crashed llama-server's start with no word why."""
+        with self.env(AI_BUILTIN_PORT="70000"):
+            self.assertEqual(settings.whole_number("AI_BUILTIN_PORT", 39281, minimum=1024,
+                                                   maximum=65535), 39281)
+        self.assertIn("65535 or less", settings.problems[0])
+
+    def test_one_key_for_two_actions_is_reported_by_name(self):
+        settings.report_clashing_keys({"HOTKEY_EN_RAW": "F4", "HOTKEY_FIX": "shift+f3",
+                                       "HOTKEY_READ": "f4"})
+        self.assertEqual(len(settings.problems), 1)
+        self.assertIn("HOTKEY_EN_RAW and HOTKEY_READ", settings.problems[0])
+
+    def test_a_chord_written_in_another_order_is_the_same_key(self):
+        settings.report_clashing_keys({"HOTKEY_FIX": "alt+ctrl+r", "HOTKEY_READ": "Ctrl + Alt + R"})
+        self.assertEqual(len(settings.problems), 1)
+
+    def test_the_shipped_keys_do_not_clash(self):
+        settings.report_clashing_keys({**{a: d for a, (_, d) in settings._HOTKEY_SETTINGS.items()},
+                                       "HOTKEY_READ": "f4"})
+        self.assertEqual(settings.problems, [])
+
+    def test_a_key_over_plain_http_to_another_computer_is_caught(self):
+        self.assertTrue(settings.key_sent_in_the_clear("http://192.168.1.5:8080/v1", "sk-x"))
+        self.assertFalse(settings.key_sent_in_the_clear("https://api.example.com/v1", "sk-x"))
+        self.assertFalse(settings.key_sent_in_the_clear("http://127.0.0.1:8080/v1", "sk-x"))
+        self.assertFalse(settings.key_sent_in_the_clear("http://localhost:1234/v1", "sk-x"))
+        self.assertFalse(settings.key_sent_in_the_clear("http://127.0.0.2:8080/v1", "sk-x"))
+        self.assertFalse(settings.key_sent_in_the_clear("http://[::1]:8080/v1", "sk-x"))
+        self.assertTrue(settings.key_sent_in_the_clear("http://my-server:8080/v1", "sk-x"))
+        self.assertFalse(settings.key_sent_in_the_clear("http://192.168.1.5:8080/v1", ""))
+
+
 class TestStartUp(SettingsTestCase):
     def test_the_engine_reports_mistakes_when_it_starts(self):
         settings.problems.append('MAX_RECORDING_SECONDS="five" is not a number — using 300.')

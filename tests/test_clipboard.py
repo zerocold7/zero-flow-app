@@ -80,6 +80,23 @@ class TestCopySelection(ClipboardTestCase):
         lock.assert_called_once()
 
 
+class TestPaste(ClipboardTestCase):
+    def test_pastes_and_restores_the_clipboard(self):
+        fake = self.use(FakeClipboard())
+        clipboard.paste_text("dictated", press_enter=True)
+        self.assertEqual(self.keys, ["ctrl+v", "enter"])
+        self.assertEqual(fake.content, "what the user had")
+
+    def test_the_clipboard_is_restored_even_if_the_paste_fails(self):
+        """A failed key send left the dictation on the clipboard, in place of what
+        the user had copied."""
+        fake = self.use(FakeClipboard())
+        with mock.patch.object(clipboard.keyboard, "send", side_effect=OSError("no keyboard")), \
+             self.assertRaises(OSError):
+            clipboard.paste_text("dictated")
+        self.assertEqual(fake.content, "what the user had")
+
+
 class TestCallers(ClipboardTestCase):
     def test_the_reader_uses_it(self):
         from reader import app

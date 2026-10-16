@@ -7,7 +7,9 @@ A value that is not what its setting needs ("five" seconds, "gpu" for a device t
 takes auto or cpu) does not stop the engine: the default is used instead, and the
 mistake is kept in `problems`, which the engine reports by name when it starts.
 """
+import ipaddress
 import os
+from urllib.parse import urlparse
 
 from dotenv import load_dotenv
 
@@ -60,7 +62,8 @@ def number(name: str, default: float, minimum: float | None = None) -> float:
     return value
 
 
-def whole_number(name: str, default: int, minimum: int | None = None) -> int:
+def whole_number(name: str, default: int, minimum: int | None = None,
+                 maximum: int | None = None) -> int:
     raw = _raw(name)
     if raw is None:
         return default
@@ -70,6 +73,8 @@ def whole_number(name: str, default: int, minimum: int | None = None) -> int:
         return _bad(name, raw, "a whole number", default)
     if minimum is not None and value < minimum:
         return _bad(name, raw, f"{minimum} or more", default)
+    if maximum is not None and value > maximum:
+        return _bad(name, raw, f"{maximum} or less", default)
     return value
 
 
@@ -93,6 +98,28 @@ AI_PROVIDER = text("AI_PROVIDER", "builtin").lower()
 AI_URL = text("AI_URL", "http://127.0.0.1:8080/v1/chat/completions")
 AI_MODEL = text("AI_MODEL", "")
 AI_API_KEY = text("AI_API_KEY", "")
+
+
+def key_sent_in_the_clear(url: str, api_key: str) -> bool:
+    """True if `api_key` would go to another computer over plain http, where anyone on
+    the way can read it. This PC's own servers (127.0.0.1, localhost) are fine."""
+    address = urlparse(url)
+    return bool(api_key) and address.scheme == "http" and not _this_pc(address.hostname)
+
+
+def _this_pc(host: str | None) -> bool:
+    if host == "localhost":
+        return True
+    try:
+        return ipaddress.ip_address(host).is_loopback      # 127.x.x.x, ::1
+    except ValueError:
+        return False                                     # a name, or no host at all
+
+
+if AI_PROVIDER == "openai" and key_sent_in_the_clear(AI_URL, AI_API_KEY):
+    problems.append(f'AI_URL="{AI_URL}" is plain http, so AI_API_KEY is sent unencrypted — '
+                    f'use an https:// address.')
+
 # The built-in AI's llama.cpp build: "auto" picks it from the graphics card (NVIDIA →
 # cuda, AMD/Intel card → vulkan, otherwise cpu).
 LLAMA_VARIANT = choice("LLAMA_VARIANT", "auto", ("auto", "cuda", "vulkan", "cpu"))
@@ -101,7 +128,7 @@ LLAMA_VARIANT = choice("LLAMA_VARIANT", "auto", ("auto", "cuda", "vulkan", "cpu"
 AI_BUILTIN_REPO = text("AI_BUILTIN_REPO", "google/gemma-4-E4B-it-qat-q4_0-gguf")
 AI_BUILTIN_FILE = text("AI_BUILTIN_FILE", "gemma-4-E4B_q4_0-it.gguf")
 AI_NUM_CTX = whole_number("AI_NUM_CTX", 8192, minimum=512)
-AI_BUILTIN_PORT = whole_number("AI_BUILTIN_PORT", 39281, minimum=1024)
+AI_BUILTIN_PORT = whole_number("AI_BUILTIN_PORT", 39281, minimum=1024, maximum=65535)
 OLLAMA_HOST_URL = text("OLLAMA_HOST_URL", "http://127.0.0.1:11434/api/generate")
 # Pin an exact model (e.g. qwen2.5:7b); blank = the first model Ollama has installed.
 OLLAMA_MODEL_NAME = text("OLLAMA_MODEL_NAME", "")
@@ -133,21 +160,40 @@ WHISPER_COMPUTE_TYPE = text("WHISPER_COMPUTE_TYPE", "float16").lower()
 MAX_RECORDING_SECONDS = number("MAX_RECORDING_SECONDS", 300, minimum=1)
 
 # ---------------------------------------------------------------- keys
-HOTKEYS = {
-    "en_raw":      text("HOTKEY_EN_RAW", "f5"),
-    "en_polish":   text("HOTKEY_EN_POLISH", "f6"),
-    "ar_raw":      text("HOTKEY_AR_RAW", "f7"),
-    "ar_polish":   text("HOTKEY_AR_POLISH", "f8"),
-    "en2ar":       text("HOTKEY_EN2AR", "f9"),
-    "ar2en":       text("HOTKEY_AR2EN", "f10"),
-    "fix":         text("HOTKEY_FIX", "shift+f3"),
-    "maintenance": text("HOTKEY_MAINTENANCE", "shift+f1"),
-    "purge":       text("HOTKEY_PURGE", "shift+f2"),
+# Each action's .env name and default key.
+_HOTKEY_SETTINGS = {
+    "en_raw":      ("HOTKEY_EN_RAW", "f5"),
+    "en_polish":   ("HOTKEY_EN_POLISH", "f6"),
+    "ar_raw":      ("HOTKEY_AR_RAW", "f7"),
+    "ar_polish":   ("HOTKEY_AR_POLISH", "f8"),
+    "en2ar":       ("HOTKEY_EN2AR", "f9"),
+    "ar2en":       ("HOTKEY_AR2EN", "f10"),
+    "fix":         ("HOTKEY_FIX", "shift+f3"),
+    "maintenance": ("HOTKEY_MAINTENANCE", "shift+f1"),
+    "purge":       ("HOTKEY_PURGE", "shift+f2"),
     # Shared with the reader on purpose: one key cancels a recording and silences it.
-    "panic":       text("HOTKEY_PANIC", "esc"),
+    "panic":       ("HOTKEY_PANIC", "esc"),
 }
+HOTKEYS = {action: text(name, default) for action, (name, default) in _HOTKEY_SETTINGS.items()}
 # The reader's key: read the highlighted text aloud.
 HOTKEY_READ = text("HOTKEY_READ", "f4")
+
+
+def report_clashing_keys(keys: dict[str, str]) -> None:
+    """`keys` maps .env names to keys. Two actions on one key both run on every
+    press — F4 set as a record key would dictate and read aloud at once — so each
+    clash is reported by name. ("Ctrl+Alt+R" and "alt + ctrl + r" are the same key.)"""
+    first = {}
+    for name, key in keys.items():
+        chord = "+".join(sorted(part.strip() for part in key.lower().split("+")))
+        other = first.setdefault(chord, name)
+        if other != name:
+            problems.append(f'{other} and {name} in .env are both "{key}" — '
+                            f'that key does both. Give each its own key.')
+
+
+report_clashing_keys({name: HOTKEYS[action] for action, (name, _) in _HOTKEY_SETTINGS.items()}
+                     | {"HOTKEY_READ": HOTKEY_READ})
 
 # ---------------------------------------------------------------- the reader
 READER_VOICE = text("READER_VOICE", "af_heart")
