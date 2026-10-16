@@ -13,6 +13,7 @@ What every answer goes through, whoever gave it, happens here once: the console
 spinner, the empty-answer check, and learning a word the model tagged `[LEARN: …]`.
 """
 import logging
+import traceback
 
 from zeroflow import settings, ui
 from zeroflow.llm import builtin, claude, ollama, openai_compatible
@@ -43,6 +44,14 @@ def ask_ai(raw_text: str, context_text: str | None, instruction: str,
     ui.start_processing_spinner("AI Processing")
     try:
         answer = provider.ask(raw_text, context_text, instruction, timeout)
+    except Exception:
+        # A provider bug, a missing package, a server answering in a shape nobody
+        # expected: no answer. Raised, it would lose the dictation — the caller
+        # pastes what was said when there is no answer.
+        logging.error(f"The AI provider failed: {traceback.format_exc()}")
+        ui.show_toast("⚠️ AI Error", "The AI failed — your own words were kept.",
+                      settings.ENABLE_TOASTS)
+        answer = None
     finally:
         ui.stop_processing_spinner()
     if answer is None:

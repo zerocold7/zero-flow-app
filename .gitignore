@@ -33,3 +33,6 @@ tools/bench/results/
 
 # The built-in AI runtime (tools/get_llama.py)
 runtime/
+
+# Left behind only if tools/mutation_check.py is killed mid-run
+*.mutbak

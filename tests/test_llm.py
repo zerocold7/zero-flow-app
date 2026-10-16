@@ -69,9 +69,25 @@ class TestRouting(unittest.TestCase):
         fake = self.use(None)
         fake.ask = mock.Mock(side_effect=RuntimeError("boom"))
         with mock.patch.object(llm.ui, "stop_processing_spinner") as stop, \
-             self.assertRaises(RuntimeError):
+             mock.patch.object(llm.ui, "show_toast"), \
+             self.assertLogs(level="ERROR"):
             llm.ask_ai("raw", None, "Polish.")
         stop.assert_called_once()
+
+    def test_a_failing_provider_is_no_answer_and_says_why(self):
+        """Raised, a provider's error (Ollama's 200 that is not JSON, a missing
+        anthropic package) lost the whole dictation; no answer pastes what was said."""
+        fake = self.use(None)
+        fake.ask = mock.Mock(side_effect=ValueError("not JSON"))
+        with mock.patch.object(llm.ui, "show_toast") as toast, \
+             self.assertLogs(level="ERROR") as logs:
+            try:
+                answer = llm.ask_ai("raw", None, "Polish.")
+            except ValueError:
+                self.fail("the provider's error reached the caller")
+        self.assertIsNone(answer)
+        self.assertIn("not JSON", "\n".join(logs.output))
+        toast.assert_called_once()
 
     def test_the_provider_is_the_one_set_in_env(self):
         self.assertIs(llm.provider, llm.choose(llm.settings.AI_PROVIDER))

@@ -28,15 +28,19 @@ def paste_text(text: str, press_enter: bool = False) -> None:
     """Paste `text` at the cursor through the clipboard, then restore the clipboard."""
     with clipboard_lock():
         saved_clipboard = pyperclip.paste()
-        pyperclip.copy(text)
-        time.sleep(0.04)
-        keyboard.send('ctrl+v')
-        # Give slow apps time to read the clipboard before we restore it — restoring
-        # too early makes them paste the *old* clipboard contents instead.
-        time.sleep(0.15)
-        if press_enter:
-            keyboard.send('enter')
-        pyperclip.copy(saved_clipboard)          # restore the user's clipboard
+        try:
+            pyperclip.copy(text)
+            time.sleep(0.04)
+            keyboard.send('ctrl+v')
+            # Give slow apps time to read the clipboard before we restore it — restoring
+            # too early makes them paste the *old* clipboard contents instead.
+            time.sleep(0.15)
+            if press_enter:
+                keyboard.send('enter')
+        finally:
+            # Even when a step above fails: the dictation must not replace what the
+            # user had on the clipboard.
+            pyperclip.copy(saved_clipboard)
 
 
 def copy_selection(select: str | None = None) -> str | None:
