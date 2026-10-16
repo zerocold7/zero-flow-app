@@ -177,6 +177,19 @@ except where noted.
 both languages in 0.33–0.43 s, the AI ready 4.6 s after start, and no `llama-server`
 left after a crash.
 
+### 🛡️ Safeguards
+- **An AI that fails keeps your words.** A provider that broke instead of answering
+  (a server reply in an unexpected shape, a missing package) lost the whole dictation;
+  now your own words are pasted, a toast says the AI failed, and the log says why.
+- **Your clipboard comes back even when a paste fails** partway, rather than being
+  left holding the dictation.
+- **Start-up warns about** two actions set to one key in `.env` (both would run on
+  every press; `alt+ctrl+r` and `Ctrl + Alt + R` count as the same key), an
+  `AI_BUILTIN_PORT` above 65535, and an `AI_API_KEY` sent over plain `http://` to
+  another computer.
+
+266 tests; the seven new guards were each broken on purpose and caught (76 in all).
+
 ---
 
 ## [1.5.1] — 2026-10-14 — A fresh install works again
