@@ -269,7 +269,7 @@ def process_recording(capture: Capture) -> None:
         ui.update_console_title("ONLINE")
         return
 
-    # Read now, with the mic already closed: pyperclip can block for up to half a
+    # Read now, with the mic already closed: the clipboard can be busy for up to half a
     # second while another app holds the clipboard. On the keyboard hook that froze
     # the keyboard; before the mic opened it would cut off your first words.
     context = polish_context(mode)

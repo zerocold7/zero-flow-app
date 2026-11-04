@@ -209,6 +209,13 @@ left after a crash.
   certifi, anyio, fsspec, setuptools. `pip-audit` (now in `requirements-dev.txt`)
   finds none left in them. torch 2.5.1 still has known holes; it needs its own move
   to a newer CUDA build.
+- **Your clipboard comes back whole, and dictations stay out of Win+V.** The clipboard
+  was saved and restored as text only (pyperclip), so a picture or copied files were
+  gone after every dictation, `F4` and `Shift+F3`; and every dictation landed in
+  clipboard history and cloud sync. The new `zeroflow/win_clipboard.py` saves every
+  format through the Win32 API and marks the engine's own writes as private. Checked
+  on the real clipboard: a picture survives, and a dictation is absent from Win+V
+  history while an ordinary copy is present. pyperclip is no longer needed.
 
 ---
 

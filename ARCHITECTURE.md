@@ -22,7 +22,7 @@ a local LLM to clean up or translate text.
 | `zeroflow/engine.py` | Flow: hotkeys, recording, transcribe → refine → paste, the action keys |
 | `zeroflow/supervisor.py` | The whole engine: runs dictation and hosts the reader as a child sharing its console |
 | `zeroflow/stt.py` | Whisper: loading (GPU, CPU fallback), transcription, the invented-ending filter. The only module that imports faster-whisper |
-| `zeroflow/capture.py`, `clipboard.py`, `hotkeys.py` | One recording's audio; paste and copy through the clipboard; key helpers |
+| `zeroflow/capture.py`, `clipboard.py`, `win_clipboard.py`, `hotkeys.py` | One recording's audio; paste and copy through the clipboard; the Win32 clipboard (every format, kept out of history); key helpers |
 | `zeroflow/llm/` | The AI model: `ask_ai` routes to the provider set by `AI_PROVIDER` — `builtin.py` (llama-server, run by the engine; installed by `llama_runtime.py`), `ollama.py`, `openai_compatible.py` or `claude.py` (interface in `base.py`) |
 | `zeroflow/text/` | `language.py` (which language a text is in; the AI-answer guard), `macros.py` (spoken commands and punctuation) |
 | `zeroflow/vocabulary.py`, `history.py` | The learned-word list and the dictation history |
@@ -113,7 +113,7 @@ A recording left running stops by itself after `MAX_RECORDING_SECONDS` (300 s) a
 transcribed as usual.
 
 The clipboard context Polish mode hands the LLM is read *after* the mic closes, not on
-the key press: `pyperclip` can block for up to half a second while another app holds
+the key press: opening the clipboard can wait up to half a second while another app holds
 the clipboard, which on the keyboard hook froze the keyboard and before the mic opened
 would have cut off the first words.
 
@@ -394,8 +394,14 @@ your PC, git-ignored), and `bench_stt.py --no-filter` gives the comparison.
 - Injection (`paste_text`) saves the clipboard, pastes via `Ctrl+V`, waits 150 ms for
   slow apps to read it, then **restores** the original clipboard — all under the
   cross-process clipboard lock. `Shift+F3` (fix the line) uses the same routine.
-- Only **text** survives the save/restore: `pyperclip` cannot hold images or files, so
-  an image on the clipboard is gone after a dictation.
+- **Everything** survives the save/restore: `zeroflow/win_clipboard.py` saves every
+  format that is plain memory (text, HTML, images as DIB, copied files) through the
+  Win32 API. Only GDI-handle formats are skipped (Windows rebuilds a bitmap from the
+  DIB). The engine's own writes — the dictation, and the restore — carry the formats
+  Windows reads as "not for clipboard history or cloud sync", so dictations never
+  appear in Win+V. (pyperclip, used before, saved text only.) A selection copied for
+  `F4` or `Shift+F3` is written by the other app's Ctrl+C, so that copy does enter
+  history; the engine cannot mark another app's write.
 
 ---
 
