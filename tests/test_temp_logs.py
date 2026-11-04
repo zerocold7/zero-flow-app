@@ -5,6 +5,7 @@ The logs are still open when the process ends, and Windows will not delete an op
 file, so the clean-up closes them first.
 """
 import os
+import shutil
 import subprocess
 import sys
 import unittest
@@ -32,6 +33,8 @@ class TestTemporaryLogFolder(unittest.TestCase):
     def test_the_folder_is_removed_when_the_process_ends(self):
         env = {k: v for k, v in os.environ.items() if k != "ZEROFLOW_LOG_DIR"}
         folder = self.run_once(env)
+        # Removed whatever the result, so a failing run leaves nothing in Temp either.
+        self.addCleanup(shutil.rmtree, folder, True)
         self.assertIn("zeroflow-cleanup-check-", folder)
         self.assertFalse(os.path.exists(folder), f"left behind: {folder}")
 

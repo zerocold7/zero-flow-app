@@ -10,9 +10,11 @@ exactly once; after a refactor, update an entry whose text changed (it shows SKI
 Every file is restored afterwards. Run it from the project root, with the venv's Python.
 """
 import glob
+import os
 import shutil
 import subprocess
 import sys
+import tempfile
 
 MUTATIONS = [
     ("claude: a refusal is no answer",
@@ -352,8 +354,14 @@ for label, old, new, test in MUTATIONS:
             failed += 1
             continue
         open(path, "w", encoding="utf-8").write(src.replace(old, new))
-        run = subprocess.run([sys.executable, "-m", "unittest", test],
-                             capture_output=True, text=True, timeout=120)
+        # Logs in a folder of this run's own, removed below: with the clean-up of the
+        # tests' log folder broken on purpose, the tests would leave theirs in Temp.
+        logs = tempfile.mkdtemp(prefix="zeroflow-mutation-")
+        try:
+            run = subprocess.run([sys.executable, "-m", "unittest", test], capture_output=True,
+                                 text=True, timeout=120, env={**os.environ, "ZEROFLOW_LOG_DIR": logs})
+        finally:
+            shutil.rmtree(logs, ignore_errors=True)
         caught = run.returncode != 0 and ("FAIL:" in run.stderr or "AssertionError" in run.stderr)
         print(f"{'CAUGHT ' if caught else 'MISSED '}  {label}")
         failed += not caught
