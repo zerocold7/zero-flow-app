@@ -5,6 +5,7 @@ check_hardware.py is standard-library only; these tests feed it made-up hardware
 they pass on any machine and never touch the real .env.
 """
 import os
+import subprocess
 import sys
 import unittest
 from unittest import mock
@@ -197,6 +198,20 @@ class TestPresets(unittest.TestCase):
             preset = hw.load_preset(tier)
             for key in ("WHISPER_MODEL_NAME", "READER_DEVICE", "AI_PROVIDER", "LLAMA_VARIANT"):
                 self.assertIn(key, preset, f"{tier} lacks {key}")
+
+    def test_every_preset_and_no_env_at_all_load_with_no_problem(self):
+        """A value the engine rejects would fall back to its default unseen by whoever
+        applied the preset. Each runs in a fresh process, with no .env read, so this
+        PC's own settings cannot hide or cause a problem."""
+        load = ("import dotenv; dotenv.load_dotenv = lambda *a, **k: None\n"
+                "from zeroflow import settings; print(repr(settings.problems))")
+        base = {k: v for k, v in os.environ.items()
+                if k not in hw.parse_env(hw._read(os.path.join(REPO, ".env.example")))}
+        for tier in [None, *hw.TIERS]:
+            env = dict(base, **(hw.load_preset(tier) if tier else {}))
+            out = subprocess.run([sys.executable, "-c", load], cwd=REPO, env=env,
+                                 capture_output=True, text=True, timeout=60)
+            self.assertEqual(out.stdout.strip(), "[]", f"{tier or 'no .env'}: {out.stdout}{out.stderr[-500:]}")
 
 
 class TestMergeEnv(unittest.TestCase):

@@ -11,18 +11,20 @@ code is the number of failures. Nothing is typed, pasted or played aloud:
   4. AI           the AI provider answers a Polish, then frees its memory
   5. voice        the reader's voice synthesises a sentence, where it ran
 
-Logs go to a temporary folder (ZEROFLOW_LOG_DIR), not the program folder.
+Logs go to a temporary folder (removed afterwards), not the program folder.
 """
 import os
 import sys
-import tempfile
 import time
 import traceback
 import wave
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.insert(0, ROOT)
-os.environ.setdefault("ZEROFLOW_LOG_DIR", tempfile.mkdtemp(prefix="zeroflow-smoke-"))
+
+from zeroflow.paths import use_temporary_log_dir  # noqa: E402
+
+use_temporary_log_dir("zeroflow-smoke-")
 
 import numpy as np  # noqa: E402
 

@@ -18,3 +18,31 @@ def log_dir() -> str:
 
 def log_path(component: str) -> str:
     return os.path.join(log_dir(), f"{component}_debug.log")
+
+
+def use_temporary_log_dir(prefix: str) -> None:
+    """Point the logs at a new temporary folder for this run (the tests and the
+    tools/ checks), and remove it when the process ends — unless ZEROFLOW_LOG_DIR is
+    set already, which is then kept. Left behind, one folder per run piled up in the
+    system's Temp: 826 of them."""
+    if os.getenv("ZEROFLOW_LOG_DIR"):
+        return
+    import atexit
+    import tempfile
+    folder = tempfile.mkdtemp(prefix=prefix)
+    os.environ["ZEROFLOW_LOG_DIR"] = folder
+    atexit.register(_remove_log_dir, folder)
+
+
+def _remove_log_dir(folder: str) -> None:
+    """Close the logs first: Windows will not delete a file that is still open."""
+    import faulthandler
+    import logging
+    import shutil
+    import sys
+    logging.shutdown()
+    logs = sys.modules.get("zeroflow.logs")
+    if logs is not None and logs._crash_file is not None:
+        faulthandler.disable()
+        logs._crash_file.close()
+    shutil.rmtree(folder, ignore_errors=True)

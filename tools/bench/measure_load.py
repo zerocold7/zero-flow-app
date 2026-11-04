@@ -14,21 +14,23 @@ Each part runs in a fresh process, one after another, so their memory is not mix
 
 Graphics memory is the card's total use before and after loading (nvidia-smi), so
 another program changing its use at the same moment would show up in it. Logs go to a
-temporary folder.
+temporary folder, removed afterwards.
 """
 import ctypes
 import json
 import os
 import subprocess
 import sys
-import tempfile
 import time
 import wave
 from ctypes import wintypes
 
 ROOT = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 sys.path.insert(0, ROOT)
-os.environ.setdefault("ZEROFLOW_LOG_DIR", tempfile.mkdtemp(prefix="zeroflow-measure-"))
+
+from zeroflow.paths import use_temporary_log_dir  # noqa: E402
+
+use_temporary_log_dir("zeroflow-measure-")  # inherited by each part's process
 PARAGRAPH = ("The engine reads the highlighted text aloud. It splits the text into short "
              "batches, so the first words start playing while the rest is still being "
              "made. On a graphics card that takes a fraction of a second; on the processor "
