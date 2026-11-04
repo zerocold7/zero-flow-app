@@ -37,7 +37,7 @@ Recommended settings (presets/nvidia-desktop.env):
   WHISPER_MODEL_NAME="large-v3"
   ...
 Checks:
-  [ok] packages installed (this Python); torch 2.5.1+cu121 (CUDA build)
+  [ok] packages installed (this Python); torch 2.14.1+cu126 (CUDA build)
   [!!] the built-in AI (cuda build) is not installed yet: python tools/get_llama.py
   [ok] the AI model downloads on first start (about 5.15 GB)
 ```

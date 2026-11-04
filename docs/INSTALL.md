@@ -70,7 +70,7 @@ Then the variant for your tier:
 *first*, or pip quietly picks the CPU-only one and the voice runs on the CPU:
 
 ```powershell
-.\venv\Scripts\python.exe -m pip install torch==2.5.1+cu121 --index-url https://download.pytorch.org/whl/cu121
+.\venv\Scripts\python.exe -m pip install torch==2.14.1+cu126 --index-url https://download.pytorch.org/whl/cu126
 .\venv\Scripts\python.exe -m pip install -r requirements.txt -c constraints.txt
 ```
 

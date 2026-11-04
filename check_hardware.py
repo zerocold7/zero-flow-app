@@ -321,8 +321,8 @@ def software_checks(tier, settings):
                              + (" (CUDA build of torch first)" if uses_nvidia else "")))
     elif uses_nvidia and "+cu" not in torch:
         notes.append((False, f"torch {torch} is the CPU-only build, so the voice cannot use your "
-                             f"card. Fix: pip install torch==2.5.1+cu121 --index-url "
-                             f"https://download.pytorch.org/whl/cu121"))
+                             f"card. Fix: pip install torch==2.14.1+cu126 --index-url "
+                             f"https://download.pytorch.org/whl/cu126"))
     else:
         notes.append((True, f"packages installed ({where}); torch {torch}"
                             + (" (CUDA build)" if "+cu" in torch else "")))

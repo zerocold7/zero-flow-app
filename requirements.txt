@@ -26,7 +26,7 @@ nvidia-cudnn-cu12~=9.1
 # --- Reader: text-to-speech (Kokoro) ---
 # kokoro pulls in torch. For GPU speech synthesis install the CUDA build of torch
 # FIRST, otherwise pip resolves the CPU-only wheel:
-#   pip install torch==2.5.1+cu121 --index-url https://download.pytorch.org/whl/cu121
+#   pip install torch==2.14.1+cu126 --index-url https://download.pytorch.org/whl/cu126
 # The reader runs fine on CPU too — Kokoro-82M is small.
 kokoro==0.9.4
 # Kokoro's English pronunciation needs spaCy's small English model. Without it here,

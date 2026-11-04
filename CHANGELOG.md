@@ -207,8 +207,14 @@ left after a crash.
 - **Packages with known security holes upgraded:** Pillow 10.2.0 → 13.0.0, requests
   2.31.0 → 2.33.0, urllib3 → 2.8.0, python-dotenv → 1.2.2, filelock → 4.2.1, and
   certifi, anyio, fsspec, setuptools. `pip-audit` (now in `requirements-dev.txt`)
-  finds none left in them. torch 2.5.1 still has known holes; it needs its own move
-  to a newer CUDA build.
+  finds none left in them.
+- **torch 2.5.1+cu121 → 2.14.1+cu126** (12 known holes, among them `torch.load`
+  running code from a crafted weights file), with sympy 1.14.0, which it needs.
+  **On NVIDIA PCs, install it with the new command in [INSTALL.md](docs/INSTALL.md)
+  first;** a plain `pip install -r … -c constraints.txt` would replace the old one
+  with the CPU-only build. The reader's voice runs on the card as
+  before (0.08 s for 4.3 s of speech, the same as 2.5.1); its cuDNN is now 9.10, still
+  not Whisper's 9.23, so the two halves stay separate processes.
 - **Your clipboard comes back whole, and dictations stay out of Win+V.** The clipboard
   was saved and restored as text only (pyperclip), so a picture or copied files were
   gone after every dictation, `F4` and `Shift+F3`; and every dictation landed in

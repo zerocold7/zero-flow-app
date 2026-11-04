@@ -61,7 +61,7 @@ python -m venv venv
 **فئات NVIDIA** (`nvidia-desktop` و `nvidia-laptop`) — ثبّت نسخة torch الخاصة بكرت الشاشة **أولاً**، وإلا يختار pip بصمت نسخة المعالج فيعمل الصوت على المعالج:
 
 ```powershell
-.\venv\Scripts\python.exe -m pip install torch==2.5.1+cu121 --index-url https://download.pytorch.org/whl/cu121
+.\venv\Scripts\python.exe -m pip install torch==2.14.1+cu126 --index-url https://download.pytorch.org/whl/cu126
 .\venv\Scripts\python.exe -m pip install -r requirements.txt -c constraints.txt
 ```
 

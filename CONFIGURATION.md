@@ -192,7 +192,7 @@ The **voice model** (reader) needs the CUDA build of `torch` for the GPU, and
 [INSTALL.md](docs/INSTALL.md).) On an NVIDIA machine, install it first:
 
 ```bash
-pip install torch==2.5.1+cu121 --index-url https://download.pytorch.org/whl/cu121
+pip install torch==2.14.1+cu126 --index-url https://download.pytorch.org/whl/cu126
 ```
 
 If the CPU build is installed anyway, the reader still works — on the CPU — and says so

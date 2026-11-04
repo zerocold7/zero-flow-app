@@ -18,7 +18,7 @@ child `zero_flow.py` spawns — so it can hold CUDA freely and `READER_DEVICE` i
 honoured as written.
 
 That isolation is deliberate. Hosting this half and Whisper as threads in *one*
-process would force the voice onto the CPU: torch 2.5.1+cu121 bundles cuDNN 9.1 while
+process would force the voice onto the CPU: torch 2.14.1+cu126 bundles cuDNN 9.10 while
 CTranslate2 (Whisper) needs the pip-installed cuDNN 9.23, Windows loads only one DLL
 per base name per process, and the loser **segfaults the whole process** — in either
 load order, with no exception to catch. CPU synthesis measures 3.6-5.2x realtime
@@ -87,12 +87,12 @@ def resolve_device():
         return "cpu"
     import torch
     if torch.version.cuda is None:
-        # A CPU-only torch wheel. requirements.txt cannot express the +cu121 index, so
+        # A CPU-only torch wheel. requirements.txt cannot express the +cu126 index, so
         # a plain `pip install -r` can quietly fetch this one and speech silently
         # halves in speed with no error anywhere. Say so.
         logging.warning("This is a CPU-only build of torch, so the voice model cannot "
-                        "use the GPU. Reinstall with: pip install torch==2.5.1+cu121 "
-                        "--index-url https://download.pytorch.org/whl/cu121")
+                        "use the GPU. Reinstall with: pip install torch==2.14.1+cu126 "
+                        "--index-url https://download.pytorch.org/whl/cu126")
         return "cpu"
     if DEVICE_POLICY == "cuda":
         return "cuda"

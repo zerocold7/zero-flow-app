@@ -15,7 +15,7 @@ state that lives inside the reader.
 WHY A CHILD PROCESS AND NOT A THREAD
 --------------------------------------------------------------------------------
 An earlier version really did host both halves in one process. It worked, but it had
-to force the voice model onto the CPU: torch 2.5.1+cu121 bundles cuDNN 9.1 while
+to force the voice model onto the CPU: torch 2.14.1+cu126 bundles cuDNN 9.10 while
 CTranslate2 (Whisper) needs the pip-installed cuDNN 9.23, Windows loads exactly one
 DLL per base name per process, and whichever initialises CUDA second gets the wrong
 one and **segfaults** — in either load order, with no exception to catch. That cost

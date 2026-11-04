@@ -535,7 +535,8 @@ as well as within one), and the **orphaned reader** (see §10a).
 **Whisper and Kokoro cannot both use CUDA in one process. The result is a segfault,
 not an exception — nothing can catch it and no fallback runs.**
 
-- `torch 2.5.1+cu121` bundles cuDNN **9.1** in `torch/lib`.
+- `torch 2.14.1+cu126` bundles cuDNN **9.10** in `torch/lib` (9.1 with the
+  2.5.1+cu121 build used before 2.0.0-alpha.4.4: the clash is the same).
 - CTranslate2 4.8 (behind faster-whisper) uses the pip `nvidia-cudnn-cu12` **9.23**.
 - Windows loads exactly **one DLL per base name per process**. Whichever initialises
   CUDA second gets the other's `cudnn64_9.dll`, its symbols don't match, and the
