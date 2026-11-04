@@ -225,10 +225,14 @@ def _iter_batches(text, first_max=FIRST_BATCH_CHARS, batch_max=BATCH_CHARS):
         yield buffer
 
 
-def stream_audio(text):
+def stream_audio(text, generation=None):
     """Synthesise `text` and queue it for playback, a batch of sentences at a time.
-    Stops rendering as soon as interrupt_audio() is called."""
-    generation = _generation
+    Stops rendering as soon as interrupt_audio() is called — or has been, since the
+    read that owns `generation` began (interrupt_audio's return value)."""
+    if generation is None:
+        generation = _generation
+    if generation != _generation:
+        return
     pipeline = get_pipeline()
     voice = _voice(current_voice)
     for batch in _iter_batches(text):
@@ -239,12 +243,20 @@ def stream_audio(text):
                 audio_queue.put((generation, audio))
 
 
+def current_generation():
+    return _generation
+
+
 def interrupt_audio():
     """Cut playback off immediately and drop everything still queued.
 
     Safe to call from any thread. It never calls sounddevice itself — see
-    _playback_worker for why — it only marks everything queued so far as stale."""
+    _playback_worker for why — it only marks everything queued so far as stale.
+    Returns the new generation: a read that passes it to stream_audio is dropped if
+    anything interrupts in between (dictation starting while the text is cleaned)."""
     global _generation
     _generation += 1
+    generation = _generation
     with audio_queue.mutex:                      # free the memory now; the worker
         audio_queue.queue.clear()                # would skip these chunks anyway
+    return generation

@@ -29,7 +29,6 @@ class TestTwoPresses(unittest.TestCase):
                 let_go.wait(5)
             return False
         with mock.patch.object(app.signals, "is_recording", side_effect=is_recording), \
-             mock.patch.object(app.voice_engine, "interrupt_audio"), \
              mock.patch.object(app.voice_engine, "stream_audio") as speak, \
              mock.patch.object(app.keyboard, "release"), \
              mock.patch.object(app, "copy_selection", return_value="read this"), \
@@ -51,7 +50,6 @@ class TestTwoPresses(unittest.TestCase):
 
     def test_the_next_press_after_a_read_works(self):
         with mock.patch.object(app.signals, "is_recording", return_value=False), \
-             mock.patch.object(app.voice_engine, "interrupt_audio"), \
              mock.patch.object(app.voice_engine, "stream_audio") as speak, \
              mock.patch.object(app.keyboard, "release"), \
              mock.patch.object(app, "copy_selection", return_value="read this"), \
@@ -67,7 +65,6 @@ class TestTwoPresses(unittest.TestCase):
 
     def test_a_failed_read_does_not_lock_the_key(self):
         with mock.patch.object(app.signals, "is_recording", return_value=False), \
-             mock.patch.object(app.voice_engine, "interrupt_audio"), \
              mock.patch.object(app.voice_engine, "stream_audio",
                                side_effect=[RuntimeError("no voice"), None]) as speak, \
              mock.patch.object(app.keyboard, "release"), \

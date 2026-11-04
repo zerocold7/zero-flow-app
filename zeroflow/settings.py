@@ -78,6 +78,20 @@ def whole_number(name: str, default: int, minimum: int | None = None,
     return value
 
 
+def hotkey(name: str, default: str) -> str:
+    """A key or chord ("f5", "shift+f3", "ctrl+alt+r"). A key the keyboard library does
+    not know ("f55") used to stop the engine at start-up when it was bound."""
+    raw = _raw(name)
+    if raw is None:
+        return default
+    import keyboard
+    try:
+        keyboard.parse_hotkey(raw)
+    except ValueError:
+        return _bad(name, raw, "a key the keyboard knows", default)
+    return raw
+
+
 def choice(name: str, default: str, allowed: tuple[str, ...]) -> str:
     raw = _raw(name)
     if raw is None:
@@ -157,9 +171,8 @@ OLLAMA_KEEP_ALIVE = text("OLLAMA_KEEP_ALIVE", "30m")
 # a five-minute dictation and its answer. 0 keeps whatever the model file says.
 OLLAMA_NUM_CTX = whole_number("OLLAMA_NUM_CTX", 8192, minimum=0)
 # Polish's clipboard context: "auto" (only to an AI on this PC), "on" or "off".
+# (decided for the provider in use: zeroflow.llm.SEND_CLIPBOARD_CONTEXT)
 POLISH_CLIPBOARD_CONTEXT = choice("POLISH_CLIPBOARD_CONTEXT", "auto", ("auto", "on", "off"))
-SEND_CLIPBOARD_CONTEXT = clipboard_context_sent(POLISH_CLIPBOARD_CONTEXT, AI_PROVIDER,
-                                                AI_URL, OLLAMA_HOST_URL)
 
 # ---------------------------------------------------------------- the debug log
 # flow_debug.log records each dictation's size, not its words: a dictated password
@@ -198,9 +211,9 @@ _HOTKEY_SETTINGS = {
     # Shared with the reader on purpose: one key cancels a recording and silences it.
     "panic":       ("HOTKEY_PANIC", "esc"),
 }
-HOTKEYS = {action: text(name, default) for action, (name, default) in _HOTKEY_SETTINGS.items()}
+HOTKEYS = {action: hotkey(name, default) for action, (name, default) in _HOTKEY_SETTINGS.items()}
 # The reader's key: read the highlighted text aloud.
-HOTKEY_READ = text("HOTKEY_READ", "f4")
+HOTKEY_READ = hotkey("HOTKEY_READ", "f4")
 
 
 def report_clashing_keys(keys: dict[str, str]) -> None:

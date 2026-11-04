@@ -46,7 +46,9 @@ class TestRealClipboard(unittest.TestCase):
         win_clipboard.set_text("dictated")
         for name in win_clipboard.PRIVATE_FORMATS:
             fmt = win_clipboard.format_id(name)
-            self.assertTrue(win_clipboard.has_format(fmt), name)
+            with win_clipboard._opened():
+                on_it = win_clipboard._user32.IsClipboardFormatAvailable(fmt)
+            self.assertTrue(on_it, name)
 
     def test_an_image_survives_a_dictation(self):
         win_clipboard.restore([(CF_DIB, tiny_dib())])

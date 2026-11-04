@@ -60,9 +60,10 @@ def absorb_learned_word(output: str, heard: str | None = None) -> str:
     if not match:
         return output
     word = match.group(1).strip()
-    if word and (FOREIGN_SCRIPT.search(word)
+    if word and (FOREIGN_SCRIPT.search(word) or len(word.split()) > MAX_TERM_WORDS
                  or (heard is not None and _squash(word) not in _squash(heard))):
-        logging.info(f"Ignored a learned word that was not in what was said: {word!r}")
+        logging.info(f"Ignored a learned word (not said, longer than {MAX_TERM_WORDS} words, "
+                     f"or foreign script): {word!r}")
     elif word:
         with VOCAB_LOCK:
             learned = word not in load_vocabulary()
@@ -90,6 +91,7 @@ def vocabulary_terms(llm_output: str | None) -> list[str]:
     terms = []
     for line in (llm_output or "").splitlines():
         term = LIST_MARKER.sub('', line).strip()
-        if term and not term.endswith(":") and len(term.split()) <= MAX_TERM_WORDS:
+        if (term and not term.endswith(":") and len(term.split()) <= MAX_TERM_WORDS
+                and not FOREIGN_SCRIPT.search(term)):
             terms.append(term)
     return terms

@@ -62,7 +62,8 @@ class TestRouting(unittest.TestCase):
         self.use("Ask Tamara. [LEARN: Tamara]")
         with mock.patch.object(llm, "absorb_learned_word",
                                side_effect=lambda out, heard: "Ask Tamara.") as absorb:
-            self.assertEqual(llm.ask_ai("ask tamara", None, "Polish."), "Ask Tamara.")
+            self.assertEqual(llm.ask_ai("ask tamara", None, "Polish.", learn=True),
+                             "Ask Tamara.")
         self.assertEqual(absorb.call_args.kwargs["heard"], "ask tamara")
 
     def test_the_spinner_stops_even_if_the_provider_fails(self):

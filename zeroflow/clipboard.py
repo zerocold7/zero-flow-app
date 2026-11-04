@@ -7,12 +7,15 @@ and each sequence runs under the engine-wide clipboard lock (zeroflow.signals), 
 neither can land in the middle of the other, in either process layout.
 """
 import ctypes
+import logging
 import re
+import threading
 import time
 
 import keyboard
 
 from zeroflow import win_clipboard as system_clipboard
+from zeroflow.win_clipboard import ClipboardBusy
 from zeroflow.signals import clipboard_lock
 from zeroflow.text import URL_PATTERN
 
@@ -23,6 +26,10 @@ KEYEVENTF_KEYUP = 0x0002
 # times, this far apart (half a second in all) before deciding nothing was selected.
 POLL_ATTEMPTS = 25
 POLL_INTERVAL = 0.02
+# Another app may keep the clipboard open past the paste: try to put the user's
+# clipboard back this many more times, this far apart.
+RESTORE_ATTEMPTS = 10
+RESTORE_RETRY_SECONDS = 1.0
 
 
 def paste_text(text: str, press_enter: bool = False) -> None:
@@ -41,7 +48,30 @@ def paste_text(text: str, press_enter: bool = False) -> None:
         finally:
             # Even when a step above fails: the dictation must not replace what the
             # user had on the clipboard.
-            system_clipboard.restore(saved_clipboard)
+            _restore(saved_clipboard)
+
+
+def _restore(saved) -> None:
+    """Put the user's clipboard back — now, or, if another app is holding the clipboard,
+    a little later on a thread of its own. Raised, the busy clipboard used to throw the
+    snapshot away and fail a dictation that had already been pasted."""
+    try:
+        system_clipboard.restore(saved)
+    except ClipboardBusy:
+        logging.warning("The clipboard was busy after the paste; restoring it shortly.")
+        threading.Thread(target=_restore_later, args=(saved,), daemon=True).start()
+
+
+def _restore_later(saved) -> None:
+    for _ in range(RESTORE_ATTEMPTS):
+        time.sleep(RESTORE_RETRY_SECONDS)
+        try:
+            with clipboard_lock():
+                system_clipboard.restore(saved)
+            return
+        except ClipboardBusy:
+            continue
+    logging.error("The clipboard stayed busy; what was on it could not be put back.")
 
 
 def copy_selection(select: str | None = None) -> str | None:
@@ -68,7 +98,7 @@ def copy_selection(select: str | None = None) -> str | None:
                     return text
             return None
         finally:
-            system_clipboard.restore(saved_clipboard)
+            _restore(saved_clipboard)
 
 
 def _press_copy() -> None:

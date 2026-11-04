@@ -252,6 +252,32 @@ was broken on purpose and caught.
   point there, and `tests/test_docs_links.py` checks that all 134 links between the
   guides lead to a real file and heading.
 
+### 🔍 Code review
+A full review of the engine found ten faults; each is now a test that failed first
+(`tests/test_review_findings.py`):
+- **A busy clipboard after the paste** threw your clipboard away and failed a dictation
+  that had already been pasted. It is now put back a moment later, and the dictation
+  is written to the history before the paste, so it is never lost.
+- **Shift+F3 during a Polish** could garble the line: it now waits for the dictation.
+- **The reader could speak into an open microphone** when dictation started while it
+  was preparing the text; that read is now dropped.
+- **The clipboard could reach a remote Ollama** when the built-in AI fell back to it:
+  `POLISH_CLIPBOARD_CONTEXT` is now decided by the AI actually in use.
+- **A Polish during the AI's first start** waited with no limit, holding every
+  dictation behind it; it now gives up after its timeout and pastes your words.
+- **`[LEARN: …]` was honoured on every AI call**, so selected text could teach a
+  "word"; only English Polish learns now, a term is at most four words, and Shift+F1
+  drops Chinese, Japanese and Korean script.
+- **The record keys printed inside Windows' keyboard hook**; a frozen console could
+  make Windows remove the hook. They now only change state there.
+- **A wrongly named key** (`HOTKEY_FIX="f55"`) stopped the engine; it now falls back to
+  the default and says so, like every other setting.
+- **Every AI answer waited a fixed 0.15 s** for the spinner; it now stops at once.
+- **A slow health check could start a second AI server** and orphan the first.
+
+Not changed: another program holding the AI's port on the same PC (needs a second
+user on it), and how long a huge Excel copy takes to save (not measured).
+
 ---
 
 ## [1.5.1] — 2026-10-14 — A fresh install works again

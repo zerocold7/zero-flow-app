@@ -325,7 +325,9 @@ toast and return `None`.
   said** (ignoring case and spacing), and never in Chinese, Japanese or Korean script.
   Learned words prime Whisper on every dictation. Before this rule, Arabic Polish had
   taught three misheard words (removed), and a model answering in Chinese tagged a
-  Chinese one. Only the English Polish prompt asks for tags at all.
+  Chinese one. Only English Polish asks for tags (`ask_ai(..., learn=True)`); every
+  other call strips a tag without learning it — text you select for `F4` or `Shift+F3`
+  could otherwise carry one — and a term is at most four words.
 - **Vocabulary maintenance** (`Shift+F1`, `run_memory_maintenance`) hands the whole
   list to the LLM and writes back the terms it returns (`vocabulary_terms`): list
   markers are stripped, and the model's chatter — "Here is the cleaned list:", or any

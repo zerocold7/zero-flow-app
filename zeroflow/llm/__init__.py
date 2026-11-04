@@ -17,7 +17,7 @@ import traceback
 
 from zeroflow import settings, ui
 from zeroflow.llm import builtin, claude, ollama, openai_compatible
-from zeroflow.vocabulary import absorb_learned_word
+from zeroflow.vocabulary import LEARN_PATTERN, absorb_learned_word
 
 PROVIDERS = {"builtin": builtin, "ollama": ollama, "openai": openai_compatible, "claude": claude}
 
@@ -43,9 +43,25 @@ def choose(name: str):
 provider = choose(settings.AI_PROVIDER)
 
 
+def clipboard_context_allowed(chosen) -> bool:
+    """Whether Polish may hand `chosen` the clipboard (POLISH_CLIPBOARD_CONTEXT). Decided
+    by the provider actually in use, not the one .env named: the built-in AI falls back
+    to Ollama when it is not installed, and that Ollama may be on another computer."""
+    name = next(key for key, module in PROVIDERS.items() if module is chosen)
+    return settings.clipboard_context_sent(settings.POLISH_CLIPBOARD_CONTEXT, name,
+                                           settings.AI_URL, settings.OLLAMA_HOST_URL)
+
+
+SEND_CLIPBOARD_CONTEXT = clipboard_context_allowed(provider)
+
+
 def ask_ai(raw_text: str, context_text: str | None, instruction: str,
-           timeout: float = 15.0) -> str | None:
-    """The model's answer, or None when there is none (the reason is logged and shown)."""
+           timeout: float = 15.0, learn: bool = False) -> str | None:
+    """The model's answer, or None when there is none (the reason is logged and shown).
+
+    `learn`: keep a word the model tagged `[LEARN: …]` — only English Polish, whose
+    prompt asks for it. Elsewhere the tag is only removed: text the user selected (F4,
+    Shift+F3) could otherwise carry one and teach a "word" that primes every dictation."""
     ui.start_processing_spinner("AI Processing")
     try:
         answer = provider.ask(raw_text, context_text, instruction, timeout)
@@ -64,6 +80,8 @@ def ask_ai(raw_text: str, context_text: str | None, instruction: str,
     if not answer.strip():
         logging.warning("The AI returned an empty answer.")
         return None
+    if not learn:
+        return LEARN_PATTERN.sub("", answer).strip() or None
     return absorb_learned_word(answer.strip(), heard=raw_text) or None
 
 

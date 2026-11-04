@@ -69,7 +69,10 @@ def _read_selection():
         return
 
     try:
-        voice_engine.interrupt_audio()           # a second press restarts, never overlaps
+        # A second press restarts, never overlaps. The generation it returns goes with
+        # this read: dictation starting while the text is copied or cleaned interrupts
+        # again, and this read is then dropped rather than spoken into the open mic.
+        generation = voice_engine.interrupt_audio()
 
         # Release the read key before the synthetic Ctrl+C, or Windows sees it still
         # held and the copy goes to the wrong place.
@@ -90,9 +93,12 @@ def _read_selection():
         else:
             cleaned = clean_text_instant(text)
 
+        if signals.is_recording() or generation != voice_engine.current_generation():
+            logging.info("Reader: dictation started while the text was prepared; not read.")
+            return
         _title("SPEAKING")
         ui.play_tone("start", settings.ENABLE_AUDIO_CHIMES)
-        voice_engine.stream_audio(cleaned)
+        voice_engine.stream_audio(cleaned, generation)
     except Exception:
         logging.error(f"Reader pipeline failed: {traceback.format_exc()}")
         traceback.print_exc()

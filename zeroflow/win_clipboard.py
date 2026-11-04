@@ -183,8 +183,3 @@ def get_text() -> str:
             return ""
         data = _read(CF_UNICODETEXT) or b""
     return data.decode("utf-16-le", "ignore").split("\0", 1)[0]
-
-
-def has_format(fmt: int) -> bool:
-    with _opened():
-        return bool(_user32.IsClipboardFormatAvailable(fmt))
