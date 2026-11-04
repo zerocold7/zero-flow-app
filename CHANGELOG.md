@@ -204,6 +204,11 @@ left after a crash.
   with "and send" — and Enter was pressed in a chat or a terminal. They are now taken
   from what you said, before the AI sees it. This also fixes Translate, which used to
   translate a spoken "انتر" or "سطر جديد" away instead of acting on it.
+- **Packages with known security holes upgraded:** Pillow 10.2.0 → 13.0.0, requests
+  2.31.0 → 2.33.0, urllib3 → 2.8.0, python-dotenv → 1.2.2, filelock → 4.2.1, and
+  certifi, anyio, fsspec, setuptools. `pip-audit` (now in `requirements-dev.txt`)
+  finds none left in them. torch 2.5.1 still has known holes; it needs its own move
+  to a newer CUDA build.
 
 ---
 

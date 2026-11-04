@@ -8,13 +8,13 @@ sounddevice==0.4.6
 soundfile==0.14.0
 keyboard==0.13.5
 pyperclip==1.8.2
-requests==2.31.0
+requests==2.33.0
 numpy==1.26.4
-python-dotenv==1.0.1
+python-dotenv==1.2.2
 win11toast==0.36.3
 colorama==0.4.6
 pystray==0.19.5
-Pillow==10.2.0
+Pillow==13.0.0
 
 # --- NVIDIA GPU acceleration (CUDA 12) ---
 # Required for faster-whisper device="cuda". Without these, CTranslate2 cannot
