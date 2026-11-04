@@ -28,6 +28,9 @@ BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 PRESETS_DIR = os.path.join(BASE_DIR, "presets")
 ENV_FILE = os.path.join(BASE_DIR, ".env")
 ENV_EXAMPLE = os.path.join(BASE_DIR, ".env.example")
+# The Python the engine is tested on (docs/INSTALL.md step 1). Also in zeroflow/settings.py,
+# which this standard-library-only script cannot import; a test keeps the two the same.
+TESTED_PYTHON = "3.12"
 
 TIERS = {
     "nvidia-desktop": "NVIDIA graphics card, 8 GB or more",
@@ -274,6 +277,19 @@ print(json.dumps(out))
 """
 
 
+def engine_python_version() -> str | None:
+    """The version of the Python the engine runs with (see engine_python), e.g.
+    "3.12.7"; None if it cannot be asked."""
+    python = engine_python()
+    if os.path.normcase(os.path.abspath(python)) == os.path.normcase(os.path.abspath(sys.executable)):
+        return platform.python_version()
+    try:
+        return subprocess.run([python, "-c", "import platform; print(platform.python_version())"],
+                              capture_output=True, text=True, timeout=30).stdout.strip() or None
+    except (OSError, subprocess.SubprocessError):
+        return None
+
+
 def installed_versions(packages):
     """{package: version or None} in the engine's interpreter. This script is usually
     run with the system Python while the packages live in venv/, so ask that one."""
@@ -312,6 +328,13 @@ def _cached(repo):
 def software_checks(tier, settings):
     """[(ok, message)] for what is installed, running and downloaded."""
     notes = []
+    python = engine_python_version()
+    if python and python.rsplit(".", 1)[0] == TESTED_PYTHON:
+        notes.append((True, f"Python {python}"))
+    elif python:
+        notes.append((False, f"Python {python} — the engine is tested on Python {TESTED_PYTHON}; "
+                             f"with another, its packages may not install or run "
+                             f"(docs/INSTALL.md step 1)"))
     versions = installed_versions(["faster-whisper", "kokoro", "torch", "nvidia-cublas-cu12"])
     where = os.path.relpath(engine_python(), BASE_DIR) if engine_python() != sys.executable else "this Python"
     torch = versions["torch"]

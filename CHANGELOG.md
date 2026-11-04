@@ -243,6 +243,8 @@ was broken on purpose and caught.
   is installed, everything installed is used, and `constraints.txt` pins exactly what an
   install pulls in.
 - `logo.jpg` 437 KB → 13 KB (680 px wide, shown at 340; the same at that size).
+- **Python other than 3.12 is named**, by `check_hardware.py` and at start-up: 3.12 is
+  the only version tested, and on another the packages may not install or run.
 - **`tools/smoke_check.py`** checks every real part on a PC end to end: settings, the
   microphone and speaker, Whisper in English and Arabic, an AI Polish, the voice.
 - **One home per fact.** Why the reader is a separate process was told in full three

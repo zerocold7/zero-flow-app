@@ -267,5 +267,42 @@ class TestWhisperDevice(unittest.TestCase):
         self.assertEqual(runtime, "CPU · int8")
 
 
+class TestPythonVersion(unittest.TestCase):
+    """Python 3.12 is the only version the engine is tested on; another one got no
+    word anywhere, and its packages could then fail to install or to run."""
+
+    def checks(self, version):
+        with mock.patch.object(hw, "engine_python_version", return_value=version), \
+             mock.patch.object(hw, "installed_versions", return_value=dict.fromkeys(
+                 ["faster-whisper", "kokoro", "torch", "nvidia-cublas-cu12"])), \
+             mock.patch.object(hw, "_cached", return_value=True):
+            return hw.software_checks("cpu-only", hw.load_preset("cpu-only"))
+
+    def test_another_python_is_flagged_with_the_tested_one_named(self):
+        flagged = [msg for ok, msg in self.checks("3.13.1") if not ok and "Python 3.13.1" in msg]
+        self.assertEqual(len(flagged), 1)
+        self.assertIn(hw.TESTED_PYTHON, flagged[0])
+
+    def test_the_tested_python_is_ok(self):
+        self.assertTrue(any(ok and "Python 3.12.7" in msg for ok, msg in self.checks("3.12.7")))
+
+    def test_the_version_comes_from_the_engines_interpreter(self):
+        import platform
+        with mock.patch.object(hw, "engine_python", return_value=sys.executable), \
+             mock.patch.object(hw.sys, "executable", r"C:\elsewhere\python.exe"):
+            self.assertEqual(hw.engine_python_version(), platform.python_version())
+
+    def test_the_engine_says_so_at_start_up(self):
+        from zeroflow import settings
+        self.assertIsNone(settings.python_notice((3, 12)))
+        notice = settings.python_notice((3, 13))
+        self.assertIn("3.13", notice)
+        self.assertIn(settings.TESTED_PYTHON, notice)
+
+    def test_both_name_the_same_tested_version(self):
+        from zeroflow import settings
+        self.assertEqual(settings.TESTED_PYTHON, hw.TESTED_PYTHON)
+
+
 if __name__ == "__main__":
     unittest.main()

@@ -9,6 +9,7 @@ mistake is kept in `problems`, which the engine reports by name when it starts.
 """
 import ipaddress
 import os
+import sys
 from urllib.parse import urlparse
 
 from dotenv import load_dotenv
@@ -18,6 +19,22 @@ from zeroflow.paths import BASE_DIR
 load_dotenv(os.path.join(BASE_DIR, ".env"))
 
 problems = []                 # one sentence per bad value; reported at start-up
+
+# The Python the engine is tested on; also in check_hardware.py (a test keeps them equal).
+TESTED_PYTHON = "3.12"
+
+
+def python_notice(version: tuple[int, int]) -> str | None:
+    """A start-up notice when the engine runs on a Python it is not tested on."""
+    running = f"{version[0]}.{version[1]}"
+    if running == TESTED_PYTHON:
+        return None
+    return (f"This is Python {running}; the engine is tested on Python {TESTED_PYTHON}. "
+            f"If something fails, reinstall with {TESTED_PYTHON} (docs/INSTALL.md step 1).")
+
+
+if notice := python_notice(sys.version_info[:2]):
+    problems.append(notice)
 
 _YES = ("true", "1", "t", "yes", "y", "on")
 _NO = ("false", "0", "f", "no", "n", "off")
