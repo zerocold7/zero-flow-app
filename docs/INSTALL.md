@@ -80,7 +80,9 @@ Also keep your NVIDIA driver up to date.
 everything in `requirements.txt` except the two `nvidia-` lines:
 
 ```powershell
-.\venv\Scripts\python.exe -m pip install ((Get-Content requirements.txt) | Where-Object { $_ -match '^[A-Za-z]' -and $_ -notmatch '^nvidia-' }) -c constraints.txt
+$parts = Get-Content requirements.txt |
+    Where-Object { $_ -match '^[A-Za-z]' -and $_ -notmatch '^nvidia-' }
+.\venv\Scripts\python.exe -m pip install $parts -c constraints.txt
 ```
 
 This step takes several minutes.

@@ -90,10 +90,12 @@ Set-ExecutionPolicy -ExecutionPolicy RemoteSigned -Scope Process
 
 (علامة النجاح: ظهور كلمة `(venv)` في بداية سطر الأوامر.)
 
-**4.** تثبيت المكتبات — نسخة المعالج فقط. هذا الأمر يقرأ قائمة المكتبات من ملف المشروع نفسه ويتخطى مكتبات كروت الشاشة الثقيلة (`nvidia-`)، ما يوفّر ~1.2 جيجابايت. ويشمل صوت القراءة `kokoro`. قد يستغرق عدة دقائق:
+**4.** تثبيت المكتبات — نسخة المعالج فقط. هذه الأسطر الثلاثة تقرأ قائمة المكتبات من ملف المشروع نفسه (دون تعديله) وتتخطى مكتبات كروت الشاشة الثقيلة (`nvidia-`)، ما يوفّر ~1.2 جيجابايت. ويشمل صوت القراءة `kokoro`. قد يستغرق عدة دقائق:
 
 ```powershell
-pip install ((Get-Content requirements.txt) | Where-Object { $_ -match '^[A-Za-z]' -and $_ -notmatch '^nvidia-' }) -c constraints.txt
+$parts = Get-Content requirements.txt |
+    Where-Object { $_ -match '^[A-Za-z]' -and $_ -notmatch '^nvidia-' }
+pip install $parts -c constraints.txt
 ```
 
 **5.** تثبيت الذكاء المدمج — يختار النسخة المناسبة للابتوبك (هنا نسخة `cpu` الصغيرة، نحو 19 ميجابايت)، ويحمّلها من مشروع llama.cpp الرسمي على GitHub، ويتحقق من أنها أصلية، ثم يضعها في مجلد `runtime` داخل المشروع:

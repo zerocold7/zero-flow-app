@@ -243,6 +243,12 @@ was broken on purpose and caught.
   is installed, everything installed is used, and `constraints.txt` pins exactly what an
   install pulls in.
 - `logo.jpg` 437 KB → 13 KB (680 px wide, shown at 340; the same at that size).
+- **The laptop guide no longer edits `requirements.txt`.** It had CPU laptops delete
+  the two `nvidia-` lines by hand, which leaves a changed file that stops the next
+  `git pull`. Every guide now skips those lines with the same three-line command
+  (`docs/INSTALL.md` step 4), short enough to copy from the printed PDFs without
+  breaking; both PDFs are rebuilt. **If you edited it**, run
+  `git checkout requirements.txt` before updating.
 - **Python other than 3.12 is named**, by `check_hardware.py` and at start-up: 3.12 is
   the only version tested, and on another the packages may not install or run.
 - **The voice starts sooner after a long first sentence.** A batch was always at

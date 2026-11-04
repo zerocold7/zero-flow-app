@@ -85,19 +85,9 @@ cd zero-flow-app
 
 ---
 
-## Step 5 — Two small edits for a laptop without NVIDIA
+## Step 5 — Laptop-friendly settings
 
-**Edit A — remove the GPU-only lines.** Open the requirements file:
-
-```powershell
-notepad requirements.txt
-```
-
-Find the **two lines that start with `nvidia-`** (`nvidia-cublas-cu12…` and `nvidia-cudnn-cu12…`) and delete just those two. Save with **Ctrl+S**, then close Notepad. They are only for NVIDIA cards and would waste ~1.2 GB.
-
-> ⚠️ Delete **only** the two `nvidia-` lines. Keep the `kokoro` line near the bottom — that is the voice that reads text aloud.
-
-**Edit B — choose laptop-friendly settings.** Create your settings file and open it:
+Create your settings file and open it:
 
 ```powershell
 Copy-Item .env.example .env
@@ -125,8 +115,12 @@ These commands create a private folder named **venv** and download the needed li
 ```powershell
 python -m venv venv
 .\venv\Scripts\python.exe -m pip install --upgrade pip
-.\venv\Scripts\python.exe -m pip install -r requirements.txt -c constraints.txt
+$parts = Get-Content requirements.txt |
+    Where-Object { $_ -match '^[A-Za-z]' -and $_ -notmatch '^nvidia-' }
+.\venv\Scripts\python.exe -m pip install $parts -c constraints.txt
 ```
+
+The last three lines read the list of parts from the project's own file and skip the two lines that start with `nvidia-`: they are only for NVIDIA graphics cards and would waste ~1.2 GB. It still installs the reading voice (`kokoro`). Nothing in the project's files is changed, so later updates (`git pull`) go through cleanly.
 
 ---
 
