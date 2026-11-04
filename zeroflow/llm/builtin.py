@@ -18,7 +18,7 @@ import time
 
 import requests
 
-from zeroflow import signals, ui
+from zeroflow import models, signals, ui
 from zeroflow.llm import llama_runtime, openai_compatible
 from zeroflow.paths import log_dir
 from zeroflow.settings import (AI_BUILTIN_FILE, AI_BUILTIN_PORT, AI_BUILTIN_REPO, AI_NUM_CTX,
@@ -55,15 +55,18 @@ def _launcher(variant: str) -> list[str]:
 
 
 def _model_path() -> str:
-    """The model file from the local model cache; downloaded once, the first time."""
+    """The model file from the local model cache; downloaded once, the first time, at
+    its pinned revision (zeroflow.models)."""
     from huggingface_hub import hf_hub_download
+    revision = models.revision(AI_BUILTIN_REPO)
     try:
-        return hf_hub_download(AI_BUILTIN_REPO, AI_BUILTIN_FILE, local_files_only=True)
+        return hf_hub_download(AI_BUILTIN_REPO, AI_BUILTIN_FILE, revision=revision,
+                               local_files_only=True)
     except Exception:
         print(f"{ui.C_ACCENT}⬇️  Downloading the AI model, {_model_label()} "
               f"(3–5 GB, first run only)...{ui.C_RESET}")
         logging.info(f"Downloading the built-in AI model {AI_BUILTIN_REPO}/{AI_BUILTIN_FILE}.")
-        return hf_hub_download(AI_BUILTIN_REPO, AI_BUILTIN_FILE)
+        return hf_hub_download(AI_BUILTIN_REPO, AI_BUILTIN_FILE, revision=revision)
 
 
 def _url(path: str) -> str:

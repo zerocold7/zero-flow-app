@@ -39,7 +39,7 @@ import warnings
 
 import sounddevice as sd
 
-from zeroflow import settings, ui
+from zeroflow import models, settings, ui
 
 warnings.filterwarnings("ignore", category=UserWarning)
 warnings.filterwarnings("ignore", category=FutureWarning)
@@ -108,14 +108,16 @@ def _model_file(filename):
     first word, cached or not. That made a local-only engine phone home on each boot,
     stalled start-up without internet, and drew the Hub's anonymous-request warning
     ("set a HF_TOKEN") into reader_debug.log. The model is public: no token needed.
+    Both come from the pinned revision (zeroflow.models), never the latest upload.
     """
     from huggingface_hub import hf_hub_download, try_to_load_from_cache
-    cached = try_to_load_from_cache(REPO_ID, filename)
+    revision = models.revision(REPO_ID)
+    cached = try_to_load_from_cache(REPO_ID, filename, revision=revision)
     if isinstance(cached, str):                  # otherwise None / "known missing"
         return cached
     logging.info(f"Downloading {filename} from {REPO_ID} (first use only).")
     print(f"{ui.C_ACCENT}🔵 [TTS]{ui.C_RESET} Downloading {filename} (first use only)...")
-    return hf_hub_download(REPO_ID, filename)
+    return hf_hub_download(REPO_ID, filename, revision=revision)
 
 
 def get_pipeline():

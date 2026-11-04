@@ -109,6 +109,11 @@ engine starts (the console says so); after that it loads from the local cache wi
 network call. No Hugging Face account or `HF_TOKEN` is needed. `WHISPER_MODEL_NAME`
 also accepts the path to a local model folder.
 
+**Every model above is downloaded at a fixed version**, as are the built-in AI's
+Gemma models and the reader's voice: `zeroflow/models.py` lists the exact Hugging Face
+commit of each, so a fresh install never takes an upload nobody has checked. A model
+you name yourself that is not in that list is taken at its latest version.
+
 ---
 
 ## 4. Changing the languages (e.g. Arabic → French)

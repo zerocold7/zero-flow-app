@@ -216,6 +216,10 @@ left after a crash.
   format through the Win32 API and marks the engine's own writes as private. Checked
   on the real clipboard: a picture survives, and a dictation is absent from Win+V
   history while an ordinary copy is present. pyperclip is no longer needed.
+- **Models download at a fixed version.** Whisper, the built-in AI's Gemma and the
+  reader's voice were fetched at whatever was uploaded last, so a changed or tampered
+  upload would reach the next fresh install. `zeroflow/models.py` now pins each to a
+  Hugging Face commit — the versions already in use, so nothing downloads again.
 
 ---
 

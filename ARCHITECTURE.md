@@ -27,6 +27,7 @@ a local LLM to clean up or translate text.
 | `zeroflow/text/` | `language.py` (which language a text is in; the AI-answer guard), `macros.py` (spoken commands and punctuation) |
 | `zeroflow/vocabulary.py`, `history.py` | The learned-word list and the dictation history |
 | `zeroflow/settings.py`, `paths.py`, `logs.py` | Every `.env` setting, checked; where files live; the debug and crash logs |
+| `zeroflow/models.py` | The fixed Hugging Face commit every model (Whisper, Gemma, Kokoro) is downloaded at |
 | `zeroflow/signals.py` | Windows named objects shared by the two processes: events, the clipboard lock, one-copy claims, the Job Object |
 | `zeroflow/ui.py`, `zeroflow/personas.py` | Console, banner, tones, toasts, tray; prompts, base vocabulary, voice macros, punctuation, pronunciation |
 | `reader/`       | Reader: `app.py` (the half itself), `text_cleaner.py`, `voice_engine.py` |
