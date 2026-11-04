@@ -33,7 +33,6 @@ from zeroflow.clipboard import POLL_INTERVAL, copy_selection
 HOTKEY_READ = settings.HOTKEY_READ
 # Shared with the dictation half on purpose: one key silences the whole engine.
 HOTKEY_PANIC = settings.HOTKEYS["panic"]
-# Off by default: the regex clean is instant, the LLM pass costs a few seconds.
 SMART_MODE_DEFAULT = settings.READER_SMART_MODE
 
 # Set by zero_flow.py when this process is the engine's child, sharing its console.

@@ -11,22 +11,8 @@ process's console: its output appears in this window, and the pair looks like a 
 program. The child owns the one tray icon, because every control in that menu toggles
 state that lives inside the reader.
 
---------------------------------------------------------------------------------
-WHY A CHILD PROCESS AND NOT A THREAD
---------------------------------------------------------------------------------
-An earlier version really did host both halves in one process. It worked, but it had
-to force the voice model onto the CPU: torch 2.14.1+cu126 bundles cuDNN 9.10 while
-CTranslate2 (Whisper) needs the pip-installed cuDNN 9.23, Windows loads exactly one
-DLL per base name per process, and whichever initialises CUDA second gets the wrong
-one and **segfaults** — in either load order, with no exception to catch. That cost
-about 2 seconds of silence before the first spoken word.
-
-Separate processes have separate DLL namespaces, so the conflict simply does not
-arise: Whisper keeps the GPU here, Kokoro gets the GPU over there, and time to first
-word drops to ~0.2 s. A crash in either half also stops being fatal to the other.
-
-The two coordinate over named Windows objects in `zeroflow/signals.py` — the microphone
-interlock and the clipboard mutex both work across the process boundary.
+Why a child process and not a thread (Whisper and the voice cannot both use CUDA in
+one process), and how the two coordinate: ARCHITECTURE.md §1 and §12.
 
 Both halves still run standalone: `local_flow.py` and `python -m reader`.
 The code lives in the zeroflow/ package (zeroflow/supervisor.py).

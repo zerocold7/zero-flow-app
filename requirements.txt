@@ -16,17 +16,15 @@ Pillow==13.0.0
 
 # --- NVIDIA GPU acceleration (CUDA 12) ---
 # Required for faster-whisper device="cuda". Without these, CTranslate2 cannot
-# load cublas64_12.dll and transcription fails. Remove these two lines if you
-# are running CPU-only (saves ~1.2 GB of downloads).
-# Pinned: cuDNN 9.x requires ctranslate2 >= 4.5 (pulled in by faster-whisper).
+# load cublas64_12.dll and transcription fails. PCs without an NVIDIA card skip
+# them (docs/INSTALL.md step 4). cuDNN 9.x requires ctranslate2 >= 4.5.
 nvidia-cublas-cu12~=12.4
 nvidia-cudnn-cu12~=9.1
 
 # --- Reader: text-to-speech (Kokoro) ---
-# kokoro pulls in torch. For GPU speech synthesis install the CUDA build of torch
-# FIRST, otherwise pip resolves the CPU-only wheel:
-#   pip install torch==2.14.1+cu126 --index-url https://download.pytorch.org/whl/cu126
-# The reader runs fine on CPU too — Kokoro-82M is small.
+# kokoro pulls in torch. On an NVIDIA PC install the CUDA build of torch FIRST
+# (docs/INSTALL.md step 4), or pip takes the CPU-only one. The reader runs on the
+# CPU too — Kokoro-82M is small.
 kokoro==0.9.4
 # Kokoro's English pronunciation needs spaCy's small English model. Without it here,
 # it is pip-installed at runtime on the first read — a hidden download, and a failure

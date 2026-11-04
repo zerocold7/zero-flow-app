@@ -88,21 +88,8 @@ Tips:
 
 ## 3. Choosing a Whisper model
 Set `WHISPER_MODEL_NAME`. Larger = more accurate (Arabic gains the most) but slower
-and more memory.
-
-| Model | Download | GPU memory (`float16` / `int8_float16`) | Notes |
-|-------|----------|------------------------------------------|-------|
-| `tiny` / `base` | 75 / 145 MB | ≈0.2–0.3 GB / less | fastest, low accuracy, weak Arabic |
-| `small` | 480 MB | ≈0.7 / 0.35 GB | the CPU default — good English, fair Arabic |
-| `medium` | 1.5 GB | ≈2 / 1 GB | good balance; the NVIDIA-laptop default |
-| `large-v3` | 3 GB | **3.9 / 2.0 GB** | **default** — best accuracy, best Arabic |
-| `distil-large-v3` | 1.5 GB | ≈2 / 1 GB | faster large-quality — **English only**, useless for the Arabic keys |
-| `mobiuslabsgmbh/faster-whisper-large-v3-turbo` | 1.6 GB | — | **English as accurate as `large-v3` and 35% faster** (0.29 vs 0.46 s per clip); **Arabic much worse** (56% vs 35% character errors). Only for English-only use |
-
-Bold figures were measured on an RTX 4070 (the turbo comparison with
-`tools/bench/bench_stt.py`, on synthetic clips); the rest are estimates from model size. On
-a CPU, `large-v3` took 12.8 s for a 14 s clip — prefer `small`. The full per-hardware
-picture, with measured speeds: [docs/HARDWARE.md](docs/HARDWARE.md).
+and more memory. Every model, with its size, memory, speed and accuracy, and which one
+suits your PC: [docs/HARDWARE.md §4](docs/HARDWARE.md#speech-model--whisper_model_name).
 
 A model you have not used before is downloaded from Hugging Face the next time the
 engine starts (the console says so); after that it loads from the local cache with no
@@ -177,26 +164,17 @@ WHISPER_COMPUTE_TYPE="float16"    # GPU precision: float16 | int8_float16 | int8
 - **`WHISPER_COMPUTE_TYPE="int8_float16"`** halves the speech model's graphics memory
   (large-v3 measured 3.9 GB → 2.0 GB) for about 0.2 s more per clip. Use it on cards
   under 11 GB. It only affects the GPU; the CPU always uses `int8`.
-- **GPU (NVIDIA):** keep `nvidia-cublas-cu12` and `nvidia-cudnn-cu12` in
-  `requirements.txt` (installed by default).
-- **CPU-only:** remove those two lines to save ~1.2 GB.
+- The GPU needs the NVIDIA libraries and the CUDA build of `torch` (the voice); which
+  packages each kind of PC installs: [INSTALL.md step 4](docs/INSTALL.md#4-install-the-python-packages).
 
 Where the model ended up is shown in the start-up banner — e.g. `Speech to text:
 [Whisper small · CPU · int8]` — and written to `flow_debug.log`. Every dictation also
 logs how long it took (`1.21s for 14.2s of audio`), which is the number to watch when
 tuning.
 
-The **voice model** (reader) needs the CUDA build of `torch` for the GPU, and
-`pip install -r requirements.txt -c constraints.txt` alone fetches the CPU-only build.
-(`constraints.txt` pins every package underneath to a set known to work together; see
-[INSTALL.md](docs/INSTALL.md).) On an NVIDIA machine, install it first:
-
-```bash
-pip install torch==2.14.1+cu126 --index-url https://download.pytorch.org/whl/cu126
-```
-
-If the CPU build is installed anyway, the reader still works — on the CPU — and says so
-in `reader_debug.log`. `READER_DEVICE` (§10) chooses the device explicitly.
+If the CPU build of `torch` is installed on an NVIDIA PC, the reader still works — on
+the CPU — and says so in `reader_debug.log`. `READER_DEVICE` (§10) chooses the device
+explicitly.
 
 ---
 

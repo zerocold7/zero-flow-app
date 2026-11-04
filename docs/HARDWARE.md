@@ -158,6 +158,7 @@ The biggest single lever. Bigger is more accurate, especially for **Arabic**, an
 | `small` | 480 MB | ≈0.7 / 0.35 GB | ≈2–3 s | good English, fair Arabic |
 | `medium` | 1.5 GB | ≈2 / 1 GB | ≈6 s | very good, good Arabic |
 | `large-v3` | 3 GB | **3.9 / 2.0 GB** | **12.8 s** | best — the default |
+| `distil-large-v3` | 1.5 GB | ≈2 / 1 GB | ≈6 s | near `large-v3` — **English only**, useless for the Arabic keys |
 
 Bold = measured; the rest are estimates from model size. Downloads happen once, on
 the first start after you change the setting.

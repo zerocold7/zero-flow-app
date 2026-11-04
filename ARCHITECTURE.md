@@ -400,9 +400,9 @@ your PC, git-ignored), and `bench_stt.py --no-filter` gives the comparison.
   Win32 API. Only GDI-handle formats are skipped (Windows rebuilds a bitmap from the
   DIB). The engine's own writes — the dictation, and the restore — carry the formats
   Windows reads as "not for clipboard history or cloud sync", so dictations never
-  appear in Win+V. (pyperclip, used before, saved text only.) A selection copied for
-  `F4` or `Shift+F3` is written by the other app's Ctrl+C, so that copy does enter
-  history; the engine cannot mark another app's write.
+  appear in Win+V. A selection copied for `F4` or `Shift+F3` is written by the other
+  app's Ctrl+C, so that copy does enter history; the engine cannot mark another app's
+  write.
 
 ---
 
@@ -535,8 +535,7 @@ as well as within one), and the **orphaned reader** (see §10a).
 **Whisper and Kokoro cannot both use CUDA in one process. The result is a segfault,
 not an exception — nothing can catch it and no fallback runs.**
 
-- `torch 2.14.1+cu126` bundles cuDNN **9.10** in `torch/lib` (9.1 with the
-  2.5.1+cu121 build used before 2.0.0-alpha.4.4: the clash is the same).
+- `torch 2.14.1+cu126` bundles cuDNN **9.10** in `torch/lib`.
 - CTranslate2 4.8 (behind faster-whisper) uses the pip `nvidia-cudnn-cu12` **9.23**.
 - Windows loads exactly **one DLL per base name per process**. Whichever initialises
   CUDA second gets the other's `cudnn64_9.dll`, its symbols don't match, and the

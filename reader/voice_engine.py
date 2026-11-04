@@ -15,14 +15,8 @@ spoken word, not at import time, so startup stays instant.
 
 **Device policy.** The reader always runs in its own process — standalone, or as the
 child `zero_flow.py` spawns — so it can hold CUDA freely and `READER_DEVICE` is
-honoured as written.
-
-That isolation is deliberate. Hosting this half and Whisper as threads in *one*
-process would force the voice onto the CPU: torch 2.14.1+cu126 bundles cuDNN 9.10 while
-CTranslate2 (Whisper) needs the pip-installed cuDNN 9.23, Windows loads only one DLL
-per base name per process, and the loser **segfaults the whole process** — in either
-load order, with no exception to catch. CPU synthesis measures 3.6-5.2x realtime
-against 52-82x on GPU, so it stays ahead of playback but with far less headroom.
+honoured as written. (In one process with Whisper it could not use CUDA at all:
+ARCHITECTURE.md §12.)
 
 **Model files.** The model, its config and each voice are read straight from the local
 Hugging Face cache, and fetched from the Hub only when missing (the first run, or a

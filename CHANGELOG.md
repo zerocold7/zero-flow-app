@@ -245,6 +245,12 @@ was broken on purpose and caught.
 - `logo.jpg` 437 KB → 13 KB (680 px wide, shown at 340; the same at that size).
 - **`tools/smoke_check.py`** checks every real part on a PC end to end: settings, the
   microphone and speaker, Whisper in English and Arabic, an AI Polish, the voice.
+- **One home per fact.** Why the reader is a separate process was told in full three
+  times (now only ARCHITECTURE.md §12); the Whisper model table twice, already
+  drifting apart (now only HARDWARE.md §4); install steps in CONFIGURATION.md and
+  requirements.txt, one of them out of date (now only INSTALL.md step 4). The others
+  point there, and `tests/test_docs_links.py` checks that all 134 links between the
+  guides lead to a real file and heading.
 
 ---
 
