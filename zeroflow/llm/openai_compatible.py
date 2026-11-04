@@ -6,8 +6,9 @@ Studio, the llama.cpp server, vLLM, and cloud services such as OpenAI or Groq.
     AI_MODEL="the-model-id"                              # as the server names it
     AI_API_KEY=""                                        # cloud services only
 
-With a cloud service, what you dictate — and the clipboard text Polish uses as
-context — goes to that company's servers. Local servers keep it on this PC.
+With a cloud service, what you dictate goes to that company's servers; the clipboard
+Polish uses as context only with POLISH_CLIPBOARD_CONTEXT=on. Local servers keep it
+all on this PC.
 """
 import logging
 

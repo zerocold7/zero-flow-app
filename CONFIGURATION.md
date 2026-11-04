@@ -32,6 +32,7 @@ only set what you want to change.
 | `AI_BUILTIN_PORT` | `39281` | The local port the built-in AI listens on (this PC only) |
 | `AI_LOAD_AT_START` | `True` | Load the AI while Whisper loads, so the first Polish is instant. `False` keeps it out of memory until the first Polish or Translate needs it (that one waits ~4 s). Tray → **Unload AI model** frees it at any time |
 | `AI_URL` / `AI_MODEL` / `AI_API_KEY` | *(blank)* | For `openai` and `claude` (see §6) |
+| `POLISH_CLIPBOARD_CONTEXT` | `auto` | Polish hands the AI your clipboard as context. `auto` = only to an AI on this PC (never to `claude` or a server on another computer) · `on` = always · `off` = never (see §6) |
 | `OLLAMA_HOST_URL` | `http://127.0.0.1:11434/api/generate` | `ollama` only: where Ollama listens |
 | `OLLAMA_MODEL_NAME` | *(blank)* | `ollama` only: pin an exact model, e.g. `qwen2.5:7b`. Blank = auto-pick the first model Ollama serves |
 | `FALLBACK_LLM` | `gemma2:27b` | `ollama` only: model name used if Ollama is unreachable |
@@ -287,9 +288,10 @@ is a complete example to copy (about 50 lines). Add it to `PROVIDERS` in
 `zeroflow/llm/__init__.py`, then set `AI_PROVIDER` to its name.
 
 > ⚠️ **Privacy:** with a **cloud** provider (`claude`, or `openai` pointed at a cloud
-> service), the text you dictate (and clipboard context in Polish mode) is sent to that
-> company's servers. The built-in AI, Ollama, LM Studio and llama.cpp keep everything on
-> your machine. Your `AI_API_KEY` lives only in `.env`, which is git-ignored.
+> service), the text you dictate is sent to that company's servers. Your clipboard is
+> not: Polish's clipboard context goes only to an AI on this PC, unless you set
+> `POLISH_CLIPBOARD_CONTEXT=on`. The built-in AI, Ollama, LM Studio and llama.cpp keep
+> everything on your machine. Your `AI_API_KEY` lives only in `.env`, which is git-ignored.
 
 ---
 

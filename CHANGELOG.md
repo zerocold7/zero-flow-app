@@ -195,6 +195,10 @@ left after a crash.
   word for word, twice (the transcript and the pasted text), and the AI's answer when
   it was in the wrong language. It now records their size; `LOG_DICTATION_TEXT=True`
   brings the words back for debugging. The history file is unchanged.
+- **Your clipboard stays on your PC.** Polish sent up to 500 characters of the
+  clipboard (often a password just copied) as context to any AI, Claude and cloud
+  services included. `POLISH_CLIPBOARD_CONTEXT=auto` (the default) now gives it only
+  to an AI on this PC; `on` and `off` override.
 
 ---
 

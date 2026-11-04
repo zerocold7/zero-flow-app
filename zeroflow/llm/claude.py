@@ -6,7 +6,8 @@
                                    # claude-haiku-5-5 cost less
 
 Uses Anthropic's Python SDK (imported only when this provider is chosen). What you
-dictate — and the clipboard text Polish uses as context — is sent to Anthropic.
+dictate is sent to Anthropic; the clipboard Polish uses as context only with
+POLISH_CLIPBOARD_CONTEXT=on.
 """
 import logging
 

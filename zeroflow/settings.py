@@ -120,6 +120,21 @@ if AI_PROVIDER == "openai" and key_sent_in_the_clear(AI_URL, AI_API_KEY):
     problems.append(f'AI_URL="{AI_URL}" is plain http, so AI_API_KEY is sent unencrypted — '
                     f'use an https:// address.')
 
+def clipboard_context_sent(setting: str, provider: str, ai_url: str, ollama_url: str) -> bool:
+    """Whether Polish hands the AI the clipboard as context. "auto": only an AI on this
+    PC gets it — the clipboard often holds a password just copied, and a cloud AI would
+    send it to that company with every Polish."""
+    if setting != "auto":
+        return setting == "on"
+    if provider == "builtin":
+        return True
+    if provider == "ollama":
+        return _this_pc(urlparse(ollama_url).hostname)
+    if provider == "openai":
+        return _this_pc(urlparse(ai_url).hostname)
+    return False                                 # claude, or a provider not known here
+
+
 # The built-in AI's llama.cpp build: "auto" picks it from the graphics card (NVIDIA →
 # cuda, AMD/Intel card → vulkan, otherwise cpu).
 LLAMA_VARIANT = choice("LLAMA_VARIANT", "auto", ("auto", "cuda", "vulkan", "cpu"))
@@ -141,6 +156,10 @@ OLLAMA_KEEP_ALIVE = text("OLLAMA_KEEP_ALIVE", "30m")
 # memory against 2.99 GB at 8,192, with the same speed and answers. 8,192 still fits
 # a five-minute dictation and its answer. 0 keeps whatever the model file says.
 OLLAMA_NUM_CTX = whole_number("OLLAMA_NUM_CTX", 8192, minimum=0)
+# Polish's clipboard context: "auto" (only to an AI on this PC), "on" or "off".
+POLISH_CLIPBOARD_CONTEXT = choice("POLISH_CLIPBOARD_CONTEXT", "auto", ("auto", "on", "off"))
+SEND_CLIPBOARD_CONTEXT = clipboard_context_sent(POLISH_CLIPBOARD_CONTEXT, AI_PROVIDER,
+                                                AI_URL, OLLAMA_HOST_URL)
 
 # ---------------------------------------------------------------- the debug log
 # flow_debug.log records each dictation's size, not its words: a dictated password

@@ -35,7 +35,8 @@ from zeroflow.llm import ask_ai, model_name, unload_ai, warm_up_ai
 from zeroflow.logs import init_logging, said
 from zeroflow.paths import HISTORY_FILE, VOCAB_CACHE_FILE, log_path
 from zeroflow.settings import (AI_LOAD_AT_START, ENABLE_AUDIO_CHIMES, ENABLE_TOASTS, HOTKEYS,
-                               MAX_RECORDING_SECONDS, WHISPER_MODEL_NAME)
+                               MAX_RECORDING_SECONDS, SEND_CLIPBOARD_CONTEXT,
+                               WHISPER_MODEL_NAME)
 from zeroflow.stt import SAMPLE_RATE, transcribe_audio
 from zeroflow.text.language import ARABIC_LETTERS, checked_ai_output
 from zeroflow.text.macros import apply_macros
@@ -270,7 +271,7 @@ def process_recording(capture: Capture) -> None:
     # Read now, with the mic already closed: pyperclip can block for up to half a
     # second while another app holds the clipboard. On the keyboard hook that froze
     # the keyboard; before the mic opened it would cut off your first words.
-    context = read_clipboard_context() if MODES[mode]["op"] == "polish" else ""
+    context = polish_context(mode)
 
     with processing_lock:
         try:
@@ -283,6 +284,14 @@ def process_recording(capture: Capture) -> None:
             ui.play_tone("empty", ENABLE_AUDIO_CHIMES)
         finally:
             ui.update_console_title("ONLINE")
+
+
+def polish_context(mode: str) -> str:
+    """The clipboard as background for Polish — only Polish uses it, and only when
+    POLISH_CLIPBOARD_CONTEXT lets this AI see it (by default, an AI on this PC)."""
+    if MODES[mode]["op"] != "polish" or not SEND_CLIPBOARD_CONTEXT:
+        return ""
+    return read_clipboard_context()
 
 
 def transcribe_and_inject(audio: np.ndarray, mode: str, context: str) -> None:
