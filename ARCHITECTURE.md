@@ -88,10 +88,11 @@ Every dictation flows through the same stages (functions named for the refactore
  2. TRANSCRIBE     transcribe_clip()                          — faster-whisper large-v3
         │                                                      GPU float16, CPU int8 fallback
         ▼
- 3. REFINE         refine_text(text, mode, context)           — Raw: passthrough
+ 3. REFINE         take_commands(), then                      — spoken commands off first
+                   refine_text(text, mode, context)           — Raw: passthrough
         │                                                      Polish/Translate: local LLM
         ▼
- 4. INJECT         inject_text()                              — macros + punctuation, then
+ 4. INJECT         inject_text()                              — punctuation + the commands, then
         │                                                      clipboard paste at the cursor
         ▼
  [text appears in the focused app]
@@ -373,8 +374,13 @@ your PC, git-ignored), and `bench_stt.py --no-filter` gives the comparison.
 - **Voice macros** (`personas.VOICE_MACROS`): a leading "new line" / "bullet" /
   "format code" or a trailing "and send" is detected, stripped from the text, and
   turned into the matching keystroke/format (`shift+enter`, `• `, `` `code` ``, `enter`).
-  All of this lives in `apply_macros()`, kept separate from `inject_text()` so it can
-  be tested without driving the keyboard — see `tests/test_macros.py`.
+  The commands are taken off **what was said**, before Polish or Translate
+  (`take_commands()`); the AI sees only the words between them, and its answer is
+  formatted afterwards (`format_text()`). So the AI can never press Enter — clipboard
+  text in Polish's context once could steer its answer to end in "and send" — and
+  Translate cannot translate your "انتر" away. Both live in `text/macros.py`, kept
+  separate from `inject_text()` so they can be tested without driving the keyboard —
+  see `tests/test_macros.py` and `tests/test_commands_from_speech.py`.
   Triggers match **whole words only** ("Pointless" is not the "point" macro), and they
   match **through Whisper's punctuation**: Whisper writes what it hears as a sentence,
   so "new line hello … and send" arrives as "New line. Hello … and send." and the

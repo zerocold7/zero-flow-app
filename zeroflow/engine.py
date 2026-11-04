@@ -39,7 +39,7 @@ from zeroflow.settings import (AI_LOAD_AT_START, ENABLE_AUDIO_CHIMES, ENABLE_TOA
                                WHISPER_MODEL_NAME)
 from zeroflow.stt import SAMPLE_RATE, transcribe_audio
 from zeroflow.text.language import ARABIC_LETTERS, checked_ai_output
-from zeroflow.text.macros import apply_macros
+from zeroflow.text.macros import format_text, take_commands
 from zeroflow.vocabulary import VOCAB_LOCK, load_vocabulary, vocabulary_terms
 
 LOG_HANDLER = init_logging("flow")
@@ -210,13 +210,14 @@ def refine_text(text: str, mode: str, context: str = "") -> str:
     return text
 
 
-def inject_text(text: str) -> None:
-    """Apply spoken macros/punctuation, then paste the text at the cursor."""
-    if not text:
+def inject_text(text: str, lead: str | None = None, end_enter: bool = False) -> None:
+    """Format the words, then paste them at the cursor with the spoken commands
+    (`lead`, `end_enter`, from take_commands on what was said)."""
+    if not text and lead is None and not end_enter:
         return
-    text, lead_newline, end_enter = apply_macros(text)
+    text = format_text(text, lead)
 
-    if lead_newline:
+    if lead == "new_line":
         keyboard.send('shift+enter')
         time.sleep(0.02)
 
@@ -315,8 +316,12 @@ def transcribe_and_inject(audio: np.ndarray, mode: str, context: str) -> None:
         return
 
     print(f"📝 Raw ({took:.1f}s): {text}")
-    text = refine_text(text, mode, context)
-    inject_text(text)
+    # The commands come off what was said before the AI sees it, so they stay yours:
+    # the AI's answer can neither press Enter nor translate an "and send" away.
+    text, lead, end_enter = take_commands(text)
+    if text:
+        text = refine_text(text, mode, context)
+    inject_text(text, lead, end_enter)
     log_to_history(text, mode)
 
 

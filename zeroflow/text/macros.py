@@ -34,16 +34,24 @@ def _strip_trailing(text: str, tokens: list[str]) -> tuple[str, bool]:
 
 
 def apply_macros(text: str) -> tuple[str, bool, bool]:
-    """Turn a raw transcription into the exact string to paste.
-
-    Spoken macros ("new line", "bullet", "format code", "and send") are detected,
-    stripped, and turned into formatting; spoken punctuation becomes real punctuation;
-    known vocabulary is re-cased. Returns `(text, lead_newline, end_enter)` — the two
-    flags being keystrokes the caller has to send, since they cannot live in a string.
+    """Turn a raw transcription into the exact string to paste: take_commands, then
+    format_text. Returns `(text, lead_newline, end_enter)` — the two flags being
+    keystrokes the caller has to send, since they cannot live in a string.
 
     Kept separate from `inject_text` so this logic is testable without driving the
     keyboard and clipboard. See tests/test_macros.py.
     """
+    words, lead, end_enter = take_commands(text)
+    return format_text(words, lead), lead == "new_line", end_enter
+
+
+def take_commands(text: str) -> tuple[str, str | None, bool]:
+    """Strip the spoken commands off a transcription: `(words, lead, end_enter)`.
+
+    `lead` is the leading macro ("new_line", "bullet", "code_block") or None, and
+    `end_enter` whether it ended in "and send". Done on what was said, before Polish or
+    Translate: read from the AI's answer, the commands were the AI's to give — text on
+    the clipboard could make it end in "and send", and Enter was pressed."""
     macros = personas.VOICE_MACROS
     text = text.strip()
 
@@ -54,10 +62,16 @@ def apply_macros(text: str) -> tuple[str, bool, bool]:
         if matched:
             lead = name
             break
+    text, end_enter = _strip_trailing(text, macros["press_enter"])
+    return text, lead, end_enter
+
+
+def format_text(text: str, lead: str | None) -> str:
+    """The words, ready to paste: spoken punctuation made real, known vocabulary
+    re-cased, and the leading macro's formatting (a bullet, a code span) applied."""
     lead_newline = lead == "new_line"
     lead_bullet = lead == "bullet"
     wrap_code = lead == "code_block"
-    text, end_enter = _strip_trailing(text, macros["press_enter"])
 
     # Spoken punctuation is matched without Whisper's own closing mark, which would
     # otherwise hide it: "That is all, period." → "That is all."
@@ -79,4 +93,4 @@ def apply_macros(text: str) -> tuple[str, bool, bool]:
     elif not lead_newline and text and not wrap_code:
         text = " " + text                        # keep spacing against the previous word
 
-    return text, lead_newline, end_enter
+    return text

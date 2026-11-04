@@ -199,6 +199,11 @@ left after a crash.
   clipboard (often a password just copied) as context to any AI, Claude and cloud
   services included. `POLISH_CLIPBOARD_CONTEXT=auto` (the default) now gives it only
   to an AI on this PC; `on` and `off` override.
+- **Only you can press Enter.** Spoken commands ("new line", "bullet", "and send")
+  were read from the AI's answer, so clipboard text could steer Polish into ending
+  with "and send" — and Enter was pressed in a chat or a terminal. They are now taken
+  from what you said, before the AI sees it. This also fixes Translate, which used to
+  translate a spoken "انتر" or "سطر جديد" away instead of acting on it.
 
 ---
 
