@@ -245,6 +245,14 @@ was broken on purpose and caught.
 - `logo.jpg` 437 KB → 13 KB (680 px wide, shown at 340; the same at that size).
 - **Python other than 3.12 is named**, by `check_hardware.py` and at start-up: 3.12 is
   the only version tested, and on another the packages may not install or run.
+- **The voice starts sooner after a long first sentence.** A batch was always at
+  least a whole sentence, so a 223-character opening meant 3.4 s of silence on the
+  processor; it is now split after a comma: 1.5 s (0.6 s with
+  `READER_FIRST_BATCH_CHARS=60`). That also makes the setting do what the guides say.
+- **Measured, left as is:** the voice's ~11 s load is library imports (torch,
+  transformers, kokoro), 2.8 s of it one scan of every installed package inside
+  transformers; it runs in the background at start-up. The engine uses no processor
+  while idle. `tools/bench/measure_load.py` gives these numbers.
 - **`tools/smoke_check.py`** checks every real part on a PC end to end: settings, the
   microphone and speaker, Whisper in English and Arabic, an AI Polish, the voice.
 - **One home per fact.** Why the reader is a separate process was told in full three

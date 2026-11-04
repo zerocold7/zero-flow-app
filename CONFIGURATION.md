@@ -422,5 +422,5 @@ Two knobs affect how quickly speech starts, both rarely worth changing:
 
 | Variable | Default | What it does |
 |----------|---------|--------------|
-| `READER_FIRST_BATCH_CHARS` | `120` | Size of the first batch sent to the voice model. Smaller = speech starts sooner, but more calls |
+| `READER_FIRST_BATCH_CHARS` | `120` | Size of the first batch sent to the voice model. Smaller = speech starts sooner, but more calls. The batch ends where a sentence ends — or, in a first sentence longer than this, after a comma |
 | `READER_BATCH_CHARS` | `300` | Size of every batch after the first, once audio is already playing |

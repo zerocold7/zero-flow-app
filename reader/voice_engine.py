@@ -59,6 +59,9 @@ DEVICE_POLICY = settings.READER_DEVICE
 # Sentence-aligned batching, so speech starts after the first sentence instead of
 # after the whole passage. Latin and Arabic sentence enders, plus a hard line break.
 SENTENCE_SPLIT = re.compile(r'(?<=[.!?؟۔…])\s+|\n+')
+# Where a first sentence too long for the first batch may be split: after a comma,
+# semicolon or colon, Latin or Arabic.
+CLAUSE_SPLIT = re.compile(r'(?<=[,;:،؛])\s+')
 # The first batch is kept short: it is the only one the listener waits on.
 FIRST_BATCH_CHARS = settings.READER_FIRST_BATCH_CHARS
 BATCH_CHARS = settings.READER_BATCH_CHARS
@@ -210,10 +213,15 @@ def _iter_batches(text, first_max=FIRST_BATCH_CHARS, batch_max=BATCH_CHARS):
     and the rest renders while that plays (CPU manages 3-5x realtime, comfortably
     ahead of playback). Later batches are larger, since per-call overhead matters
     more than latency once the audio is already flowing.
+
+    A first sentence longer than `first_max` is the one exception to whole sentences:
+    it is split after a comma, so a long opening is not seconds of silence on a CPU
+    (223 characters: 3.4 s to the first sound, 2.0 s split).
     """
     sentences = [s for s in SENTENCE_SPLIT.split(text.strip()) if s.strip()]
     if not sentences:
         return
+    sentences[:1] = _split_long_first(sentences[0], first_max)
     buffer, limit = "", first_max
     for sentence in sentences:
         if buffer and len(buffer) + len(sentence) + 1 > limit:
@@ -223,6 +231,18 @@ def _iter_batches(text, first_max=FIRST_BATCH_CHARS, batch_max=BATCH_CHARS):
             buffer = f"{buffer} {sentence}".strip()
     if buffer:
         yield buffer
+
+
+def _split_long_first(sentence, first_max):
+    """[sentence], or — when it is longer than `first_max` and has clause marks —
+    [as many leading clauses as fit (at least one), the rest of the sentence]."""
+    clauses = CLAUSE_SPLIT.split(sentence)
+    if len(sentence) <= first_max or len(clauses) == 1:
+        return [sentence]
+    head = clauses.pop(0)
+    while clauses and len(head) + 1 + len(clauses[0]) <= first_max:
+        head = f"{head} {clauses.pop(0)}"
+    return [head, " ".join(clauses)] if clauses else [sentence]
 
 
 def stream_audio(text, generation=None):
