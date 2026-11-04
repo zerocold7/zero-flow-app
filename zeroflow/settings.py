@@ -142,6 +142,11 @@ OLLAMA_KEEP_ALIVE = text("OLLAMA_KEEP_ALIVE", "30m")
 # a five-minute dictation and its answer. 0 keeps whatever the model file says.
 OLLAMA_NUM_CTX = whole_number("OLLAMA_NUM_CTX", 8192, minimum=0)
 
+# ---------------------------------------------------------------- the debug log
+# flow_debug.log records each dictation's size, not its words: a dictated password
+# would otherwise sit in the log. True writes the words too, for debugging.
+LOG_DICTATION_TEXT = switch("LOG_DICTATION_TEXT", False)
+
 # ---------------------------------------------------------------- sound and notices
 ENABLE_AUDIO_CHIMES = switch("ENABLE_AUDIO_CHIMES", True)
 ENABLE_TOASTS = switch("ENABLE_TOAST_NOTIFICATIONS", True)

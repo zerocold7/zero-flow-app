@@ -3,6 +3,7 @@ import logging
 import re
 
 from zeroflow import ui
+from zeroflow.logs import said
 
 
 # Chinese, Japanese and Korean script. The engine only ever wants English or Arabic, and
@@ -42,7 +43,7 @@ def checked_ai_output(output: str, original: str, lang: str) -> str:
     wanted = ARABIC_LETTERS if lang == "ar" else LATIN_LETTERS
     if FOREIGN_SCRIPT.search(output) or not wanted.search(output):
         logging.warning(f"The AI did not answer in '{lang}'; pasting the original instead: "
-                        f"{output[:120]!r}")
+                        f"{said(output[:120])}")
         print(f"{ui.C_WARN}⚠️  The AI answered in the wrong language — pasting your own words.{ui.C_RESET}")
         return original
     return ARABIC_MARKS.sub("", output) if lang == "ar" else output

@@ -38,6 +38,7 @@ only set what you want to change.
 | `MAX_RECORDING_SECONDS` | `300` | A recording left running stops by itself after this many seconds, and is transcribed as usual |
 | `ENABLE_AUDIO_CHIMES` | `True` | Beeps on start/stop/success |
 | `ENABLE_TOAST_NOTIFICATIONS` | `True` | Windows toast pop-ups |
+| `LOG_DICTATION_TEXT` | `False` | `flow_debug.log` records each dictation's size, not its words. `True` writes the words too, for debugging (see §9) |
 | `HOTKEY_*` | see §2 | Key bindings |
 | `HOTKEY_READ` | `f4` | Read the highlighted text aloud (see §10) |
 | `READER_VOICE` | `af_heart` | Which Kokoro voice speaks (see §10) |
@@ -311,8 +312,8 @@ Example: to make Polish more aggressive, add a rule to `STANDARD_SYSTEM_PROMPT` 
 **A language guard sits behind every prompt.** The key decides the language, so the
 engine checks the answer: an Arabic answer must contain Arabic, an English one English,
 and neither may contain Chinese, Japanese or Korean script. If the model answers in the
-wrong language it pastes your own words instead, and `flow_debug.log` records what the
-model said. Arabic answers also lose any vowel marks the model adds unasked (tanween on
+wrong language it pastes your own words instead, and `flow_debug.log` records that it
+did (and what the model said, with `LOG_DICTATION_TEXT=True`). Arabic answers also lose any vowel marks the model adds unasked (tanween on
 alif stays: *جدًا*). Some small models need this: `qwen2.5:7b` answered Arabic Polish in
 Chinese in 5 tries out of 5 with the old prompt. Which models write the best Arabic:
 [docs/HARDWARE.md §4](docs/HARDWARE.md#ai-model).
@@ -360,7 +361,7 @@ Also in **`zeroflow/personas.py`**:
 | `flow_vocabulary.txt` | learned terms | deduped on write; `Shift+F1` prunes it |
 | `flow_vocabulary.txt.bak` | the list before the last `Shift+F1` | replaced each run — copy it back to undo |
 | `flow_history.md` | history of injected text | trimmed back past ~500 KB, after each write |
-| `flow_debug.log` | dictation diagnostics | auto-rotates (~3 MB cap) |
+| `flow_debug.log` | dictation diagnostics — each dictation's size and timing, not its words (`LOG_DICTATION_TEXT`) | auto-rotates (~3 MB cap) |
 | `reader_debug.log` | reader diagnostics | auto-rotates (~3 MB cap) |
 | `builtin_ai.log` | the built-in AI's own output | appended; delete it any time |
 

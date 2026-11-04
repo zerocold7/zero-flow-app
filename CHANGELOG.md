@@ -190,6 +190,12 @@ left after a crash.
 
 266 tests; the seven new guards were each broken on purpose and caught (76 in all).
 
+### 🔒 Privacy and security (audit)
+- **Your words stay out of the debug log.** `flow_debug.log` recorded every dictation
+  word for word, twice (the transcript and the pasted text), and the AI's answer when
+  it was in the wrong language. It now records their size; `LOG_DICTATION_TEXT=True`
+  brings the words back for debugging. The history file is unchanged.
+
 ---
 
 ## [1.5.1] — 2026-10-14 — A fresh install works again

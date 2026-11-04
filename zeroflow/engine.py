@@ -32,7 +32,7 @@ from zeroflow.clipboard import copy_selection, paste_text, read_clipboard_contex
 from zeroflow.history import cap_history_file, log_to_history
 from zeroflow.hotkeys import run_async, wait_for_release
 from zeroflow.llm import ask_ai, model_name, unload_ai, warm_up_ai
-from zeroflow.logs import init_logging
+from zeroflow.logs import init_logging, said
 from zeroflow.paths import HISTORY_FILE, VOCAB_CACHE_FILE, log_path
 from zeroflow.settings import (AI_LOAD_AT_START, ENABLE_AUDIO_CHIMES, ENABLE_TOASTS, HOTKEYS,
                                MAX_RECORDING_SECONDS, WHISPER_MODEL_NAME)
@@ -219,7 +219,7 @@ def inject_text(text: str) -> None:
         keyboard.send('shift+enter')
         time.sleep(0.02)
 
-    logging.info(f"Injecting text via clipboard paste: {text!r}")
+    logging.info(f"Injecting text via clipboard paste: {said(text)}")
     paste_text(text, press_enter=end_enter)
 
 
@@ -293,7 +293,7 @@ def transcribe_and_inject(audio: np.ndarray, mode: str, context: str) -> None:
     # The speed figure docs/HARDWARE.md tunes against: seconds spent per clip.
     took = time.time() - started
     logging.info(f"Transcription result (mode={mode}, lang={lang}, "
-                 f"{took:.2f}s for {len(audio) / SAMPLE_RATE:.1f}s of audio): {text!r}")
+                 f"{took:.2f}s for {len(audio) / SAMPLE_RATE:.1f}s of audio): {said(text)}")
 
     if text is None:
         logging.info("Transcription failed — nothing injected (the error is logged above).")
