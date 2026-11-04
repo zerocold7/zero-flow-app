@@ -61,8 +61,11 @@ Face; after that the engine needs no internet, and nothing you say, type or read
 the machine. The one exception is your choice: pointing it at a cloud AI instead
 ([CONFIGURATION.md §6](CONFIGURATION.md#6-choosing-the-ai-provider)).
 
-> **Status:** version 2.0 is in alpha, so expect changes between releases; see the
-> [CHANGELOG](CHANGELOG.md).
+> **This is the main repository of Zero- Flow Engine.** Version 2 lives here; it replaces
+> `local-voice-flow` (1.x), which is no longer developed.
+>
+> **Status:** `2.0.0-alpha.4.5`. Version 2 is in alpha, so expect changes between
+> releases; see the [CHANGELOG](CHANGELOG.md).
 
 ## How it works
 
@@ -173,8 +176,9 @@ Each has a twin that starts with no window — `Launch_Zero_Silent.vbs`,
 
 1. `python check_hardware.py` — every line under *Checks* should say `[ok]`.
 2. Look at `flow_debug.log` (dictation) and `reader_debug.log` (reader) in the project
-   folder: every transcription, fallback and failure is recorded there, with how long
-   each clip took.
+   folder: every fallback and failure is recorded there, with how long each clip took.
+   What you dictated is not (only its length); set `LOG_DICTATION_TEXT=True` in `.env`
+   to see the words while you investigate.
 3. [HARDWARE.md §5](docs/HARDWARE.md#5-is-it-tuned-right-read-the-signs) matches
    symptoms to fixes; the [FAQ](docs/FAQ.md) covers the rest.
 
@@ -183,9 +187,20 @@ Each has a twin that starts with no window — `Launch_Zero_Silent.vbs`,
 Audio never leaves the machine: transcription runs on-device (`faster-whisper`), the AI
 runs inside the engine (llama.cpp with Google's Gemma 4, listening on this PC only), and
 the voice (`Kokoro`) is local too. The speech, voice and AI models download once from
-Hugging Face — no account or `HF_TOKEN` needed — and after that the engine makes **no
-network requests at all**. The only exception is one you choose: pointing it at a cloud
-AI provider ([CONFIGURATION.md §6](CONFIGURATION.md#6-choosing-the-ai-provider)).
+Hugging Face — no account or `HF_TOKEN` needed, each at a fixed, checked version — and
+after that the engine makes **no network requests at all**. The only exception is one
+you choose: pointing it at a cloud AI provider
+([CONFIGURATION.md §6](CONFIGURATION.md#6-choosing-the-ai-provider)). Even then, your
+clipboard stays home: Polish only shows it to an AI on your PC.
+
+On the PC itself:
+- **The debug log never holds your words**, only how long each dictation was. Your
+  dictations are kept in one place, `flow_history.md`, which `Shift+F2` clears.
+- **Your clipboard comes back whole** after every dictation — text, a picture or copied
+  files — and the engine's own pastes stay out of clipboard history (`Win+V`) and cloud
+  clipboard sync.
+- **Nothing is typed but your words**: no key is pressed after a paste, and the AI cannot
+  add a command of its own.
 
 ## For developers
 
@@ -199,8 +214,16 @@ plays; about half a minute. They cover what breaks quietly: voice macros and spo
 punctuation, quick start/stop/cancel of recordings, AI failures, the vocabulary and
 history files, sentence batching, the reader's audio-thread safety and supervision,
 one-copy-at-a-time, hardware tiers and presets. A few start real Python processes, to
-test how Windows treats them. Developer tools: `requirements-dev.txt`. Start with
-[ARCHITECTURE.md](ARCHITECTURE.md).
+test how Windows treats them; six more use the real clipboard and run only with
+`ZEROFLOW_REAL_CLIPBOARD=1`.
+
+| Tool | What it proves |
+|---|---|
+| `tools\smoke_check.py` | Every real part works on this PC: settings, microphone and speaker, Whisper in English and Arabic, an AI Polish, the voice |
+| `tools\mutation_check.py` | The tests guard the fixes: it breaks each one on purpose and requires its test to fail |
+| `tools\bench\` | Speed, accuracy and invented words, measured before and after a change |
+
+Developer tools: `requirements-dev.txt`. Start with [ARCHITECTURE.md](ARCHITECTURE.md).
 
 ## License
 
