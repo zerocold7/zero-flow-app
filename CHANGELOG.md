@@ -220,6 +220,9 @@ left after a crash.
   reader's voice were fetched at whatever was uploaded last, so a changed or tampered
   upload would reach the next fresh install. `zeroflow/models.py` now pins each to a
   Hugging Face commit — the versions already in use, so nothing downloads again.
+- **Two quick `F4` presses start one read.** The reader's "busy" flag was checked and
+  set a few steps apart, so a second press in between started a second selection copy
+  and a second read. A lock now covers the whole read.
 
 ---
 

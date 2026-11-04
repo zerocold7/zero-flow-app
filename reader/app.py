@@ -42,7 +42,10 @@ CHILD_MODE = bool(os.getenv("ZEROFLOW_CHILD"))
 # =====================================================================
 # RUNTIME STATE
 # =====================================================================
-is_processing = False
+# Held for one read, from the key press to the last batch queued. Each press runs on its
+# own thread: a plain "busy" flag, checked and then set a few steps later, let a second
+# press slip in between — two selection copies, two reads.
+reading = threading.Lock()
 is_suspended = False
 use_smart_mode = SMART_MODE_DEFAULT
 
@@ -51,17 +54,21 @@ use_smart_mode = SMART_MODE_DEFAULT
 # =====================================================================
 def process_and_speak():
     """Capture the selection, clean it, and speak it."""
-    global is_processing
-    if is_processing or is_suspended:
+    if is_suspended or not reading.acquire(blocking=False):
         return
+    try:
+        _read_selection()
+    finally:
+        reading.release()
 
+
+def _read_selection():
     if signals.is_recording():
         # Dictation has the mic open. Speaking now would be picked up and transcribed.
         logging.info("Reader: declined to speak — the dictation half is recording.")
         ui.play_tone("empty", settings.ENABLE_AUDIO_CHIMES)
         return
 
-    is_processing = True
     try:
         voice_engine.interrupt_audio()           # a second press restarts, never overlaps
 
@@ -92,7 +99,6 @@ def process_and_speak():
         traceback.print_exc()
     finally:
         _title("ONLINE")
-        is_processing = False
 
 
 def _title(state):
