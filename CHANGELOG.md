@@ -253,6 +253,17 @@ was broken on purpose and caught.
   transformers, kokoro), 2.8 s of it one scan of every installed package inside
   transformers; it runs in the background at start-up. The engine uses no processor
   while idle. `tools/bench/measure_load.py` gives these numbers.
+
+### 🧪 Every case tested
+391 tests (from 266 at alpha.4.3); test coverage 87% of the engine (from 77%). New:
+the whole engine's life (starting the reader, Exit from the tray, a stuck reader at
+shutdown, a crash, a second copy); every signal between the halves on real Windows
+objects under names of their own; Shift+F2; a microphone that will not open, a clip
+too short or cancelled, the five-minute limit; Smart cleaning's four outcomes,
+suspend, voice and device choice. `tools/mutation_check.py` breaks 96 guards on
+purpose — every fix since the audit included — and each one's test catches it.
+What stays untested on purpose: what is drawn on screen (console, tray, toasts) and
+sound itself, which `tools/smoke_check.py` checks for real.
 - **`tools/smoke_check.py`** checks every real part on a PC end to end: settings, the
   microphone and speaker, Whisper in English and Arabic, an AI Polish, the voice.
 - **One home per fact.** Why the reader is a separate process was told in full three
