@@ -11,7 +11,9 @@ node_modules/
 package-lock.json
 package.json
 
-# Python cache
+# Python cache and test coverage
+.coverage
+htmlcov/
 __pycache__/
 *.py[cod]
 *$py.class

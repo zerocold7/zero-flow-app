@@ -7,3 +7,4 @@ reportlab     # tools/build_setup_pdf.py
 pip-audit     # known security holes in installed packages:  venv\Scripts\python -m pip_audit
 soundfile==0.14.0  # tools/bench: reads and writes the speech clips
 anthropic     # the Claude provider's tests (for users it is an optional install)
+coverage      # which code the tests run:  -m coverage run -m unittest discover -s tests -t .
