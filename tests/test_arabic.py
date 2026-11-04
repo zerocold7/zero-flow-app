@@ -160,23 +160,23 @@ class TestArabicSpokenCommands(unittest.TestCase):
     ordinary sentences and turned them into bullets or code."""
 
     def test_a_sentence_starting_with_nuqta_is_left_alone(self):
-        text, _, _ = macros.apply_macros("نقطة البداية هي تثبيت البرنامج.")
+        text, _ = macros.apply_macros("نقطة البداية هي تثبيت البرنامج.")
         self.assertEqual(text, " نقطة البداية هي تثبيت البرنامج.")
 
     def test_qaima_makes_a_bullet(self):
-        text, _, _ = macros.apply_macros("قائمة شراء الحليب")
+        text, _ = macros.apply_macros("قائمة شراء الحليب")
         self.assertEqual(text, "• شراء الحليب")
 
     def test_a_sentence_starting_with_code_is_left_alone(self):
-        text, _, _ = macros.apply_macros("كود الخصم لا يعمل.")
+        text, _ = macros.apply_macros("كود الخصم لا يعمل.")
         self.assertEqual(text, " كود الخصم لا يعمل.")
 
     def test_tansiq_code_wraps_as_code(self):
-        text, _, _ = macros.apply_macros("تنسيق كود print hello")
+        text, _ = macros.apply_macros("تنسيق كود print hello")
         self.assertEqual(text, "`print hello`")
 
     def test_nuqta_at_the_end_still_types_a_full_stop(self):
-        text, _, _ = macros.apply_macros("انتهينا من العمل نقطة")
+        text, _ = macros.apply_macros("انتهينا من العمل نقطة")
         self.assertEqual(text, " انتهينا من العمل.")
 
 

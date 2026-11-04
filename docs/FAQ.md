@@ -81,7 +81,8 @@ Whisper learned from subtitled videos, and a breath or a keystroke after your la
 is where it writes how those videos end: "Thank you.", "Have a good night.",
 "اشتركوا في القناة". The engine drops such an ending when the audio shows it was never
 said — it sits on sound far quieter than your speech, or Whisper was unsure of it — and
-keeps a "thank you" you really said. `flow_debug.log` records each one it drops
+keeps a "thank you" you really said. Endings that only videos have ("Thanks for
+watching", "اشتركوا في القناة") are always dropped from the end of a dictation. `flow_debug.log` records each one it drops
 ("Dropped an invented ending"). If one still gets through, speak a little closer to the
 microphone and stop the recording soon after you finish. To test it on your own voice:
 `tools/bench/record_mine.py` (see [ARCHITECTURE.md §7](../ARCHITECTURE.md#7-anti-hallucination-measures)).

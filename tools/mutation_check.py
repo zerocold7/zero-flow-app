@@ -275,8 +275,8 @@ MUTATIONS = [
      "    if MODES[mode][\"op\"] != \"polish\" or not SEND_CLIPBOARD_CONTEXT:", "    if MODES[mode][\"op\"] != \"polish\":",
      "tests.test_clipboard_context.TestPolishReadsTheClipboardOnlyWhenAllowed.test_not_allowed"),
     ("commands: taken from what was said, before the AI",
-     "    text, lead, end_enter = take_commands(text)\n", "    lead, end_enter = None, False\n",
-     "tests.test_commands_from_speech.TestYourCommandsStillWork.test_and_send_you_said_presses_enter_after_polish"),
+     "    text, lead = take_commands(text)\n", "    lead = None\n",
+     "tests.test_commands_from_speech.TestYourCommandStillWorks.test_new_line_you_said_survives_polish"),
     ("models: Whisper at its pinned revision",
      "revision=models.revision(repo),", "revision=None,",
      "tests.test_model_revisions.TestWhisper.test_a_short_name_is_fetched_at_its_pinned_revision"),
@@ -331,6 +331,9 @@ MUTATIONS = [
     ("cases: Smart clean falls back on an echo",
      "    if not output or output.strip() == prepared.strip():", "    if not output:",
      "tests.test_reader_cases.TestSmartCleaning.test_the_text_handed_back_unchanged_falls_back_too"),
+    ("live test: a subtitle phrase on real speech is dropped",
+     "    if phrase in SUBTITLE_ENDINGS:", "    if False:",
+     "tests.test_hallucination.TestInventedEndings.test_the_live_case_subscribe_on_real_speech_is_dropped"),
 ]
 
 only = sys.argv[1] if len(sys.argv) > 1 else ""

@@ -1,13 +1,12 @@
 """Spoken commands come from what you said, never from the AI's answer.
 
-"and send" at the end of a dictation presses Enter. The commands were read from the
-text after Polish or Translate, so the AI decided whether Enter was pressed: clipboard
-text handed to Polish as context could steer its answer to end in "and send", and the
-engine then pressed Enter in a chat or a terminal. Translate had the opposite fault —
-"... انتر" was translated away, so the Enter you asked for never came.
+"New line" at the start of a dictation sends Shift+Enter. The commands used to be read
+from the text after Polish or Translate, so the AI decided: text on the clipboard,
+handed to Polish as context, could steer its answer, and Translate translated
+"سطر جديد" away, so the new line you asked for never came.
 
-Now the commands are taken off the transcript first; the AI only sees the words in
-between, and its answer is pasted with the keys you spoke.
+Now the command is taken off the transcript first; the AI only sees the words after
+it, and its answer is pasted after the key you spoke.
 """
 import os
 import sys
@@ -54,41 +53,31 @@ class DictationTestCase(unittest.TestCase):
         return given, paste.call_args, shift_enter
 
 
-class TestTheAICannotPressEnter(DictationTestCase):
-    def test_an_answer_ending_in_and_send_does_not_press_enter(self):
-        given, paste, _ = self.dictate("see you tomorrow", "en_polish",
-                                       "See you tomorrow, and send.")
-        self.assertFalse(paste.kwargs.get("press_enter"))
-
+class TestTheAICannotAddACommand(DictationTestCase):
     def test_an_answer_starting_with_new_line_does_not_add_one(self):
         _, _, shift_enter = self.dictate("see you tomorrow", "en_polish",
                                          "New line. See you tomorrow.")
         self.assertFalse(shift_enter)
 
 
-class TestYourCommandsStillWork(DictationTestCase):
-    def test_and_send_you_said_presses_enter_after_polish(self):
-        given, paste, _ = self.dictate("see you tomorrow and send", "en_polish",
-                                       "See you tomorrow.")
-        self.assertTrue(paste.kwargs.get("press_enter"))
+class TestYourCommandStillWorks(DictationTestCase):
+    def test_new_line_you_said_survives_polish(self):
+        given, paste, shift_enter = self.dictate("new line see you tomorrow", "en_polish",
+                                                 "See you tomorrow.")
+        self.assertTrue(shift_enter)
         self.assertEqual(given, ["see you tomorrow"])          # the AI never saw it
-        self.assertIn("See you tomorrow.", paste.args[0])
+        self.assertEqual(paste.args[0], "See you tomorrow.")
 
     def test_new_line_you_said_survives_translate(self):
         given, paste, shift_enter = self.dictate("سطر جديد مرحبا بك", "ar2en", "Welcome.")
         self.assertTrue(shift_enter)
         self.assertEqual(given, ["مرحبا بك"])
 
-    def test_enter_you_said_in_arabic_survives_translate(self):
-        given, paste, _ = self.dictate("أراك غدا انتر", "ar2en", "See you tomorrow.")
-        self.assertTrue(paste.kwargs.get("press_enter"))
-        self.assertEqual(given, ["أراك غدا"])
-
     def test_raw_mode_is_unchanged(self):
-        given, paste, _ = self.dictate("see you tomorrow and send", "en_raw", None)
+        given, paste, shift_enter = self.dictate("new line see you tomorrow", "en_raw", None)
         self.assertEqual(given, [])                             # no AI in raw mode
-        self.assertTrue(paste.kwargs.get("press_enter"))
-        self.assertEqual(paste.args[0], " see you tomorrow")
+        self.assertTrue(shift_enter)
+        self.assertEqual(paste.args[0], "see you tomorrow")
 
 
 if __name__ == "__main__":

@@ -112,6 +112,33 @@ class TestInventedEndings(unittest.TestCase):
             words((" Thank", 0.7, 1.0, 0.4), (" you.", 1.0, 1.3, 0.35)), audio)
         self.assertEqual(text_of(kept), "")
 
+    def test_the_live_case_subscribe_on_real_speech_is_dropped(self):
+        """From the live test: "…اسمي عبادي، وانتر" came out "…وأنت اشتركوا في القناة".
+        Whisper laid the stock phrase over a real word, so it was as loud as the speech
+        and confident — the evidence rule kept it. A phrase only video subtitles end
+        with is dropped from the end whatever the audio says."""
+        audio = clip((3.4, 0.1))                     # loud all the way: real speech
+        sentence = words((" السلام", 0.0, 0.5), (" عليكم،", 0.5, 1.0), (" اسمي", 1.0, 1.4),
+                         (" عبادي،", 1.4, 2.0), (" وأنت", 2.0, 2.4), (" اشتركوا", 2.4, 2.8, 0.9),
+                         (" في", 2.8, 2.9, 0.9), (" القناة.", 2.9, 3.4, 0.9))
+        self.assertEqual(text_of(stt.trim_invented_ending(sentence, audio)),
+                         "السلام عليكم، اسمي عبادي، وأنت")
+
+    def test_thanks_for_watching_on_real_speech_is_dropped(self):
+        audio = clip((2.6, 0.1))
+        sentence = words(*SENTENCE, (" Thanks", 1.8, 2.1), (" for", 2.1, 2.2),
+                         (" watching.", 2.2, 2.6))
+        self.assertEqual(text_of(stt.trim_invented_ending(sentence, audio)),
+                         "Send the report today.")
+
+    def test_a_clearly_spoken_thanks_for_listening_stays(self):
+        """People do end a talk with it: only subtitle phrases are dropped regardless."""
+        audio = clip((2.8, 0.1))
+        sentence = words(*SENTENCE, (" Thanks", 1.8, 2.1), (" for", 2.1, 2.3),
+                         (" listening.", 2.3, 2.8))
+        self.assertEqual(text_of(stt.trim_invented_ending(sentence, audio)),
+                         "Send the report today. Thanks for listening.")
+
     def test_a_clip_that_is_only_a_clear_thank_you_stays(self):
         audio = clip((0.2, 0.0005), (0.8, 0.1), (0.2, 0.0005))
         kept = stt.trim_invented_ending(

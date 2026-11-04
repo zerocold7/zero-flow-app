@@ -1,4 +1,4 @@
-"""Spoken commands ("new line", "قائمة", "and send") and spoken punctuation."""
+"""Spoken commands ("new line", "قائمة", "format code") and spoken punctuation."""
 import re
 
 from zeroflow import personas
@@ -6,7 +6,7 @@ from zeroflow.vocabulary import load_vocabulary
 
 
 # Whisper punctuates what it hears, so a spoken macro rarely arrives bare: "New line.
-# Hello." / "See you then, and send." Macros are matched through this punctuation.
+# Hello." Macros are matched through this punctuation.
 MACRO_PUNCT = r'[\s,.;:!?،؛؟…]'
 TRAILING_PUNCT = re.compile(MACRO_PUNCT + r'+$')
 
@@ -24,46 +24,30 @@ def _strip_leading(text: str, tokens: list[str]) -> tuple[str, bool]:
     return stripped, stripped != text
 
 
-def _strip_trailing(text: str, tokens: list[str]) -> tuple[str, bool]:
-    """Remove a trailing trigger phrase, the comma Whisper puts before it and the mark
-    after it — but not the speaker's own "!" or "?" in front. Whole words only: "a
-    thousand send" is not the "and send" macro. Returns (text, matched)."""
-    pattern = rf'(?i)[\s,،]*(?<!\w)(?:{_phrases(tokens)}){MACRO_PUNCT}*$'
-    stripped = re.sub(pattern, '', text, count=1)
-    return stripped, stripped != text
-
-
-def apply_macros(text: str) -> tuple[str, bool, bool]:
+def apply_macros(text: str) -> tuple[str, bool]:
     """Turn a raw transcription into the exact string to paste: take_commands, then
-    format_text. Returns `(text, lead_newline, end_enter)` — the two flags being
-    keystrokes the caller has to send, since they cannot live in a string.
+    format_text. Returns `(text, lead_newline)` — the flag being a keystroke the caller
+    has to send, since it cannot live in a string.
 
     Kept separate from `inject_text` so this logic is testable without driving the
     keyboard and clipboard. See tests/test_macros.py.
     """
-    words, lead, end_enter = take_commands(text)
-    return format_text(words, lead), lead == "new_line", end_enter
+    words, lead = take_commands(text)
+    return format_text(words, lead), lead == "new_line"
 
 
-def take_commands(text: str) -> tuple[str, str | None, bool]:
-    """Strip the spoken commands off a transcription: `(words, lead, end_enter)`.
+def take_commands(text: str) -> tuple[str, str | None]:
+    """Strip the spoken command off the start of a transcription: `(words, lead)`.
 
-    `lead` is the leading macro ("new_line", "bullet", "code_block") or None, and
-    `end_enter` whether it ended in "and send". Done on what was said, before Polish or
-    Translate: read from the AI's answer, the commands were the AI's to give — text on
-    the clipboard could make it end in "and send", and Enter was pressed."""
-    macros = personas.VOICE_MACROS
+    `lead` is the leading macro ("new_line", "bullet", "code_block") or None. Done on
+    what was said, before Polish or Translate: read from the AI's answer, the command
+    was the AI's to give, and Translate translated it away."""
     text = text.strip()
-
-    # At most one leading macro; press_enter is the trailing one.
-    lead = None
-    for name in ("new_line", "bullet", "code_block"):
-        text, matched = _strip_leading(text, macros[name])
+    for name in ("new_line", "bullet", "code_block"):           # at most one
+        text, matched = _strip_leading(text, personas.VOICE_MACROS[name])
         if matched:
-            lead = name
-            break
-    text, end_enter = _strip_trailing(text, macros["press_enter"])
-    return text, lead, end_enter
+            return text, name
+    return text, None
 
 
 def format_text(text: str, lead: str | None) -> str:

@@ -326,13 +326,11 @@ Also in **`zeroflow/personas.py`**:
       "new_line":   ["new line", "سطر جديد"],        # said first → Shift+Enter
       "bullet":     ["bullet", "point", "قائمة"],    # said first → "• " prefix
       "code_block": ["format code", "تنسيق كود"],    # said first → wrapped in `backticks`
-      "press_enter":["and send", "انتر"],            # said last  → Enter after pasting
   }
   ```
-  The first three only count at the **start** of a dictation and `press_enter` only
-  at the **end**. Triggers match **whole words**, case-insensitively, and see past the
-  punctuation Whisper adds ("New line. Hello" and "…see you then, and send." both
-  work). Because a trigger is a whole word, "Pointless" never becomes a bullet — but a
+  They only count at the **start** of a dictation. Triggers match **whole words**,
+  case-insensitively, and see past the punctuation Whisper adds ("New line. Hello"
+  works). Because a trigger is a whole word, "Pointless" never becomes a bullet — but a
   sentence that really starts with "Point…" does, so drop `"point"` if that gets in
   your way.
 - **`PUNCTUATION_MAP`** — trailing spoken punctuation → real punctuation (regex → mark).

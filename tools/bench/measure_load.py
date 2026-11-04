@@ -86,8 +86,8 @@ def part_dictation() -> dict:
     audio = clip()
     _, cold = timed(lambda: stt.transcribe_audio(audio, "en"))
     _, warm = timed(lambda: stt.transcribe_audio(audio, "en"))
-    sentence = "new line please send the report to Tamara comma thanks and send"
-    _, text_work = timed(lambda: [format_text(*take_commands(sentence)[:2]) for _ in range(100)])
+    sentence = "new line please send the report to Tamara comma thanks"
+    _, text_work = timed(lambda: [format_text(*take_commands(sentence)) for _ in range(100)])
     gpu1 = gpu_mb()
     return {"import s": imported, "load s": loaded, "clip s": len(audio) / 16000,
             "transcribe cold s": cold, "transcribe warm s": warm,

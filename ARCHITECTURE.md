@@ -361,7 +361,11 @@ Hallucination originates in Whisper, not the app code. Mitigations in `transcrib
   in its words is under 0.5 (alone in a clip: below −45 dBFS, or unsure). Levels are
   measured on the clip as recorded, before the volume is normalised. A clearly spoken
   "thank you" passes every test and stays — `tests/test_hallucination.py` pins both
-  sides, and every drop is logged with its evidence.
+  sides, and every drop is logged with its evidence. The exception is
+  `SUBTITLE_ENDINGS` — "اشتركوا في القناة", "thanks for watching", translation
+  credits — which only video subtitles end with: dropped from the end whatever the
+  audio says, since Whisper can lay one over a real word it did not know (in a live
+  test "…وانتر" came out "…وأنت اشتركوا في القناة", loud and confident).
 
 **Measuring it.** `tools/bench/` runs the engine's own transcription (`transcribe_audio`,
 the same steps as a dictation) over test clips and scores errors, end punctuation,
@@ -375,19 +379,20 @@ your PC, git-ignored), and `bench_stt.py --no-filter` gives the comparison.
 
 ## 8. Injection details (`inject_text`)
 - **Voice macros** (`personas.VOICE_MACROS`): a leading "new line" / "bullet" /
-  "format code" or a trailing "and send" is detected, stripped from the text, and
-  turned into the matching keystroke/format (`shift+enter`, `• `, `` `code` ``, `enter`).
-  The commands are taken off **what was said**, before Polish or Translate
-  (`take_commands()`); the AI sees only the words between them, and its answer is
-  formatted afterwards (`format_text()`). So the AI can never press Enter — clipboard
-  text in Polish's context once could steer its answer to end in "and send" — and
-  Translate cannot translate your "انتر" away. Both live in `text/macros.py`, kept
-  separate from `inject_text()` so they can be tested without driving the keyboard —
-  see `tests/test_macros.py` and `tests/test_commands_from_speech.py`.
+  "format code" is detected, stripped from the text, and turned into the matching
+  keystroke/format (`shift+enter`, `• `, `` `code` ``). The command is taken off **what
+  was said**, before Polish or Translate (`take_commands()`); the AI sees only the
+  words after it, and its answer is formatted afterwards (`format_text()`). So the AI
+  can never add a command, and Translate cannot translate "سطر جديد" away. Both live
+  in `text/macros.py`, kept separate from `inject_text()` so they can be tested
+  without driving the keyboard — see `tests/test_macros.py` and
+  `tests/test_commands_from_speech.py`. There is no Enter command: "and send" / "انتر"
+  misfired in use (Arabic joins "and" to the word: "وانتر") and was removed; nothing
+  the engine pastes is ever followed by a key press.
   Triggers match **whole words only** ("Pointless" is not the "point" macro), and they
   match **through Whisper's punctuation**: Whisper writes what it hears as a sentence,
-  so "new line hello … and send" arrives as "New line. Hello … and send." and the
-  macros have to see past those marks.
+  so "new line hello" arrives as "New line. Hello." and the macros have to see past
+  those marks.
 - **Punctuation map**: trailing spoken punctuation ("period", "comma", Arabic
   equivalents) becomes real punctuation. It is matched with Whisper's own closing mark
   removed, so "That is all, period." becomes "That is all."

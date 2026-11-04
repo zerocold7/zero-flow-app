@@ -95,8 +95,8 @@ class TestCopySelection(ClipboardTestCase):
 class TestPaste(ClipboardTestCase):
     def test_pastes_and_restores_the_clipboard(self):
         fake = self.use(FakeClipboard())
-        clipboard.paste_text("dictated", press_enter=True)
-        self.assertEqual(self.keys, ["ctrl+v", "enter"])
+        clipboard.paste_text("dictated")
+        self.assertEqual(self.keys, ["ctrl+v"])                # nothing but the paste
         self.assertEqual(fake.content, "what the user had")
 
     def test_the_clipboard_is_restored_even_if_the_paste_fails(self):

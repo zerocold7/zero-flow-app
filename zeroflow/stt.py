@@ -140,7 +140,8 @@ def whisper_hint(language: str | None) -> str | None:
 
 # Whisper learned from subtitled videos, and a breath or a keystroke after you stop
 # talking is where it writes how those videos end. Only these phrases are ever dropped,
-# only at the very end, and only when the audio says they were not said.
+# only at the very end, and — except SUBTITLE_ENDINGS below — only when the audio says
+# they were not said.
 STOCK_ENDINGS = sorted({tuple(plain_words(p)) for p in (
     "thank you", "thank you very much", "thank you so much", "thanks", "thanks a lot",
     "thank you for watching", "thanks for watching", "thank you for listening",
@@ -151,6 +152,17 @@ STOCK_ENDINGS = sorted({tuple(plain_words(p)) for p in (
     "شكرا لحسن الاستماع", "اشتركوا في القناة", "لا تنسوا الاشتراك في القناة",
     "ترجمة نانسي قنقر", "مع السلامة", "الى اللقاء",
 )}, key=len, reverse=True)
+
+# Of those, the ones only video subtitles end with: nobody dictates them. Whisper can
+# lay one over a real word it did not know — in the live test "…وانتر" came out
+# "…وأنت اشتركوا في القناة", as loud and as confident as the speech — so the audio
+# cannot tell; these are dropped from the end whatever it says.
+SUBTITLE_ENDINGS = {tuple(plain_words(p)) for p in (
+    "thank you for watching", "thanks for watching", "please subscribe",
+    "subscribe to the channel",
+    "شكرا للمشاهدة", "شكرا على المشاهدة", "اشتركوا في القناة",
+    "لا تنسوا الاشتراك في القناة", "ترجمة نانسي قنقر",
+)}
 
 
 # The tail counts as never said if it is this much quieter than the speech before it
@@ -174,11 +186,12 @@ def trim_invented_ending(words: list, audio: np.ndarray) -> list:
     """`words` (Whisper's, with timings and confidence) without a stock ending that was
     never said. `audio` is the clip as recorded, before any volume change.
 
-    A known ending ("Thank you.", "شكرا للمشاهدة"…) is dropped only from the very end,
-    and only if it sits on audio INVENTED_QUIETER_DB quieter than the speech before it,
-    or Whisper scored its own words below INVENTED_MAX_PROBABILITY. If the phrase is all
+    A known ending ("Thank you.", "شكرا"…) is dropped only from the very end, and only
+    if it sits on audio INVENTED_QUIETER_DB quieter than the speech before it, or
+    Whisper scored its own words below INVENTED_MAX_PROBABILITY. If the phrase is all
     there is, it must be quieter than INVENTED_ALONE_MAX_DBFS or unsure. A clearly
-    spoken "thank you" passes every one of these and stays."""
+    spoken "thank you" passes every one of these and stays. A SUBTITLE_ENDINGS phrase
+    ("اشتركوا في القناة", "thanks for watching") is dropped from the end regardless."""
     tokens = [plain_words(w.word) for w in words]
     flat = [(i, t) for i, ts in enumerate(tokens) for t in ts]
     for phrase in STOCK_ENDINGS:
@@ -188,6 +201,10 @@ def trim_invented_ending(words: list, audio: np.ndarray) -> list:
     else:
         return words
     ending, said = words[cut:], words[:cut]
+    if phrase in SUBTITLE_ENDINGS:
+        logging.info(f"Dropped an invented ending: {''.join(w.word for w in ending).strip()!r} "
+                     f"(a phrase only video subtitles end with).")
+        return said
     level = _rms(audio, [(w.start, w.end) for w in ending])
     confidence = sum(w.probability for w in ending) / len(ending)
     if said:

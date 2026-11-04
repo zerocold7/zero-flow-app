@@ -211,10 +211,10 @@ def refine_text(text: str, mode: str, context: str = "") -> str:
     return text
 
 
-def inject_text(text: str, lead: str | None = None, end_enter: bool = False) -> None:
-    """Format the words, then paste them at the cursor with the spoken commands
-    (`lead`, `end_enter`, from take_commands on what was said)."""
-    if not text and lead is None and not end_enter:
+def inject_text(text: str, lead: str | None = None) -> None:
+    """Format the words, then paste them at the cursor after the spoken command
+    (`lead`, from take_commands on what was said)."""
+    if not text and lead is None:
         return
     text = format_text(text, lead)
 
@@ -223,7 +223,7 @@ def inject_text(text: str, lead: str | None = None, end_enter: bool = False) -> 
         time.sleep(0.02)
 
     logging.info(f"Injecting text via clipboard paste: {said(text)}")
-    paste_text(text, press_enter=end_enter)
+    paste_text(text)
 
 
 def process_recording(capture: Capture) -> None:
@@ -317,15 +317,15 @@ def transcribe_and_inject(audio: np.ndarray, mode: str, context: str) -> None:
         return
 
     print(f"📝 Raw ({took:.1f}s): {text}")
-    # The commands come off what was said before the AI sees it, so they stay yours:
-    # the AI's answer can neither press Enter nor translate an "and send" away.
-    text, lead, end_enter = take_commands(text)
+    # The command comes off what was said before the AI sees it, so it stays yours:
+    # the AI's answer can neither add one nor translate "new line" away.
+    text, lead = take_commands(text)
     if text:
         text = refine_text(text, mode, context)
     # Kept before the paste: if the paste fails (a clipboard another app holds), the
     # words are still in flow_history.md rather than lost.
     log_to_history(text, mode)
-    inject_text(text, lead, end_enter)
+    inject_text(text, lead)
 
 
 # What a record key shows and plays, done in order on a thread of its own. The record

@@ -199,11 +199,24 @@ left after a crash.
   clipboard (often a password just copied) as context to any AI, Claude and cloud
   services included. `POLISH_CLIPBOARD_CONTEXT=auto` (the default) now gives it only
   to an AI on this PC; `on` and `off` override.
-- **Only you can press Enter.** Spoken commands ("new line", "bullet", "and send")
-  were read from the AI's answer, so clipboard text could steer Polish into ending
-  with "and send" — and Enter was pressed in a chat or a terminal. They are now taken
-  from what you said, before the AI sees it. This also fixes Translate, which used to
-  translate a spoken "انتر" or "سطر جديد" away instead of acting on it.
+- **Spoken commands come from what you said.** "New line", "bullet" and "format code"
+  were read from the AI's answer, so clipboard text could steer Polish into adding
+  one, and Translate translated "سطر جديد" away. They are now taken from what you
+  said, before the AI sees it.
+- **"اشتركوا في القناة" is no longer added.** In a live test, Arabic Polish pasted
+  "…وأنت اشتركوا في القناة" after a word Whisper did not know: the stock phrase sat on
+  real speech, loud and confident, so the invented-ending filter (which goes by the
+  audio) kept it. Endings only video subtitles have — "اشتركوا في القناة", "شكرا
+  للمشاهدة", "thanks for watching", translation credits — are now dropped from the end
+  whatever the audio says; "thank you", "شكرا" and "thanks for listening" still follow
+  the audio. Measured first: two general fixes (faster-whisper's
+  `hallucination_silence_threshold`, a shorter Arabic hint) gained nothing, and the
+  hint cost quiet Arabic badly (55% → 92% errors). English showed no invented words in
+  any test.
+- **The Enter command is gone.** "and send" / "انتر" was meant to press Enter after
+  the paste; in use it misfired ("and enter" and the Arabic "وانتر", with "and" joined
+  to the word, were typed as words) and the AI could be steered into it. The engine
+  now only types what you said: no key is ever pressed after a paste.
 - **Packages with known security holes upgraded:** Pillow 10.2.0 → 13.0.0, requests
   2.31.0 → 2.33.0, urllib3 → 2.8.0, python-dotenv → 1.2.2, filelock → 4.2.1, and
   certifi, anyio, fsspec, setuptools. `pip-audit` (now in `requirements-dev.txt`)
