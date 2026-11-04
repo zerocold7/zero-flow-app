@@ -224,6 +224,9 @@ left after a crash.
   set a few steps apart, so a second press in between started a second selection copy
   and a second read. A lock now covers the whole read.
 
+305 tests (6 more on the real clipboard with `ZEROFLOW_REAL_CLIPBOARD=1`); each fix
+was broken on purpose and caught.
+
 ---
 
 ## [1.5.1] — 2026-10-14 — A fresh install works again
