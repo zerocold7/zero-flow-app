@@ -28,6 +28,11 @@ def choose(name: str):
         settings.problems.append("The built-in AI is not installed on this PC — run "
                                  "tools/get_llama.py, or set AI_PROVIDER=ollama. Using ollama.")
         return ollama
+    if name == "claude" and not claude.available():
+        settings.problems.append('AI_PROVIDER="claude" needs Anthropic\'s package — install it '
+                                 'with: venv\\Scripts\\python -m pip install anthropic -c '
+                                 'constraints.txt. Using the built-in AI.')
+        return choose("builtin")
     if name in PROVIDERS:
         return PROVIDERS[name]
     settings.problems.append(f'AI_PROVIDER="{name}" in .env is not one of '

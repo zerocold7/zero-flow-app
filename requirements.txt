@@ -5,7 +5,6 @@
 # reader on a fresh install while this file had not changed at all.
 faster-whisper==1.0.3
 sounddevice==0.4.6
-soundfile==0.14.0
 keyboard==0.13.5
 requests==2.33.0
 numpy==1.26.4
@@ -34,6 +33,6 @@ kokoro==0.9.4
 # when offline.
 en_core_web_sm @ https://github.com/explosion/spacy-models/releases/download/en_core_web_sm-3.8.0/en_core_web_sm-3.8.0-py3-none-any.whl#sha256=1932429db727d4bff3deed6b34cfc05df17794f4a52eeb26cf8928f7c1a0fb85
 
-# --- Optional AI provider: Claude (AI_PROVIDER="claude", with your own API key) ---
-# Imported only when that provider is chosen.
-anthropic==1.14.0
+# --- Optional: the Claude provider (AI_PROVIDER="claude", with your own API key) ---
+# Not installed for everyone: only that provider uses it. To use Claude, add it with
+#   pip install anthropic -c constraints.txt

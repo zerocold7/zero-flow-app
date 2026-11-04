@@ -104,6 +104,22 @@ class TestChoosingAProvider(unittest.TestCase):
         self.assertIs(llm.choose("openai"), openai_compatible)
         self.assertIs(llm.choose("ollama"), llm.ollama)
 
+    def test_claude_without_its_package_is_reported_and_the_builtin_ai_used(self):
+        """The Claude package is an optional install; choosing Claude without it used
+        to fail on the first Polish, with a traceback in the log."""
+        from zeroflow.llm import builtin, claude
+        with mock.patch.object(claude, "available", return_value=False), \
+             mock.patch.object(builtin, "available", return_value=True), \
+             mock.patch.object(llm.settings, "problems", []):
+            self.assertIs(llm.choose("claude"), builtin)
+            self.assertEqual(len(llm.settings.problems), 1)
+            self.assertIn("pip install anthropic -c constraints.txt", llm.settings.problems[0])
+
+    def test_claude_with_its_package_is_claude(self):
+        from zeroflow.llm import claude
+        with mock.patch.object(claude, "available", return_value=True):
+            self.assertIs(llm.choose("claude"), claude)
+
     def test_an_unknown_name_is_reported_and_ollama_used(self):
         with mock.patch.object(llm.settings, "problems", []):
             self.assertIs(llm.choose("chatgpt"), llm.ollama)

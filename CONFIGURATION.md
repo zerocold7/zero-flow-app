@@ -274,7 +274,12 @@ AI_URL="https://api.openai.com/v1/chat/completions"
 AI_MODEL="the-model-id"
 AI_API_KEY="sk-..."
 ```
-Anthropic's Claude has its own provider:
+Anthropic's Claude has its own provider. Its package is not part of the main install;
+add it once:
+```powershell
+.\venv\Scripts\python.exe -m pip install anthropic -c constraints.txt
+```
+then:
 ```ini
 AI_PROVIDER="claude"
 AI_API_KEY="sk-ant-..."    # blank = the key in ANTHROPIC_API_KEY

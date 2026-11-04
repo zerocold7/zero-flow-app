@@ -9,6 +9,7 @@ Uses Anthropic's Python SDK (imported only when this provider is chosen). What y
 dictate is sent to Anthropic; the clipboard Polish uses as context only with
 POLISH_CLIPBOARD_CONTEXT=on.
 """
+import importlib.util
 import logging
 
 from zeroflow import ui
@@ -22,6 +23,11 @@ DEFAULT_MODEL = "claude-opus-5-5"
 FALLBACK_BETA = "server-side-fallback-2026-07-01"
 
 _clients = {}
+
+
+def available() -> bool:
+    """True if Anthropic's package is installed: an optional install, for this provider."""
+    return importlib.util.find_spec("anthropic") is not None
 
 
 def _make_client(api_key: str):

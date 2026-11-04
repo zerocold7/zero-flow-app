@@ -233,6 +233,19 @@ left after a crash.
 305 tests (6 more on the real clipboard with `ZEROFLOW_REAL_CLIPBOARD=1`); each fix
 was broken on purpose and caught.
 
+### 🪶 Lighter install
+- **The Claude package is an optional install.** Every install carried `anthropic` and
+  the 7 packages it pulls in, used only with `AI_PROVIDER=claude`. It is now one extra
+  command for those who choose Claude ([CONFIGURATION.md §6](CONFIGURATION.md)); without
+  it, start-up says so, names the command, and uses the built-in AI.
+- **`soundfile` moved to `requirements-dev.txt`**: only the bench tools use it.
+- **`tests/test_requirements.py`** keeps the lists honest: everything the engine imports
+  is installed, everything installed is used, and `constraints.txt` pins exactly what an
+  install pulls in.
+- `logo.jpg` 437 KB → 13 KB (680 px wide, shown at 340; the same at that size).
+- **`tools/smoke_check.py`** checks every real part on a PC end to end: settings, the
+  microphone and speaker, Whisper in English and Arabic, an AI Polish, the voice.
+
 ---
 
 ## [1.5.1] — 2026-10-14 — A fresh install works again

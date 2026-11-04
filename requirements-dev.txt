@@ -1,6 +1,9 @@
 # Tools for working on the engine, not for running it.
-# Install after requirements.txt:  venv\Scripts\python -m pip install -r requirements-dev.txt
+# Install after requirements.txt:
+#   venv\Scripts\python -m pip install -r requirements-dev.txt -c constraints.txt
 ruff          # lint:  venv\Scripts\python -m ruff check .
 pytest        # tests: venv\Scripts\python -m pytest  (or: -m unittest discover -s tests -t .)
 reportlab     # tools/build_setup_pdf.py
 pip-audit     # known security holes in installed packages:  venv\Scripts\python -m pip_audit
+soundfile==0.14.0  # tools/bench: reads and writes the speech clips
+anthropic     # the Claude provider's tests (for users it is an optional install)

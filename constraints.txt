@@ -4,6 +4,7 @@
 # newest that day (transformers 5.19 broke the reader on a fresh install).
 #   pip install -r requirements.txt -c constraints.txt
 # torch==2.14.1 also matches the CUDA build (2.14.1+cu126) that NVIDIA PCs install first.
+# Also pins the optional Claude package and what it pulls in (anthropic, httpx2, ...).
 
 addict==2.4.0
 annotated-doc==0.0.4
@@ -97,7 +98,6 @@ six==1.17.0
 smart_open==8.0.1
 sniffio==1.3.1
 sounddevice==0.4.6
-soundfile==0.14.0
 spacy==3.8.16
 spacy-curated-transformers==0.3.1
 spacy-legacy==3.0.12
