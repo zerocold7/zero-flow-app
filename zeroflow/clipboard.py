@@ -1,17 +1,21 @@
 """The clipboard: pasting text, copying the selection, and reading it for context —
-always giving back what the user had on it.
+always giving back what the user had on it: every format, an image or copied files
+too (zeroflow.win_clipboard), with the engine's own text kept out of clipboard history.
 
 Both halves drive the clipboard — the reader copies a selection, dictation pastes —
 and each sequence runs under the engine-wide clipboard lock (zeroflow.signals), so
 neither can land in the middle of the other, in either process layout.
 """
 import ctypes
+import logging
 import re
+import threading
 import time
 
 import keyboard
-import pyperclip
 
+from zeroflow import win_clipboard as system_clipboard
+from zeroflow.win_clipboard import ClipboardBusy
 from zeroflow.signals import clipboard_lock
 from zeroflow.text import URL_PATTERN
 
@@ -22,25 +26,50 @@ KEYEVENTF_KEYUP = 0x0002
 # times, this far apart (half a second in all) before deciding nothing was selected.
 POLL_ATTEMPTS = 25
 POLL_INTERVAL = 0.02
+# Another app may keep the clipboard open past the paste: try to put the user's
+# clipboard back this many more times, this far apart.
+RESTORE_ATTEMPTS = 10
+RESTORE_RETRY_SECONDS = 1.0
 
 
-def paste_text(text: str, press_enter: bool = False) -> None:
+def paste_text(text: str) -> None:
     """Paste `text` at the cursor through the clipboard, then restore the clipboard."""
     with clipboard_lock():
-        saved_clipboard = pyperclip.paste()
+        saved_clipboard = system_clipboard.snapshot()
         try:
-            pyperclip.copy(text)
+            system_clipboard.set_text(text)
             time.sleep(0.04)
             keyboard.send('ctrl+v')
             # Give slow apps time to read the clipboard before we restore it — restoring
             # too early makes them paste the *old* clipboard contents instead.
             time.sleep(0.15)
-            if press_enter:
-                keyboard.send('enter')
         finally:
             # Even when a step above fails: the dictation must not replace what the
             # user had on the clipboard.
-            pyperclip.copy(saved_clipboard)
+            _restore(saved_clipboard)
+
+
+def _restore(saved) -> None:
+    """Put the user's clipboard back — now, or, if another app is holding the clipboard,
+    a little later on a thread of its own. Raised, the busy clipboard used to throw the
+    snapshot away and fail a dictation that had already been pasted."""
+    try:
+        system_clipboard.restore(saved)
+    except ClipboardBusy:
+        logging.warning("The clipboard was busy after the paste; restoring it shortly.")
+        threading.Thread(target=_restore_later, args=(saved,), daemon=True).start()
+
+
+def _restore_later(saved) -> None:
+    for _ in range(RESTORE_ATTEMPTS):
+        time.sleep(RESTORE_RETRY_SECONDS)
+        try:
+            with clipboard_lock():
+                system_clipboard.restore(saved)
+            return
+        except ClipboardBusy:
+            continue
+    logging.error("The clipboard stayed busy; what was on it could not be put back.")
 
 
 def copy_selection(select: str | None = None) -> str | None:
@@ -52,9 +81,9 @@ def copy_selection(select: str | None = None) -> str | None:
     Shift+F3 (fix the line); the caller makes sure its own hotkey is released first,
     or the Ctrl+C is combined with it."""
     with clipboard_lock():
-        saved_clipboard = pyperclip.paste()
+        saved_clipboard = system_clipboard.snapshot()
         try:
-            pyperclip.copy("")                   # so a failed copy reads as empty, not as stale text
+            system_clipboard.clear()             # so a failed copy reads as empty, not as stale text
             time.sleep(POLL_INTERVAL)
             if select:
                 keyboard.send(select)
@@ -62,12 +91,12 @@ def copy_selection(select: str | None = None) -> str | None:
             _press_copy()
             for _ in range(POLL_ATTEMPTS):
                 time.sleep(POLL_INTERVAL)
-                text = pyperclip.paste().strip()
+                text = system_clipboard.get_text().strip()
                 if text:
                     return text
             return None
         finally:
-            pyperclip.copy(saved_clipboard)
+            _restore(saved_clipboard)
 
 
 def _press_copy() -> None:
@@ -84,6 +113,6 @@ def read_clipboard_context() -> str:
     try:
         # Under the lock, so an injection still in flight is not mistaken for context.
         with clipboard_lock():
-            return re.sub(URL_PATTERN, '', pyperclip.paste())[:500]
+            return re.sub(URL_PATTERN, '', system_clipboard.get_text())[:500]
     except Exception:
         return ""

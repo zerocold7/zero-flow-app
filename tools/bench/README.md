@@ -9,6 +9,7 @@ git-ignored.
 | `make_clips.py` | Makes 132 synthetic test cases: 12 English sentences (Kokoro) and 12 Arabic (espeak-ng), each **clean**, followed by **4 s of room noise**, a **breath** or **typing**, and spoken **quietly** — plus clips with **no speech** (silence, hum, clicks, quiet and loud noise). Same output every run. |
 | `bench_stt.py` | Runs the engine's own transcription (`zeroflow.stt.transcribe_audio`) over a clip folder and scores character errors, end punctuation, **invented words**, and time. `--compare A B` puts two runs side by side; `--model` tries another Whisper model; `--no-filter` turns the invented-ending filter off. |
 | `bench_llm.py` | For each AI context size: graphics memory, load time, Polish speed, and the answers. Measures Ollama (the phase 2 numbers); the built-in AI's phase 4 numbers are in CHANGELOG.md. |
+| `measure_load.py` | How heavy each part is on this PC — for the dictation half, the built-in AI, and the voice on the card and on the processor: load time, memory, graphics memory, and each step's time once loaded (a transcription, a Polish, the voice's first sound and real-time factor). Uses `mine/` for its English clip. |
 | `record_mine.py` | Records **your own voice** reading the benchmark's sentences, plus two clips with no words — into `mine/`, on this PC only. |
 
 ```powershell

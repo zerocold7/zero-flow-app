@@ -160,23 +160,23 @@ class TestArabicSpokenCommands(unittest.TestCase):
     ordinary sentences and turned them into bullets or code."""
 
     def test_a_sentence_starting_with_nuqta_is_left_alone(self):
-        text, _, _ = macros.apply_macros("نقطة البداية هي تثبيت البرنامج.")
+        text, _ = macros.apply_macros("نقطة البداية هي تثبيت البرنامج.")
         self.assertEqual(text, " نقطة البداية هي تثبيت البرنامج.")
 
     def test_qaima_makes_a_bullet(self):
-        text, _, _ = macros.apply_macros("قائمة شراء الحليب")
+        text, _ = macros.apply_macros("قائمة شراء الحليب")
         self.assertEqual(text, "• شراء الحليب")
 
     def test_a_sentence_starting_with_code_is_left_alone(self):
-        text, _, _ = macros.apply_macros("كود الخصم لا يعمل.")
+        text, _ = macros.apply_macros("كود الخصم لا يعمل.")
         self.assertEqual(text, " كود الخصم لا يعمل.")
 
     def test_tansiq_code_wraps_as_code(self):
-        text, _, _ = macros.apply_macros("تنسيق كود print hello")
+        text, _ = macros.apply_macros("تنسيق كود print hello")
         self.assertEqual(text, "`print hello`")
 
     def test_nuqta_at_the_end_still_types_a_full_stop(self):
-        text, _, _ = macros.apply_macros("انتهينا من العمل نقطة")
+        text, _ = macros.apply_macros("انتهينا من العمل نقطة")
         self.assertEqual(text, " انتهينا من العمل.")
 
 
@@ -287,7 +287,7 @@ class TestFixLine(AITestCase):
         with mock.patch.object(engine, "keyboard") as kb, \
              mock.patch.object(hotkeys, "keyboard", kb), \
              mock.patch.object(clipboard, "keyboard", kb), \
-             mock.patch.object(clipboard, "pyperclip") as clip, \
+             mock.patch.object(clipboard, "system_clipboard") as clip, \
              mock.patch.object(clipboard, "_press_copy",
                                side_effect=lambda: kb.send("ctrl+c")), \
              mock.patch.object(clipboard.time, "sleep"), \
@@ -296,7 +296,7 @@ class TestFixLine(AITestCase):
              mock.patch.object(engine, "log_to_history"), \
              contextlib.redirect_stdout(io.StringIO()):
             kb.is_pressed.return_value = False
-            clip.paste.side_effect = ["saved clipboard", line]
+            clip.get_text.return_value = line
             engine.correct_current_line()
         return pasted, kb
 
@@ -322,7 +322,7 @@ class TestFixLine(AITestCase):
         with mock.patch.object(engine, "keyboard") as kb, \
              mock.patch.object(hotkeys, "keyboard", kb), \
              mock.patch.object(clipboard, "keyboard", kb), \
-             mock.patch.object(clipboard, "pyperclip") as clip, \
+             mock.patch.object(clipboard, "system_clipboard") as clip, \
              mock.patch.object(clipboard, "_press_copy",
                                side_effect=lambda: kb.send("ctrl+c")), \
              mock.patch.object(clipboard.time, "sleep"), \
@@ -330,7 +330,7 @@ class TestFixLine(AITestCase):
              mock.patch.object(engine, "ask_ai", return_value=None), \
              contextlib.redirect_stdout(console):
             kb.is_pressed.return_value = False
-            clip.paste.side_effect = ["saved", "teh line"]
+            clip.get_text.return_value = "teh line"
             engine.correct_current_line()
         paste.assert_not_called()
         self.assertIn("AI unavailable", console.getvalue())
@@ -353,7 +353,7 @@ class TestFixLine(AITestCase):
         with mock.patch.object(engine, "keyboard") as kb, \
              mock.patch.object(hotkeys, "keyboard", kb), \
              mock.patch.object(clipboard, "keyboard", kb), \
-             mock.patch.object(clipboard, "pyperclip") as clip, \
+             mock.patch.object(clipboard, "system_clipboard") as clip, \
              mock.patch.object(clipboard, "_press_copy",
                                side_effect=lambda: kb.send("ctrl+c")), \
              mock.patch.object(clipboard.time, "sleep"), \
@@ -364,7 +364,7 @@ class TestFixLine(AITestCase):
              contextlib.redirect_stdout(io.StringIO()):
             kb.is_pressed.side_effect = is_pressed
             kb.send.side_effect = lambda key: events.append(("send", key))
-            clip.paste.side_effect = ["saved", "line"]
+            clip.get_text.return_value = "line"
             engine.correct_current_line()
         first_send = next(i for i, e in enumerate(events) if e[0] == "send")
         self.assertIn(("up", "shift"), events[:first_send], "sent keys without checking Shift")

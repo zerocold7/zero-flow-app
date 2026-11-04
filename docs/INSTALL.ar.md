@@ -61,7 +61,7 @@ python -m venv venv
 **فئات NVIDIA** (`nvidia-desktop` و `nvidia-laptop`) — ثبّت نسخة torch الخاصة بكرت الشاشة **أولاً**، وإلا يختار pip بصمت نسخة المعالج فيعمل الصوت على المعالج:
 
 ```powershell
-.\venv\Scripts\python.exe -m pip install torch==2.5.1+cu121 --index-url https://download.pytorch.org/whl/cu121
+.\venv\Scripts\python.exe -m pip install torch==2.14.1+cu126 --index-url https://download.pytorch.org/whl/cu126
 .\venv\Scripts\python.exe -m pip install -r requirements.txt -c constraints.txt
 ```
 
@@ -70,7 +70,9 @@ python -m venv venv
 **فئتا `cpu-only` و `amd-intel-gpu`** — تجاوز مكتبات NVIDIA (1.2 جيجابايت). هذا الأمر يثبّت كل ما في `requirements.txt` ما عدا سطرَي `nvidia-`:
 
 ```powershell
-.\venv\Scripts\python.exe -m pip install ((Get-Content requirements.txt) | Where-Object { $_ -match '^[A-Za-z]' -and $_ -notmatch '^nvidia-' }) -c constraints.txt
+$parts = Get-Content requirements.txt |
+    Where-Object { $_ -match '^[A-Za-z]' -and $_ -notmatch '^nvidia-' }
+.\venv\Scripts\python.exe -m pip install $parts -c constraints.txt
 ```
 
 هذه الخطوة تستغرق عدة دقائق.

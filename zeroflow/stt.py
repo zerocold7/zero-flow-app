@@ -19,13 +19,14 @@ _skipped = [name for name in ("torch", "transformers") if name not in sys.module
 sys.modules.update(dict.fromkeys(_skipped))      # None: "import X" raises ImportError
 try:
     from faster_whisper import WhisperModel
-    from faster_whisper.utils import download_model
+    from faster_whisper.utils import _MODELS as WHISPER_REPOS
 finally:
     for _name in _skipped:
         sys.modules.pop(_name, None)                 # a later real import still works
+from huggingface_hub import snapshot_download
 from huggingface_hub.utils import logging as hf_logging
 
-from zeroflow import personas, ui
+from zeroflow import models, personas, ui
 from zeroflow.settings import WHISPER_COMPUTE_TYPE, WHISPER_DEVICE, WHISPER_MODEL_NAME
 from zeroflow.text.language import ARABIC_LETTERS, plain_words
 from zeroflow.vocabulary import load_vocabulary
@@ -48,6 +49,27 @@ model_runtime = ""        # where it runs, e.g. "GPU · float16" — shown in th
 TEMPERATURES = (0.0, 0.2, 0.4)
 
 
+# The files faster-whisper's own download_model fetches; called directly here, so the
+# download can name a pinned revision (zeroflow.models), which download_model cannot.
+WHISPER_FILES = ["config.json", "preprocessor_config.json", "model.bin", "tokenizer.json",
+                 "vocabulary.*"]
+
+
+def whisper_repo(name: str) -> str | None:
+    """The Hub repo of a Whisper model: "large-v3" → "Systran/faster-whisper-large-v3";
+    a repo id ("org/name") is its own. None for anything else."""
+    return WHISPER_REPOS.get(name) or (name if "/" in name else None)
+
+
+def _download_whisper(local_files_only: bool = False) -> str:
+    repo = whisper_repo(WHISPER_MODEL_NAME)
+    if repo is None:
+        raise ValueError(f'WHISPER_MODEL_NAME="{WHISPER_MODEL_NAME}" is not a Whisper model '
+                         f'name, a Hugging Face repo or a folder on this PC.')
+    return snapshot_download(repo, revision=models.revision(repo),
+                             allow_patterns=WHISPER_FILES, local_files_only=local_files_only)
+
+
 def resolve_whisper_model() -> str:
     """The Whisper model's folder on disk: straight from the local cache when it is
     there, downloaded only when it is not (the first run, or a new WHISPER_MODEL_NAME).
@@ -58,12 +80,12 @@ def resolve_whisper_model() -> str:
     if os.path.isdir(WHISPER_MODEL_NAME):
         return WHISPER_MODEL_NAME                # a local model folder was configured
     try:
-        return download_model(WHISPER_MODEL_NAME, local_files_only=True)
+        return _download_whisper(local_files_only=True)
     except FileNotFoundError:                    # huggingface_hub's LocalEntryNotFoundError
         logging.info(f"Whisper model '{WHISPER_MODEL_NAME}' is not cached yet; downloading it.")
         print(f"{ui.C_ACCENT}⬇️  Downloading the speech model '{WHISPER_MODEL_NAME}' "
               f"(first run only)...{ui.C_RESET}")
-        return download_model(WHISPER_MODEL_NAME)
+        return _download_whisper()
 
 
 def load_whisper_model() -> WhisperModel:
@@ -118,7 +140,8 @@ def whisper_hint(language: str | None) -> str | None:
 
 # Whisper learned from subtitled videos, and a breath or a keystroke after you stop
 # talking is where it writes how those videos end. Only these phrases are ever dropped,
-# only at the very end, and only when the audio says they were not said.
+# only at the very end, and — except SUBTITLE_ENDINGS below — only when the audio says
+# they were not said.
 STOCK_ENDINGS = sorted({tuple(plain_words(p)) for p in (
     "thank you", "thank you very much", "thank you so much", "thanks", "thanks a lot",
     "thank you for watching", "thanks for watching", "thank you for listening",
@@ -129,6 +152,17 @@ STOCK_ENDINGS = sorted({tuple(plain_words(p)) for p in (
     "شكرا لحسن الاستماع", "اشتركوا في القناة", "لا تنسوا الاشتراك في القناة",
     "ترجمة نانسي قنقر", "مع السلامة", "الى اللقاء",
 )}, key=len, reverse=True)
+
+# Of those, the ones only video subtitles end with: nobody dictates them. Whisper can
+# lay one over a real word it did not know — in the live test "…وانتر" came out
+# "…وأنت اشتركوا في القناة", as loud and as confident as the speech — so the audio
+# cannot tell; these are dropped from the end whatever it says.
+SUBTITLE_ENDINGS = {tuple(plain_words(p)) for p in (
+    "thank you for watching", "thanks for watching", "please subscribe",
+    "subscribe to the channel",
+    "شكرا للمشاهدة", "شكرا على المشاهدة", "اشتركوا في القناة",
+    "لا تنسوا الاشتراك في القناة", "ترجمة نانسي قنقر",
+)}
 
 
 # The tail counts as never said if it is this much quieter than the speech before it
@@ -152,11 +186,12 @@ def trim_invented_ending(words: list, audio: np.ndarray) -> list:
     """`words` (Whisper's, with timings and confidence) without a stock ending that was
     never said. `audio` is the clip as recorded, before any volume change.
 
-    A known ending ("Thank you.", "شكرا للمشاهدة"…) is dropped only from the very end,
-    and only if it sits on audio INVENTED_QUIETER_DB quieter than the speech before it,
-    or Whisper scored its own words below INVENTED_MAX_PROBABILITY. If the phrase is all
+    A known ending ("Thank you.", "شكرا"…) is dropped only from the very end, and only
+    if it sits on audio INVENTED_QUIETER_DB quieter than the speech before it, or
+    Whisper scored its own words below INVENTED_MAX_PROBABILITY. If the phrase is all
     there is, it must be quieter than INVENTED_ALONE_MAX_DBFS or unsure. A clearly
-    spoken "thank you" passes every one of these and stays."""
+    spoken "thank you" passes every one of these and stays. A SUBTITLE_ENDINGS phrase
+    ("اشتركوا في القناة", "thanks for watching") is dropped from the end regardless."""
     tokens = [plain_words(w.word) for w in words]
     flat = [(i, t) for i, ts in enumerate(tokens) for t in ts]
     for phrase in STOCK_ENDINGS:
@@ -166,6 +201,10 @@ def trim_invented_ending(words: list, audio: np.ndarray) -> list:
     else:
         return words
     ending, said = words[cut:], words[:cut]
+    if phrase in SUBTITLE_ENDINGS:
+        logging.info(f"Dropped an invented ending: {''.join(w.word for w in ending).strip()!r} "
+                     f"(a phrase only video subtitles end with).")
+        return said
     level = _rms(audio, [(w.start, w.end) for w in ending])
     confidence = sum(w.probability for w in ending) / len(ending)
     if said:

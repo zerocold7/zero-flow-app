@@ -18,7 +18,7 @@ import time
 
 import requests
 
-from zeroflow import signals, ui
+from zeroflow import models, signals, ui
 from zeroflow.llm import llama_runtime, openai_compatible
 from zeroflow.paths import log_dir
 from zeroflow.settings import (AI_BUILTIN_FILE, AI_BUILTIN_PORT, AI_BUILTIN_REPO, AI_NUM_CTX,
@@ -55,15 +55,18 @@ def _launcher(variant: str) -> list[str]:
 
 
 def _model_path() -> str:
-    """The model file from the local model cache; downloaded once, the first time."""
+    """The model file from the local model cache; downloaded once, the first time, at
+    its pinned revision (zeroflow.models)."""
     from huggingface_hub import hf_hub_download
+    revision = models.revision(AI_BUILTIN_REPO)
     try:
-        return hf_hub_download(AI_BUILTIN_REPO, AI_BUILTIN_FILE, local_files_only=True)
+        return hf_hub_download(AI_BUILTIN_REPO, AI_BUILTIN_FILE, revision=revision,
+                               local_files_only=True)
     except Exception:
         print(f"{ui.C_ACCENT}⬇️  Downloading the AI model, {_model_label()} "
               f"(3–5 GB, first run only)...{ui.C_RESET}")
         logging.info(f"Downloading the built-in AI model {AI_BUILTIN_REPO}/{AI_BUILTIN_FILE}.")
-        return hf_hub_download(AI_BUILTIN_REPO, AI_BUILTIN_FILE)
+        return hf_hub_download(AI_BUILTIN_REPO, AI_BUILTIN_FILE, revision=revision)
 
 
 def _url(path: str) -> str:
@@ -77,52 +80,73 @@ def _healthy() -> bool:
         return False
 
 
-def start() -> bool:
+def start(wait: float | None = None) -> bool:
     """Make sure a server is answering — ours, or one already running. False (with the
-    reason logged and shown) if it cannot be."""
-    global _process
-    with _lock:
-        if _healthy():
-            return True
-        if _process is not None and _process.poll() is not None:
-            logging.warning(f"The built-in AI stopped (code {_process.returncode}); "
-                            f"restarting it.")
-        try:
-            variant = _variant()
-            command = _launcher(variant) + [
-                "-m", _model_path(),
-                "-ngl", "0" if variant == "cpu" else "99",   # every layer on the card, or none
-                "-c", str(AI_NUM_CTX),
-                "-np", "1",                       # one request at a time: dictation is serial
-                "--reasoning", "off",             # thinking made Polish 2.4-7.8 s, not 0.26 s
-                "--host", "127.0.0.1",            # this PC only
-                "--port", str(AI_BUILTIN_PORT),
-            ]
-        except Exception as e:
-            return _unavailable(e)
-        print(f"{ui.C_ACCENT}🧠 Loading the AI model...{ui.C_RESET}", flush=True)
-        log = open(os.path.join(log_dir(), "builtin_ai.log"), "a", encoding="utf-8")
-        try:
-            _process = subprocess.Popen(command, stdout=log, stderr=subprocess.STDOUT,
-                                        creationflags=CREATE_NO_WINDOW)
-        except OSError as e:
-            return _unavailable(e)
-        finally:
-            log.close()                           # the child holds its own handle
-        signals.bind_child_to_this_process(_process)
-        deadline = time.monotonic() + START_TIMEOUT
-        while time.monotonic() < deadline:
-            if _process.poll() is not None:
-                return _unavailable(f"llama-server stopped while starting (code "
-                                    f"{_process.returncode}); see builtin_ai.log")
-            if _healthy():
-                logging.info(f"Built-in AI ready ({variant}) on port {AI_BUILTIN_PORT}.")
-                return True
-            time.sleep(0.2)
-        _process.kill()
-        return _unavailable(f"llama-server was not ready after {START_TIMEOUT} s; "
-                            f"see builtin_ai.log")
+    reason logged and shown) if it cannot be.
 
+    `wait`: how long to wait for another thread that is starting it (the first start
+    downloads the model, then loads it for up to START_TIMEOUT). A Polish passes its own
+    timeout, so it gives up and pastes your words instead of holding every dictation
+    behind it; None (the warm-up) waits for as long as that takes."""
+    if not _lock.acquire(timeout=-1 if wait is None else wait):
+        return _unavailable("the AI model is still loading — try again in a moment")
+    try:
+        return _start()
+    finally:
+        _lock.release()
+
+
+def _start() -> bool:
+    global _process
+    if _healthy():
+        return True
+    if _process is not None and _process.poll() is None:
+        # Ours, running, but not answering yet (still loading, or a busy CPU build).
+        # Starting a second one would fail on the port and orphan this one.
+        return _wait_until_ready("still loading")
+    if _process is not None:
+        logging.warning(f"The built-in AI stopped (code {_process.returncode}); "
+                        f"restarting it.")
+    try:
+        variant = _variant()
+        command = _launcher(variant) + [
+            "-m", _model_path(),
+            "-ngl", "0" if variant == "cpu" else "99",   # every layer on the card, or none
+            "-c", str(AI_NUM_CTX),
+            "-np", "1",                       # one request at a time: dictation is serial
+            "--reasoning", "off",             # thinking made Polish 2.4-7.8 s, not 0.26 s
+            "--host", "127.0.0.1",            # this PC only
+            "--port", str(AI_BUILTIN_PORT),
+        ]
+    except Exception as e:
+        return _unavailable(e)
+    print(f"{ui.C_ACCENT}🧠 Loading the AI model...{ui.C_RESET}", flush=True)
+    log = open(os.path.join(log_dir(), "builtin_ai.log"), "a", encoding="utf-8")
+    try:
+        _process = subprocess.Popen(command, stdout=log, stderr=subprocess.STDOUT,
+                                    creationflags=CREATE_NO_WINDOW)
+    except OSError as e:
+        return _unavailable(e)
+    finally:
+        log.close()                           # the child holds its own handle
+    signals.bind_child_to_this_process(_process)
+    return _wait_until_ready(variant)
+
+
+def _wait_until_ready(what: str) -> bool:
+    """Wait for the server this process started to answer, for up to START_TIMEOUT."""
+    deadline = time.monotonic() + START_TIMEOUT
+    while time.monotonic() < deadline:
+        if _process.poll() is not None:
+            return _unavailable(f"llama-server stopped while starting (code "
+                                f"{_process.returncode}); see builtin_ai.log")
+        if _healthy():
+            logging.info(f"Built-in AI ready ({what}) on port {AI_BUILTIN_PORT}.")
+            return True
+        time.sleep(0.2)
+    _process.kill()
+    return _unavailable(f"llama-server was not ready after {START_TIMEOUT} s; "
+                        f"see builtin_ai.log")
 
 def _unavailable(reason) -> bool:
     logging.warning(f"Built-in AI unavailable: {reason}")
@@ -145,13 +169,13 @@ def stop() -> None:
 # ---------------------------------------------------------------- the provider interface
 def ask(raw_text: str, context_text: str | None, instruction: str,
         timeout: float = 15.0) -> str | None:
-    if not start():
+    if not start(wait=timeout):
         return None
     answer = openai_compatible.chat(_url("/v1/chat/completions"), "gemma", "", raw_text,
                                     context_text, instruction, timeout)
     if answer is None and not _healthy():         # it stopped: start it again, once
         logging.warning("The built-in AI stopped; restarting it.")
-        if start():
+        if start(wait=timeout):
             answer = openai_compatible.chat(_url("/v1/chat/completions"), "gemma", "",
                                             raw_text, context_text, instruction, timeout)
     return answer

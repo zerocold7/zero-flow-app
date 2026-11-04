@@ -34,7 +34,8 @@ C_WARN = Fore.YELLOW
 C_ERR = Fore.RED
 C_RESET = Style.RESET_ALL
 
-spinner_active = False
+_spinner = None           # the AI spinner's thread, once one has run
+_spinner_stop = None      # and its stop signal
 tray_icon = None
 
 
@@ -164,24 +165,30 @@ def print_banner(title: str, about: list[tuple[str, str]], sections: list) -> No
 
 
 def start_processing_spinner(message: str = "AI Processing") -> None:
-    global spinner_active
-    spinner_active = True
+    global _spinner, _spinner_stop
+    stop = threading.Event()
+
     def spin():
         chars = "⠋⠙⠹⠸⠼⠴⠦⠧⠇⠏"
         i = 0
-        while spinner_active:
+        while not stop.is_set():
             sys.stdout.write(f"\r{C_WARN}[{chars[i % len(chars)]}] {message}...{C_RESET}")
             sys.stdout.flush()
-            time.sleep(0.1)
+            stop.wait(0.1)
             i += 1
         sys.stdout.write("\r" + " " * 50 + "\r")
-    threading.Thread(target=spin, daemon=True).start()
+    _spinner, _spinner_stop = threading.Thread(target=spin, daemon=True), stop
+    _spinner.start()
 
 
 def stop_processing_spinner() -> None:
-    global spinner_active
-    spinner_active = False
-    time.sleep(0.15)
+    """Stop the spinner and wait for it to wipe its line, so what is printed next is
+    not drawn over. It wakes at once: a fixed 0.15 s sleep here used to be added to
+    every AI answer (a Polish takes ~0.26 s)."""
+    if _spinner_stop is None:
+        return
+    _spinner_stop.set()
+    _spinner.join(1)
 
 
 def create_image(color1: str, color2: str) -> Image.Image:

@@ -8,8 +8,11 @@ from unittest import mock
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-import anthropic
-import httpx2
+try:
+    import anthropic
+    import httpx2
+except ImportError:                              # an optional install (requirements-dev.txt)
+    raise unittest.SkipTest("Anthropic's package is not installed") from None
 
 from zeroflow import llm
 from zeroflow.llm import claude

@@ -13,6 +13,7 @@ See ARCHITECTURE.md for the full design rationale.
 """
 import logging
 import os
+import queue
 import shutil
 import sys
 import threading
@@ -31,14 +32,14 @@ from zeroflow.capture import Capture
 from zeroflow.clipboard import copy_selection, paste_text, read_clipboard_context
 from zeroflow.history import cap_history_file, log_to_history
 from zeroflow.hotkeys import run_async, wait_for_release
-from zeroflow.llm import ask_ai, model_name, unload_ai, warm_up_ai
-from zeroflow.logs import init_logging
+from zeroflow.llm import SEND_CLIPBOARD_CONTEXT, ask_ai, model_name, unload_ai, warm_up_ai
+from zeroflow.logs import init_logging, said
 from zeroflow.paths import HISTORY_FILE, VOCAB_CACHE_FILE, log_path
 from zeroflow.settings import (AI_LOAD_AT_START, ENABLE_AUDIO_CHIMES, ENABLE_TOASTS, HOTKEYS,
                                MAX_RECORDING_SECONDS, WHISPER_MODEL_NAME)
 from zeroflow.stt import SAMPLE_RATE, transcribe_audio
 from zeroflow.text.language import ARABIC_LETTERS, checked_ai_output
-from zeroflow.text.macros import apply_macros
+from zeroflow.text.macros import format_text, take_commands
 from zeroflow.vocabulary import VOCAB_LOCK, load_vocabulary, vocabulary_terms
 
 LOG_HANDLER = init_logging("flow")
@@ -180,7 +181,8 @@ def refine_text(text: str, mode: str, context: str = "") -> str:
     if cfg["op"] == "polish":
         ui.update_console_title("AI POLISHING")
         prompt = personas.ARABIC_POLISH_PROMPT if cfg["lang"] == "ar" else personas.STANDARD_SYSTEM_PROMPT
-        answer = ask_ai(text, context, prompt)
+        # Only the English prompt asks the model to tag new words (personas.py).
+        answer = ask_ai(text, context, prompt, learn=cfg["lang"] == "en")
         if answer is None:
             return _ai_unavailable(text)
         out = checked_ai_output(answer, text, cfg["lang"])
@@ -209,18 +211,19 @@ def refine_text(text: str, mode: str, context: str = "") -> str:
     return text
 
 
-def inject_text(text: str) -> None:
-    """Apply spoken macros/punctuation, then paste the text at the cursor."""
-    if not text:
+def inject_text(text: str, lead: str | None = None) -> None:
+    """Format the words, then paste them at the cursor after the spoken command
+    (`lead`, from take_commands on what was said)."""
+    if not text and lead is None:
         return
-    text, lead_newline, end_enter = apply_macros(text)
+    text = format_text(text, lead)
 
-    if lead_newline:
+    if lead == "new_line":
         keyboard.send('shift+enter')
         time.sleep(0.02)
 
-    logging.info(f"Injecting text via clipboard paste: {text!r}")
-    paste_text(text, press_enter=end_enter)
+    logging.info(f"Injecting text via clipboard paste: {said(text)}")
+    paste_text(text)
 
 
 def process_recording(capture: Capture) -> None:
@@ -267,10 +270,10 @@ def process_recording(capture: Capture) -> None:
         ui.update_console_title("ONLINE")
         return
 
-    # Read now, with the mic already closed: pyperclip can block for up to half a
+    # Read now, with the mic already closed: the clipboard can be busy for up to half a
     # second while another app holds the clipboard. On the keyboard hook that froze
     # the keyboard; before the mic opened it would cut off your first words.
-    context = read_clipboard_context() if MODES[mode]["op"] == "polish" else ""
+    context = polish_context(mode)
 
     with processing_lock:
         try:
@@ -285,6 +288,14 @@ def process_recording(capture: Capture) -> None:
             ui.update_console_title("ONLINE")
 
 
+def polish_context(mode: str) -> str:
+    """The clipboard as background for Polish — only Polish uses it, and only when
+    POLISH_CLIPBOARD_CONTEXT lets this AI see it (by default, an AI on this PC)."""
+    if MODES[mode]["op"] != "polish" or not SEND_CLIPBOARD_CONTEXT:
+        return ""
+    return read_clipboard_context()
+
+
 def transcribe_and_inject(audio: np.ndarray, mode: str, context: str) -> None:
     """Stages 2-4 for one captured clip: transcribe, refine, paste."""
     ui.update_console_title("DECODING")
@@ -293,7 +304,7 @@ def transcribe_and_inject(audio: np.ndarray, mode: str, context: str) -> None:
     # The speed figure docs/HARDWARE.md tunes against: seconds spent per clip.
     took = time.time() - started
     logging.info(f"Transcription result (mode={mode}, lang={lang}, "
-                 f"{took:.2f}s for {len(audio) / SAMPLE_RATE:.1f}s of audio): {text!r}")
+                 f"{took:.2f}s for {len(audio) / SAMPLE_RATE:.1f}s of audio): {said(text)}")
 
     if text is None:
         logging.info("Transcription failed — nothing injected (the error is logged above).")
@@ -306,13 +317,50 @@ def transcribe_and_inject(audio: np.ndarray, mode: str, context: str) -> None:
         return
 
     print(f"📝 Raw ({took:.1f}s): {text}")
-    text = refine_text(text, mode, context)
-    inject_text(text)
+    # The command comes off what was said before the AI sees it, so it stays yours:
+    # the AI's answer can neither add one nor translate "new line" away.
+    text, lead = take_commands(text)
+    if text:
+        text = refine_text(text, mode, context)
+    # Kept before the paste: if the paste fails (a clipboard another app holds), the
+    # words are still in flow_history.md rather than lost.
     log_to_history(text, mode)
+    inject_text(text, lead)
+
+
+# What a record key shows and plays, done in order on a thread of its own. The record
+# keys run inside Windows' keyboard hook (suppress=True): a console blocked by a
+# QuickEdit selection would hold print() there past the hook's time limit, and Windows
+# then silently removes the hook — every hotkey dead until a restart.
+_feedback = queue.Queue()
+
+
+def _feedback_worker() -> None:
+    while True:
+        task = _feedback.get()
+        try:
+            task()
+        except Exception:
+            logging.error(f"Hotkey feedback failed: {traceback.format_exc()}")
+
+
+threading.Thread(target=_feedback_worker, name="hotkey-feedback", daemon=True).start()
+
+
+def _started_feedback(mode_name: str) -> None:
+    ui.set_tray_state(True)
+    print(f"\n{ui.C_ACCENT}🔴 [{MODES[mode_name]['label']}] Capturing audio...{ui.C_RESET}")
+    ui.play_tone("start", ENABLE_AUDIO_CHIMES)
+
+
+def _stopped_feedback() -> None:
+    ui.set_tray_state(False)
+    ui.play_tone("stop", ENABLE_AUDIO_CHIMES)
 
 
 def on_record_hotkey(mode_name: str) -> None:
-    """A record key (F5–F10) was pressed: start a capture in that mode, or stop it."""
+    """A record key (F5–F10) was pressed: start a capture in that mode, or stop it.
+    Runs inside the keyboard hook, so it only changes state; the rest is _feedback."""
     global current_capture
 
     with capture_lock:
@@ -324,7 +372,6 @@ def on_record_hotkey(mode_name: str) -> None:
             # reading to itself.
             signals.request_reader_silence()
             signals.set_recording(True)
-            ui.set_tray_state(True)
             starting = True
         else:
             # Any record key stops the capture. The mode is locked in at the start —
@@ -332,13 +379,11 @@ def on_record_hotkey(mode_name: str) -> None:
             current_capture = None
             starting = False
     if starting:
-        print(f"\n{ui.C_ACCENT}🔴 [{MODES[mode_name]['label']}] Capturing audio...{ui.C_RESET}")
-        ui.play_tone("start", ENABLE_AUDIO_CHIMES)
+        _feedback.put(lambda: _started_feedback(mode_name))
         threading.Thread(target=process_recording, args=(capture,)).start()
     else:
         capture.stop()
-        ui.set_tray_state(False)
-        ui.play_tone("stop", ENABLE_AUDIO_CHIMES)
+        _feedback.put(_stopped_feedback)
 
 
 def on_cancel_hotkey() -> None:
@@ -355,9 +400,16 @@ def on_cancel_hotkey() -> None:
 
 
 def correct_current_line() -> None:
-    """Shift+F3 — grab the current line, fix it via the LLM, paste it back."""
+    """Shift+F3 — grab the current line, fix it via the LLM, paste it back. Waits for a
+    dictation still being processed: its paste would otherwise land on the selected
+    line, and the fixed line would then be pasted beside it."""
     if is_recording():
         return
+    with processing_lock:
+        _correct_current_line()
+
+
+def _correct_current_line() -> None:
     print(f"\n{ui.C_ACCENT}⚡ Running contextual line refinement...{ui.C_RESET}")
     ui.play_tone("start", ENABLE_AUDIO_CHIMES)
     # Still holding Shift from Shift+F3 would turn the Ctrl+C below into Ctrl+Shift+C

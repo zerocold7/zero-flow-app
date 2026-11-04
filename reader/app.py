@@ -33,7 +33,6 @@ from zeroflow.clipboard import POLL_INTERVAL, copy_selection
 HOTKEY_READ = settings.HOTKEY_READ
 # Shared with the dictation half on purpose: one key silences the whole engine.
 HOTKEY_PANIC = settings.HOTKEYS["panic"]
-# Off by default: the regex clean is instant, the LLM pass costs a few seconds.
 SMART_MODE_DEFAULT = settings.READER_SMART_MODE
 
 # Set by zero_flow.py when this process is the engine's child, sharing its console.
@@ -42,7 +41,10 @@ CHILD_MODE = bool(os.getenv("ZEROFLOW_CHILD"))
 # =====================================================================
 # RUNTIME STATE
 # =====================================================================
-is_processing = False
+# Held for one read, from the key press to the last batch queued. Each press runs on its
+# own thread: a plain "busy" flag, checked and then set a few steps later, let a second
+# press slip in between — two selection copies, two reads.
+reading = threading.Lock()
 is_suspended = False
 use_smart_mode = SMART_MODE_DEFAULT
 
@@ -51,19 +53,26 @@ use_smart_mode = SMART_MODE_DEFAULT
 # =====================================================================
 def process_and_speak():
     """Capture the selection, clean it, and speak it."""
-    global is_processing
-    if is_processing or is_suspended:
+    if is_suspended or not reading.acquire(blocking=False):
         return
+    try:
+        _read_selection()
+    finally:
+        reading.release()
 
+
+def _read_selection():
     if signals.is_recording():
         # Dictation has the mic open. Speaking now would be picked up and transcribed.
         logging.info("Reader: declined to speak — the dictation half is recording.")
         ui.play_tone("empty", settings.ENABLE_AUDIO_CHIMES)
         return
 
-    is_processing = True
     try:
-        voice_engine.interrupt_audio()           # a second press restarts, never overlaps
+        # A second press restarts, never overlaps. The generation it returns goes with
+        # this read: dictation starting while the text is copied or cleaned interrupts
+        # again, and this read is then dropped rather than spoken into the open mic.
+        generation = voice_engine.interrupt_audio()
 
         # Release the read key before the synthetic Ctrl+C, or Windows sees it still
         # held and the copy goes to the wrong place.
@@ -84,15 +93,17 @@ def process_and_speak():
         else:
             cleaned = clean_text_instant(text)
 
+        if signals.is_recording() or generation != voice_engine.current_generation():
+            logging.info("Reader: dictation started while the text was prepared; not read.")
+            return
         _title("SPEAKING")
         ui.play_tone("start", settings.ENABLE_AUDIO_CHIMES)
-        voice_engine.stream_audio(cleaned)
+        voice_engine.stream_audio(cleaned, generation)
     except Exception:
         logging.error(f"Reader pipeline failed: {traceback.format_exc()}")
         traceback.print_exc()
     finally:
         _title("ONLINE")
-        is_processing = False
 
 
 def _title(state):

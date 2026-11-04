@@ -13,7 +13,7 @@
 - [Why do I tap the key instead of holding it?](#why-do-i-tap-the-key-instead-of-holding-it)
 - [My laptop's F-keys change the volume instead](#my-laptops-f-keys-change-the-volume-instead)
 - [It typed "Thanks for watching!" — I never said that](#it-typed-thanks-for-watching--i-never-said-that)
-- [What happened to the picture I had copied?](#what-happened-to-the-picture-i-had-copied)
+- [Does it change what I had copied?](#does-it-change-what-i-had-copied)
 - [Can it start with Windows?](#can-it-start-with-windows)
 
 **Tuning and problems**
@@ -81,15 +81,17 @@ Whisper learned from subtitled videos, and a breath or a keystroke after your la
 is where it writes how those videos end: "Thank you.", "Have a good night.",
 "اشتركوا في القناة". The engine drops such an ending when the audio shows it was never
 said — it sits on sound far quieter than your speech, or Whisper was unsure of it — and
-keeps a "thank you" you really said. `flow_debug.log` records each one it drops
+keeps a "thank you" you really said. Endings that only videos have ("Thanks for
+watching", "اشتركوا في القناة") are always dropped from the end of a dictation. `flow_debug.log` records each one it drops
 ("Dropped an invented ending"). If one still gets through, speak a little closer to the
 microphone and stop the recording soon after you finish. To test it on your own voice:
 `tools/bench/record_mine.py` (see [ARCHITECTURE.md §7](../ARCHITECTURE.md#7-anti-hallucination-measures)).
 
-### What happened to the picture I had copied?
-Dictation, `F4` and `Shift+F3` all borrow the clipboard and restore it afterwards — but
-only *text* can be restored. If an image was on the clipboard, it is gone after a
-dictation. Copy it again.
+### Does it change what I had copied?
+No. Dictation, `F4` and `Shift+F3` all borrow the clipboard and put back everything
+that was on it afterwards — text, a picture or copied files. Your dictations are also
+kept out of clipboard history (`Win + V`) and cloud clipboard sync. (Before version
+2.0, only text came back.)
 
 ### Can it start with Windows?
 Yes: `Win + R` → `shell:startup` → create a shortcut there to `Launch_Zero_Silent.vbs`.

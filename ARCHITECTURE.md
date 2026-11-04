@@ -22,18 +22,19 @@ a local LLM to clean up or translate text.
 | `zeroflow/engine.py` | Flow: hotkeys, recording, transcribe → refine → paste, the action keys |
 | `zeroflow/supervisor.py` | The whole engine: runs dictation and hosts the reader as a child sharing its console |
 | `zeroflow/stt.py` | Whisper: loading (GPU, CPU fallback), transcription, the invented-ending filter. The only module that imports faster-whisper |
-| `zeroflow/capture.py`, `clipboard.py`, `hotkeys.py` | One recording's audio; paste and copy through the clipboard; key helpers |
+| `zeroflow/capture.py`, `clipboard.py`, `win_clipboard.py`, `hotkeys.py` | One recording's audio; paste and copy through the clipboard; the Win32 clipboard (every format, kept out of history); key helpers |
 | `zeroflow/llm/` | The AI model: `ask_ai` routes to the provider set by `AI_PROVIDER` — `builtin.py` (llama-server, run by the engine; installed by `llama_runtime.py`), `ollama.py`, `openai_compatible.py` or `claude.py` (interface in `base.py`) |
 | `zeroflow/text/` | `language.py` (which language a text is in; the AI-answer guard), `macros.py` (spoken commands and punctuation) |
 | `zeroflow/vocabulary.py`, `history.py` | The learned-word list and the dictation history |
 | `zeroflow/settings.py`, `paths.py`, `logs.py` | Every `.env` setting, checked; where files live; the debug and crash logs |
+| `zeroflow/models.py` | The fixed Hugging Face commit every model (Whisper, Gemma, Kokoro) is downloaded at |
 | `zeroflow/signals.py` | Windows named objects shared by the two processes: events, the clipboard lock, one-copy claims, the Job Object |
 | `zeroflow/ui.py`, `zeroflow/personas.py` | Console, banner, tones, toasts, tray; prompts, base vocabulary, voice macros, punctuation, pronunciation |
 | `reader/`       | Reader: `app.py` (the half itself), `text_cleaner.py`, `voice_engine.py` |
 | `check_hardware.py` | Standalone (standard library only): detects the GPU/RAM, picks a hardware tier, writes its settings into `.env` |
 | `presets/`      | One `.env` fragment per hardware tier — the model and device settings `check_hardware.py` applies |
 | `docs/`         | User guides: install, hardware & tuning, FAQ, the beginner walkthrough (English + Arabic) |
-| `tools/`        | Install the built-in AI (`tools/get_llama.py`); rebuild the printable PDFs (`tools/README.md`); measure speech and AI changes (`tools/bench/`); prove the tests guard the fixes (`tools/mutation_check.py`) |
+| `tools/`        | Install the built-in AI (`tools/get_llama.py`); rebuild the printable PDFs (`tools/README.md`); measure speech and AI changes (`tools/bench/`); prove the tests guard the fixes (`tools/mutation_check.py`); check every real part end to end on this PC (`tools/smoke_check.py`) |
 | `runtime/`      | *(git-ignored)* The built-in AI's llama.cpp build, one folder per variant (`runtime/llama/cuda/`…), written by `tools/get_llama.py` |
 | `tests/`        | `unittest` tests, run in the venv: text logic, recording and AI failure paths, playback threading, vocabulary and history files, process supervision (`.\venv\Scripts\python.exe -m unittest discover -s tests -t .`) |
 
@@ -88,10 +89,11 @@ Every dictation flows through the same stages (functions named for the refactore
  2. TRANSCRIBE     transcribe_clip()                          — faster-whisper large-v3
         │                                                      GPU float16, CPU int8 fallback
         ▼
- 3. REFINE         refine_text(text, mode, context)           — Raw: passthrough
+ 3. REFINE         take_commands(), then                      — spoken commands off first
+                   refine_text(text, mode, context)           — Raw: passthrough
         │                                                      Polish/Translate: local LLM
         ▼
- 4. INJECT         inject_text()                              — macros + punctuation, then
+ 4. INJECT         inject_text()                              — punctuation + the commands, then
         │                                                      clipboard paste at the cursor
         ▼
  [text appears in the focused app]
@@ -112,7 +114,7 @@ A recording left running stops by itself after `MAX_RECORDING_SECONDS` (300 s) a
 transcribed as usual.
 
 The clipboard context Polish mode hands the LLM is read *after* the mic closes, not on
-the key press: `pyperclip` can block for up to half a second while another app holds
+the key press: opening the clipboard can wait up to half a second while another app holds
 the clipboard, which on the keyboard hook froze the keyboard and before the mic opened
 would have cut off the first words.
 
@@ -323,7 +325,9 @@ toast and return `None`.
   said** (ignoring case and spacing), and never in Chinese, Japanese or Korean script.
   Learned words prime Whisper on every dictation. Before this rule, Arabic Polish had
   taught three misheard words (removed), and a model answering in Chinese tagged a
-  Chinese one. Only the English Polish prompt asks for tags at all.
+  Chinese one. Only English Polish asks for tags (`ask_ai(..., learn=True)`); every
+  other call strips a tag without learning it — text you select for `F4` or `Shift+F3`
+  could otherwise carry one — and a term is at most four words.
 - **Vocabulary maintenance** (`Shift+F1`, `run_memory_maintenance`) hands the whole
   list to the LLM and writes back the terms it returns (`vocabulary_terms`): list
   markers are stripped, and the model's chatter — "Here is the cleaned list:", or any
@@ -357,7 +361,11 @@ Hallucination originates in Whisper, not the app code. Mitigations in `transcrib
   in its words is under 0.5 (alone in a clip: below −45 dBFS, or unsure). Levels are
   measured on the clip as recorded, before the volume is normalised. A clearly spoken
   "thank you" passes every test and stays — `tests/test_hallucination.py` pins both
-  sides, and every drop is logged with its evidence.
+  sides, and every drop is logged with its evidence. The exception is
+  `SUBTITLE_ENDINGS` — "اشتركوا في القناة", "thanks for watching", translation
+  credits — which only video subtitles end with: dropped from the end whatever the
+  audio says, since Whisper can lay one over a real word it did not know (in a live
+  test "…وانتر" came out "…وأنت اشتركوا في القناة", loud and confident).
 
 **Measuring it.** `tools/bench/` runs the engine's own transcription (`transcribe_audio`,
 the same steps as a dictation) over test clips and scores errors, end punctuation,
@@ -371,14 +379,20 @@ your PC, git-ignored), and `bench_stt.py --no-filter` gives the comparison.
 
 ## 8. Injection details (`inject_text`)
 - **Voice macros** (`personas.VOICE_MACROS`): a leading "new line" / "bullet" /
-  "format code" or a trailing "and send" is detected, stripped from the text, and
-  turned into the matching keystroke/format (`shift+enter`, `• `, `` `code` ``, `enter`).
-  All of this lives in `apply_macros()`, kept separate from `inject_text()` so it can
-  be tested without driving the keyboard — see `tests/test_macros.py`.
+  "format code" is detected, stripped from the text, and turned into the matching
+  keystroke/format (`shift+enter`, `• `, `` `code` ``). The command is taken off **what
+  was said**, before Polish or Translate (`take_commands()`); the AI sees only the
+  words after it, and its answer is formatted afterwards (`format_text()`). So the AI
+  can never add a command, and Translate cannot translate "سطر جديد" away. Both live
+  in `text/macros.py`, kept separate from `inject_text()` so they can be tested
+  without driving the keyboard — see `tests/test_macros.py` and
+  `tests/test_commands_from_speech.py`. There is no Enter command: "and send" / "انتر"
+  misfired in use (Arabic joins "and" to the word: "وانتر") and was removed; nothing
+  the engine pastes is ever followed by a key press.
   Triggers match **whole words only** ("Pointless" is not the "point" macro), and they
   match **through Whisper's punctuation**: Whisper writes what it hears as a sentence,
-  so "new line hello … and send" arrives as "New line. Hello … and send." and the
-  macros have to see past those marks.
+  so "new line hello" arrives as "New line. Hello." and the macros have to see past
+  those marks.
 - **Punctuation map**: trailing spoken punctuation ("period", "comma", Arabic
   equivalents) becomes real punctuation. It is matched with Whisper's own closing mark
   removed, so "That is all, period." becomes "That is all."
@@ -388,8 +402,14 @@ your PC, git-ignored), and `bench_stt.py --no-filter` gives the comparison.
 - Injection (`paste_text`) saves the clipboard, pastes via `Ctrl+V`, waits 150 ms for
   slow apps to read it, then **restores** the original clipboard — all under the
   cross-process clipboard lock. `Shift+F3` (fix the line) uses the same routine.
-- Only **text** survives the save/restore: `pyperclip` cannot hold images or files, so
-  an image on the clipboard is gone after a dictation.
+- **Everything** survives the save/restore: `zeroflow/win_clipboard.py` saves every
+  format that is plain memory (text, HTML, images as DIB, copied files) through the
+  Win32 API. Only GDI-handle formats are skipped (Windows rebuilds a bitmap from the
+  DIB). The engine's own writes — the dictation, and the restore — carry the formats
+  Windows reads as "not for clipboard history or cloud sync", so dictations never
+  appear in Win+V. A selection copied for `F4` or `Shift+F3` is written by the other
+  app's Ctrl+C, so that copy does enter history; the engine cannot mark another app's
+  write.
 
 ---
 
@@ -522,7 +542,7 @@ as well as within one), and the **orphaned reader** (see §10a).
 **Whisper and Kokoro cannot both use CUDA in one process. The result is a segfault,
 not an exception — nothing can catch it and no fallback runs.**
 
-- `torch 2.5.1+cu121` bundles cuDNN **9.1** in `torch/lib`.
+- `torch 2.14.1+cu126` bundles cuDNN **9.10** in `torch/lib`.
 - CTranslate2 4.8 (behind faster-whisper) uses the pip `nvidia-cudnn-cu12` **9.23**.
 - Windows loads exactly **one DLL per base name per process**. Whichever initialises
   CUDA second gets the other's `cudnn64_9.dll`, its symbols don't match, and the

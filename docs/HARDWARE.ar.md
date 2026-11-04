@@ -31,7 +31,7 @@ GPU    : Intel(R) UHD Graphics 750 — 2.0 GB (built-in graphics, not used)
 Your tier: nvidia-desktop — NVIDIA graphics card, 8 GB or more
 ...
 Checks:
-  [ok] packages installed (this Python); torch 2.5.1+cu121 (CUDA build)
+  [ok] packages installed (this Python); torch 2.14.1+cu126 (CUDA build)
   [!!] the built-in AI (cuda build) is not installed yet: python tools/get_llama.py
   [ok] the AI model downloads on first start (about 5.15 GB)
 ```
@@ -124,6 +124,7 @@ python check_hardware.py --apply
 | `small` | 480 MB | ≈0.7 / 0.35 GB | ≈2–3 ث | إنجليزية جيدة، عربية مقبولة |
 | `medium` | 1.5 GB | ≈2 / 1 GB | ≈6 ث | جيدة جداً، عربية جيدة |
 | `large-v3` | 3 GB | **3.9 / 2.0 GB** | **12.8 ث** | الأفضل — الافتراضي |
+| `distil-large-v3` | 1.5 GB | ≈2 / 1 GB | ≈6 ث | قريب من `large-v3` — **للإنجليزية فقط**، لا يصلح لمفاتيح العربية |
 
 الأرقام العريضة مُقاسة، والباقي تقديرات بحسب حجم النموذج. التحميل مرة واحدة، عند أول تشغيل بعد تغيير الإعداد.
 

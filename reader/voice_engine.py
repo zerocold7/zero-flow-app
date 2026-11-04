@@ -15,14 +15,8 @@ spoken word, not at import time, so startup stays instant.
 
 **Device policy.** The reader always runs in its own process — standalone, or as the
 child `zero_flow.py` spawns — so it can hold CUDA freely and `READER_DEVICE` is
-honoured as written.
-
-That isolation is deliberate. Hosting this half and Whisper as threads in *one*
-process would force the voice onto the CPU: torch 2.5.1+cu121 bundles cuDNN 9.1 while
-CTranslate2 (Whisper) needs the pip-installed cuDNN 9.23, Windows loads only one DLL
-per base name per process, and the loser **segfaults the whole process** — in either
-load order, with no exception to catch. CPU synthesis measures 3.6-5.2x realtime
-against 52-82x on GPU, so it stays ahead of playback but with far less headroom.
+honoured as written. (In one process with Whisper it could not use CUDA at all:
+ARCHITECTURE.md §12.)
 
 **Model files.** The model, its config and each voice are read straight from the local
 Hugging Face cache, and fetched from the Hub only when missing (the first run, or a
@@ -39,7 +33,7 @@ import warnings
 
 import sounddevice as sd
 
-from zeroflow import settings, ui
+from zeroflow import models, settings, ui
 
 warnings.filterwarnings("ignore", category=UserWarning)
 warnings.filterwarnings("ignore", category=FutureWarning)
@@ -65,6 +59,9 @@ DEVICE_POLICY = settings.READER_DEVICE
 # Sentence-aligned batching, so speech starts after the first sentence instead of
 # after the whole passage. Latin and Arabic sentence enders, plus a hard line break.
 SENTENCE_SPLIT = re.compile(r'(?<=[.!?؟۔…])\s+|\n+')
+# Where a first sentence too long for the first batch may be split: after a comma,
+# semicolon or colon, Latin or Arabic.
+CLAUSE_SPLIT = re.compile(r'(?<=[,;:،؛])\s+')
 # The first batch is kept short: it is the only one the listener waits on.
 FIRST_BATCH_CHARS = settings.READER_FIRST_BATCH_CHARS
 BATCH_CHARS = settings.READER_BATCH_CHARS
@@ -87,12 +84,12 @@ def resolve_device():
         return "cpu"
     import torch
     if torch.version.cuda is None:
-        # A CPU-only torch wheel. requirements.txt cannot express the +cu121 index, so
+        # A CPU-only torch wheel. requirements.txt cannot express the +cu126 index, so
         # a plain `pip install -r` can quietly fetch this one and speech silently
         # halves in speed with no error anywhere. Say so.
         logging.warning("This is a CPU-only build of torch, so the voice model cannot "
-                        "use the GPU. Reinstall with: pip install torch==2.5.1+cu121 "
-                        "--index-url https://download.pytorch.org/whl/cu121")
+                        "use the GPU. Reinstall with: pip install torch==2.14.1+cu126 "
+                        "--index-url https://download.pytorch.org/whl/cu126")
         return "cpu"
     if DEVICE_POLICY == "cuda":
         return "cuda"
@@ -108,14 +105,16 @@ def _model_file(filename):
     first word, cached or not. That made a local-only engine phone home on each boot,
     stalled start-up without internet, and drew the Hub's anonymous-request warning
     ("set a HF_TOKEN") into reader_debug.log. The model is public: no token needed.
+    Both come from the pinned revision (zeroflow.models), never the latest upload.
     """
     from huggingface_hub import hf_hub_download, try_to_load_from_cache
-    cached = try_to_load_from_cache(REPO_ID, filename)
+    revision = models.revision(REPO_ID)
+    cached = try_to_load_from_cache(REPO_ID, filename, revision=revision)
     if isinstance(cached, str):                  # otherwise None / "known missing"
         return cached
     logging.info(f"Downloading {filename} from {REPO_ID} (first use only).")
     print(f"{ui.C_ACCENT}🔵 [TTS]{ui.C_RESET} Downloading {filename} (first use only)...")
-    return hf_hub_download(REPO_ID, filename)
+    return hf_hub_download(REPO_ID, filename, revision=revision)
 
 
 def get_pipeline():
@@ -214,10 +213,15 @@ def _iter_batches(text, first_max=FIRST_BATCH_CHARS, batch_max=BATCH_CHARS):
     and the rest renders while that plays (CPU manages 3-5x realtime, comfortably
     ahead of playback). Later batches are larger, since per-call overhead matters
     more than latency once the audio is already flowing.
+
+    A first sentence longer than `first_max` is the one exception to whole sentences:
+    it is split after a comma, so a long opening is not seconds of silence on a CPU
+    (223 characters: 3.4 s to the first sound, 2.0 s split).
     """
     sentences = [s for s in SENTENCE_SPLIT.split(text.strip()) if s.strip()]
     if not sentences:
         return
+    sentences[:1] = _split_long_first(sentences[0], first_max)
     buffer, limit = "", first_max
     for sentence in sentences:
         if buffer and len(buffer) + len(sentence) + 1 > limit:
@@ -229,10 +233,26 @@ def _iter_batches(text, first_max=FIRST_BATCH_CHARS, batch_max=BATCH_CHARS):
         yield buffer
 
 
-def stream_audio(text):
+def _split_long_first(sentence, first_max):
+    """[sentence], or — when it is longer than `first_max` and has clause marks —
+    [as many leading clauses as fit (at least one), the rest of the sentence]."""
+    clauses = CLAUSE_SPLIT.split(sentence)
+    if len(sentence) <= first_max or len(clauses) == 1:
+        return [sentence]
+    head = clauses.pop(0)
+    while clauses and len(head) + 1 + len(clauses[0]) <= first_max:
+        head = f"{head} {clauses.pop(0)}"
+    return [head, " ".join(clauses)] if clauses else [sentence]
+
+
+def stream_audio(text, generation=None):
     """Synthesise `text` and queue it for playback, a batch of sentences at a time.
-    Stops rendering as soon as interrupt_audio() is called."""
-    generation = _generation
+    Stops rendering as soon as interrupt_audio() is called — or has been, since the
+    read that owns `generation` began (interrupt_audio's return value)."""
+    if generation is None:
+        generation = _generation
+    if generation != _generation:
+        return
     pipeline = get_pipeline()
     voice = _voice(current_voice)
     for batch in _iter_batches(text):
@@ -243,12 +263,20 @@ def stream_audio(text):
                 audio_queue.put((generation, audio))
 
 
+def current_generation():
+    return _generation
+
+
 def interrupt_audio():
     """Cut playback off immediately and drop everything still queued.
 
     Safe to call from any thread. It never calls sounddevice itself — see
-    _playback_worker for why — it only marks everything queued so far as stale."""
+    _playback_worker for why — it only marks everything queued so far as stale.
+    Returns the new generation: a read that passes it to stream_audio is dropped if
+    anything interrupts in between (dictation starting while the text is cleaned)."""
     global _generation
     _generation += 1
+    generation = _generation
     with audio_queue.mutex:                      # free the memory now; the worker
         audio_queue.queue.clear()                # would skip these chunks anyway
+    return generation

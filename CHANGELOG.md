@@ -190,6 +190,134 @@ left after a crash.
 
 266 tests; the seven new guards were each broken on purpose and caught (76 in all).
 
+### 🔒 Privacy and security (audit)
+- **Your words stay out of the debug log.** `flow_debug.log` recorded every dictation
+  word for word, twice (the transcript and the pasted text), and the AI's answer when
+  it was in the wrong language. It now records their size; `LOG_DICTATION_TEXT=True`
+  brings the words back for debugging. The history file is unchanged.
+- **Your clipboard stays on your PC.** Polish sent up to 500 characters of the
+  clipboard (often a password just copied) as context to any AI, Claude and cloud
+  services included. `POLISH_CLIPBOARD_CONTEXT=auto` (the default) now gives it only
+  to an AI on this PC; `on` and `off` override.
+- **Spoken commands come from what you said.** "New line", "bullet" and "format code"
+  were read from the AI's answer, so clipboard text could steer Polish into adding
+  one, and Translate translated "سطر جديد" away. They are now taken from what you
+  said, before the AI sees it.
+- **"اشتركوا في القناة" is no longer added.** In a live test, Arabic Polish pasted
+  "…وأنت اشتركوا في القناة" after a word Whisper did not know: the stock phrase sat on
+  real speech, loud and confident, so the invented-ending filter (which goes by the
+  audio) kept it. Endings only video subtitles have — "اشتركوا في القناة", "شكرا
+  للمشاهدة", "thanks for watching", translation credits — are now dropped from the end
+  whatever the audio says; "thank you", "شكرا" and "thanks for listening" still follow
+  the audio. Measured first: two general fixes (faster-whisper's
+  `hallucination_silence_threshold`, a shorter Arabic hint) gained nothing, and the
+  hint cost quiet Arabic badly (55% → 92% errors). English showed no invented words in
+  any test.
+- **The Enter command is gone.** "and send" / "انتر" was meant to press Enter after
+  the paste; in use it misfired ("and enter" and the Arabic "وانتر", with "and" joined
+  to the word, were typed as words) and the AI could be steered into it. The engine
+  now only types what you said: no key is ever pressed after a paste.
+- **Packages with known security holes upgraded:** Pillow 10.2.0 → 13.0.0, requests
+  2.31.0 → 2.33.0, urllib3 → 2.8.0, python-dotenv → 1.2.2, filelock → 4.2.1, and
+  certifi, anyio, fsspec, setuptools. `pip-audit` (now in `requirements-dev.txt`)
+  finds none left in them.
+- **torch 2.5.1+cu121 → 2.14.1+cu126** (12 known holes, among them `torch.load`
+  running code from a crafted weights file), with sympy 1.14.0, which it needs.
+  **On NVIDIA PCs, install it with the new command in [INSTALL.md](docs/INSTALL.md)
+  first;** a plain `pip install -r … -c constraints.txt` would replace the old one
+  with the CPU-only build. The reader's voice runs on the card as
+  before (0.08 s for 4.3 s of speech, the same as 2.5.1); its cuDNN is now 9.10, still
+  not Whisper's 9.23, so the two halves stay separate processes.
+- **Your clipboard comes back whole, and dictations stay out of Win+V.** The clipboard
+  was saved and restored as text only (pyperclip), so a picture or copied files were
+  gone after every dictation, `F4` and `Shift+F3`; and every dictation landed in
+  clipboard history and cloud sync. The new `zeroflow/win_clipboard.py` saves every
+  format through the Win32 API and marks the engine's own writes as private. Checked
+  on the real clipboard: a picture survives, and a dictation is absent from Win+V
+  history while an ordinary copy is present. pyperclip is no longer needed.
+- **Models download at a fixed version.** Whisper, the built-in AI's Gemma and the
+  reader's voice were fetched at whatever was uploaded last, so a changed or tampered
+  upload would reach the next fresh install. `zeroflow/models.py` now pins each to a
+  Hugging Face commit — the versions already in use, so nothing downloads again.
+- **Two quick `F4` presses start one read.** The reader's "busy" flag was checked and
+  set a few steps apart, so a second press in between started a second selection copy
+  and a second read. A lock now covers the whole read.
+
+305 tests (6 more on the real clipboard with `ZEROFLOW_REAL_CLIPBOARD=1`); each fix
+was broken on purpose and caught.
+
+### 🪶 Lighter install
+- **The Claude package is an optional install.** Every install carried `anthropic` and
+  the 7 packages it pulls in, used only with `AI_PROVIDER=claude`. It is now one extra
+  command for those who choose Claude ([CONFIGURATION.md §6](CONFIGURATION.md)); without
+  it, start-up says so, names the command, and uses the built-in AI.
+- **`soundfile` moved to `requirements-dev.txt`**: only the bench tools use it.
+- **`tests/test_requirements.py`** keeps the lists honest: everything the engine imports
+  is installed, everything installed is used, and `constraints.txt` pins exactly what an
+  install pulls in.
+- `logo.jpg` 437 KB → 13 KB (680 px wide, shown at 340; the same at that size).
+- **The laptop guide no longer edits `requirements.txt`.** It had CPU laptops delete
+  the two `nvidia-` lines by hand, which leaves a changed file that stops the next
+  `git pull`. Every guide now skips those lines with the same three-line command
+  (`docs/INSTALL.md` step 4), short enough to copy from the printed PDFs without
+  breaking; both PDFs are rebuilt. **If you edited it**, run
+  `git checkout requirements.txt` before updating.
+- **Python other than 3.12 is named**, by `check_hardware.py` and at start-up: 3.12 is
+  the only version tested, and on another the packages may not install or run.
+- **The voice starts sooner after a long first sentence.** A batch was always at
+  least a whole sentence, so a 223-character opening meant 3.4 s of silence on the
+  processor; it is now split after a comma: 1.5 s (0.6 s with
+  `READER_FIRST_BATCH_CHARS=60`). That also makes the setting do what the guides say.
+- **Measured, left as is:** the voice's ~11 s load is library imports (torch,
+  transformers, kokoro), 2.8 s of it one scan of every installed package inside
+  transformers; it runs in the background at start-up. The engine uses no processor
+  while idle. `tools/bench/measure_load.py` gives these numbers.
+
+### 🧪 Every case tested
+391 tests (from 266 at alpha.4.3); test coverage 87% of the engine (from 77%). New:
+the whole engine's life (starting the reader, Exit from the tray, a stuck reader at
+shutdown, a crash, a second copy); every signal between the halves on real Windows
+objects under names of their own; Shift+F2; a microphone that will not open, a clip
+too short or cancelled, the five-minute limit; Smart cleaning's four outcomes,
+suspend, voice and device choice. `tools/mutation_check.py` breaks 96 guards on
+purpose — every fix since the audit included — and each one's test catches it.
+What stays untested on purpose: what is drawn on screen (console, tray, toasts) and
+sound itself, which `tools/smoke_check.py` checks for real.
+- **`tools/smoke_check.py`** checks every real part on a PC end to end: settings, the
+  microphone and speaker, Whisper in English and Arabic, an AI Polish, the voice.
+- **One home per fact.** Why the reader is a separate process was told in full three
+  times (now only ARCHITECTURE.md §12); the Whisper model table twice, already
+  drifting apart (now only HARDWARE.md §4); install steps in CONFIGURATION.md and
+  requirements.txt, one of them out of date (now only INSTALL.md step 4). The others
+  point there, and `tests/test_docs_links.py` checks that all 134 links between the
+  guides lead to a real file and heading.
+
+### 🔍 Code review
+A full review of the engine found ten faults; each is now a test that failed first
+(`tests/test_review_findings.py`):
+- **A busy clipboard after the paste** threw your clipboard away and failed a dictation
+  that had already been pasted. It is now put back a moment later, and the dictation
+  is written to the history before the paste, so it is never lost.
+- **Shift+F3 during a Polish** could garble the line: it now waits for the dictation.
+- **The reader could speak into an open microphone** when dictation started while it
+  was preparing the text; that read is now dropped.
+- **The clipboard could reach a remote Ollama** when the built-in AI fell back to it:
+  `POLISH_CLIPBOARD_CONTEXT` is now decided by the AI actually in use.
+- **A Polish during the AI's first start** waited with no limit, holding every
+  dictation behind it; it now gives up after its timeout and pastes your words.
+- **`[LEARN: …]` was honoured on every AI call**, so selected text could teach a
+  "word"; only English Polish learns now, a term is at most four words, and Shift+F1
+  drops Chinese, Japanese and Korean script.
+- **The record keys printed inside Windows' keyboard hook**; a frozen console could
+  make Windows remove the hook. They now only change state there.
+- **A wrongly named key** (`HOTKEY_FIX="f55"`) stopped the engine; it now falls back to
+  the default and says so, like every other setting.
+- **Every AI answer waited a fixed 0.15 s** for the spinner; it now stops at once.
+- **A slow health check could start a second AI server** and orphan the first.
+
+Not changed: another program holding the AI's port on the same PC (needs a second
+user on it), and how long a huge Excel copy takes to save (not measured).
+
 ---
 
 ## [1.5.1] — 2026-10-14 — A fresh install works again

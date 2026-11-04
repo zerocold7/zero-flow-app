@@ -14,9 +14,18 @@ import threading
 from logging.handlers import RotatingFileHandler
 
 from zeroflow.paths import log_dir, log_path
+from zeroflow.settings import LOG_DICTATION_TEXT
 
 _handler = None           # this process's debug log, once init_logging has run
 _crash_file = None        # kept open for the life of the process: faulthandler writes to it
+
+
+def said(text: str | None) -> str:
+    """Dictated words as the log shows them: their size only, unless LOG_DICTATION_TEXT
+    is on — the history file is where dictations are kept, not the debug log."""
+    if text is None or LOG_DICTATION_TEXT:
+        return repr(text)
+    return f"({len(text)} chars)"
 
 
 def init_logging(component: str) -> logging.Handler:

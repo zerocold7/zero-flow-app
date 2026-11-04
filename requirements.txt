@@ -5,36 +5,32 @@
 # reader on a fresh install while this file had not changed at all.
 faster-whisper==1.0.3
 sounddevice==0.4.6
-soundfile==0.14.0
 keyboard==0.13.5
-pyperclip==1.8.2
-requests==2.31.0
+requests==2.33.0
 numpy==1.26.4
-python-dotenv==1.0.1
+python-dotenv==1.2.2
 win11toast==0.36.3
 colorama==0.4.6
 pystray==0.19.5
-Pillow==10.2.0
+Pillow==13.0.0
 
 # --- NVIDIA GPU acceleration (CUDA 12) ---
 # Required for faster-whisper device="cuda". Without these, CTranslate2 cannot
-# load cublas64_12.dll and transcription fails. Remove these two lines if you
-# are running CPU-only (saves ~1.2 GB of downloads).
-# Pinned: cuDNN 9.x requires ctranslate2 >= 4.5 (pulled in by faster-whisper).
+# load cublas64_12.dll and transcription fails. PCs without an NVIDIA card skip
+# them (docs/INSTALL.md step 4). cuDNN 9.x requires ctranslate2 >= 4.5.
 nvidia-cublas-cu12~=12.4
 nvidia-cudnn-cu12~=9.1
 
 # --- Reader: text-to-speech (Kokoro) ---
-# kokoro pulls in torch. For GPU speech synthesis install the CUDA build of torch
-# FIRST, otherwise pip resolves the CPU-only wheel:
-#   pip install torch==2.5.1+cu121 --index-url https://download.pytorch.org/whl/cu121
-# The reader runs fine on CPU too — Kokoro-82M is small.
+# kokoro pulls in torch. On an NVIDIA PC install the CUDA build of torch FIRST
+# (docs/INSTALL.md step 4), or pip takes the CPU-only one. The reader runs on the
+# CPU too — Kokoro-82M is small.
 kokoro==0.9.4
 # Kokoro's English pronunciation needs spaCy's small English model. Without it here,
 # it is pip-installed at runtime on the first read — a hidden download, and a failure
 # when offline.
 en_core_web_sm @ https://github.com/explosion/spacy-models/releases/download/en_core_web_sm-3.8.0/en_core_web_sm-3.8.0-py3-none-any.whl#sha256=1932429db727d4bff3deed6b34cfc05df17794f4a52eeb26cf8928f7c1a0fb85
 
-# --- Optional AI provider: Claude (AI_PROVIDER="claude", with your own API key) ---
-# Imported only when that provider is chosen.
-anthropic==1.14.0
+# --- Optional: the Claude provider (AI_PROVIDER="claude", with your own API key) ---
+# Not installed for everyone: only that provider uses it. To use Claude, add it with
+#   pip install anthropic -c constraints.txt

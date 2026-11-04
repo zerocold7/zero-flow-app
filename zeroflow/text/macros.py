@@ -1,4 +1,4 @@
-"""Spoken commands ("new line", "قائمة", "and send") and spoken punctuation."""
+"""Spoken commands ("new line", "قائمة", "format code") and spoken punctuation."""
 import re
 
 from zeroflow import personas
@@ -6,7 +6,7 @@ from zeroflow.vocabulary import load_vocabulary
 
 
 # Whisper punctuates what it hears, so a spoken macro rarely arrives bare: "New line.
-# Hello." / "See you then, and send." Macros are matched through this punctuation.
+# Hello." Macros are matched through this punctuation.
 MACRO_PUNCT = r'[\s,.;:!?،؛؟…]'
 TRAILING_PUNCT = re.compile(MACRO_PUNCT + r'+$')
 
@@ -24,40 +24,38 @@ def _strip_leading(text: str, tokens: list[str]) -> tuple[str, bool]:
     return stripped, stripped != text
 
 
-def _strip_trailing(text: str, tokens: list[str]) -> tuple[str, bool]:
-    """Remove a trailing trigger phrase, the comma Whisper puts before it and the mark
-    after it — but not the speaker's own "!" or "?" in front. Whole words only: "a
-    thousand send" is not the "and send" macro. Returns (text, matched)."""
-    pattern = rf'(?i)[\s,،]*(?<!\w)(?:{_phrases(tokens)}){MACRO_PUNCT}*$'
-    stripped = re.sub(pattern, '', text, count=1)
-    return stripped, stripped != text
-
-
-def apply_macros(text: str) -> tuple[str, bool, bool]:
-    """Turn a raw transcription into the exact string to paste.
-
-    Spoken macros ("new line", "bullet", "format code", "and send") are detected,
-    stripped, and turned into formatting; spoken punctuation becomes real punctuation;
-    known vocabulary is re-cased. Returns `(text, lead_newline, end_enter)` — the two
-    flags being keystrokes the caller has to send, since they cannot live in a string.
+def apply_macros(text: str) -> tuple[str, bool]:
+    """Turn a raw transcription into the exact string to paste: take_commands, then
+    format_text. Returns `(text, lead_newline)` — the flag being a keystroke the caller
+    has to send, since it cannot live in a string.
 
     Kept separate from `inject_text` so this logic is testable without driving the
     keyboard and clipboard. See tests/test_macros.py.
     """
-    macros = personas.VOICE_MACROS
-    text = text.strip()
+    words, lead = take_commands(text)
+    return format_text(words, lead), lead == "new_line"
 
-    # At most one leading macro; press_enter is the trailing one.
-    lead = None
-    for name in ("new_line", "bullet", "code_block"):
-        text, matched = _strip_leading(text, macros[name])
+
+def take_commands(text: str) -> tuple[str, str | None]:
+    """Strip the spoken command off the start of a transcription: `(words, lead)`.
+
+    `lead` is the leading macro ("new_line", "bullet", "code_block") or None. Done on
+    what was said, before Polish or Translate: read from the AI's answer, the command
+    was the AI's to give, and Translate translated it away."""
+    text = text.strip()
+    for name in ("new_line", "bullet", "code_block"):           # at most one
+        text, matched = _strip_leading(text, personas.VOICE_MACROS[name])
         if matched:
-            lead = name
-            break
+            return text, name
+    return text, None
+
+
+def format_text(text: str, lead: str | None) -> str:
+    """The words, ready to paste: spoken punctuation made real, known vocabulary
+    re-cased, and the leading macro's formatting (a bullet, a code span) applied."""
     lead_newline = lead == "new_line"
     lead_bullet = lead == "bullet"
     wrap_code = lead == "code_block"
-    text, end_enter = _strip_trailing(text, macros["press_enter"])
 
     # Spoken punctuation is matched without Whisper's own closing mark, which would
     # otherwise hide it: "That is all, period." → "That is all."
@@ -79,4 +77,4 @@ def apply_macros(text: str) -> tuple[str, bool, bool]:
     elif not lead_newline and text and not wrap_code:
         text = " " + text                        # keep spacing against the previous word
 
-    return text, lead_newline, end_enter
+    return text

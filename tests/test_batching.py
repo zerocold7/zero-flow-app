@@ -33,7 +33,8 @@ class TestIterBatches(unittest.TestCase):
         self.assertGreater(len(batches[1]), len(batches[0]))
 
     def test_never_splits_mid_sentence(self):
-        """Splitting inside a sentence would audibly chop the phrasing."""
+        """Splitting inside a sentence would audibly chop the phrasing. (One exception,
+        below: a long first sentence is split at a comma.)"""
         text = ("First one here. Second one follows. Third arrives now. "
                 "Fourth and final sentence of this passage.")
         for batch in _iter_batches(text, first_max=20, batch_max=20):
@@ -53,6 +54,50 @@ class TestIterBatches(unittest.TestCase):
 
     def test_splits_on_hard_line_breaks(self):
         self.assertEqual(len(list(_iter_batches("Line one\nLine two", first_max=5, batch_max=5))), 2)
+
+
+class TestLongFirstSentence(unittest.TestCase):
+    """Nothing is heard until the first batch is made, and a batch used to be at least a
+    whole sentence: a 223-character opening sentence meant 3.4 s of silence on the
+    processor. Split at a comma, the voice started at 2.0 s."""
+
+    LONG = ("When the engine reads a long selection aloud, the first sentence is often the "
+            "longest one, full of clauses and commas, and nothing can be heard until it is "
+            "made. Then a short one.")
+
+    def test_a_long_first_sentence_is_split_at_a_comma(self):
+        first = next(_iter_batches(self.LONG, first_max=60))
+        self.assertEqual(first, "When the engine reads a long selection aloud,")
+
+    def test_clauses_are_grouped_up_to_the_first_batch_size(self):
+        first = next(_iter_batches(self.LONG, first_max=120))
+        self.assertTrue(first.endswith(","))
+        self.assertLessEqual(len(first), 120)
+        self.assertGreater(len(first), 60)                  # two clauses, not one
+
+    def test_nothing_is_lost_or_reordered(self):
+        for first_max in (20, 60, 120, 500):
+            batches = list(_iter_batches(self.LONG, first_max=first_max, batch_max=300))
+            self.assertEqual(" ".join(batches), self.LONG, first_max)
+
+    def test_only_the_first_sentence_is_split(self):
+        text = "Short start. " + self.LONG
+        batches = list(_iter_batches(text, first_max=60, batch_max=60))
+        self.assertTrue(all(b.endswith((".", "start.")) or b == batches[-1] for b in batches[1:]))
+        self.assertNotIn(",", "".join(b[-1] for b in batches))
+
+    def test_a_first_clause_longer_than_the_batch_is_kept_whole(self):
+        text = "A first clause that is already far longer than the batch, then more."
+        self.assertEqual(next(_iter_batches(text, first_max=20)),
+                         "A first clause that is already far longer than the batch,")
+
+    def test_a_long_sentence_without_commas_is_left_whole(self):
+        text = "x " * 100
+        self.assertEqual(list(_iter_batches(text, first_max=20)), [text.strip()])
+
+    def test_arabic_commas_split_too(self):
+        text = "هذه جملة طويلة جداً تبدأ القراءة، وفيها فاصلة عربية ثم كلام كثير بعدها حتى النهاية."
+        self.assertEqual(next(_iter_batches(text, first_max=40)), "هذه جملة طويلة جداً تبدأ القراءة،")
 
 
 if __name__ == "__main__":

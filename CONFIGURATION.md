@@ -32,12 +32,14 @@ only set what you want to change.
 | `AI_BUILTIN_PORT` | `39281` | The local port the built-in AI listens on (this PC only) |
 | `AI_LOAD_AT_START` | `True` | Load the AI while Whisper loads, so the first Polish is instant. `False` keeps it out of memory until the first Polish or Translate needs it (that one waits ~4 s). Tray → **Unload AI model** frees it at any time |
 | `AI_URL` / `AI_MODEL` / `AI_API_KEY` | *(blank)* | For `openai` and `claude` (see §6) |
+| `POLISH_CLIPBOARD_CONTEXT` | `auto` | Polish hands the AI your clipboard as context. `auto` = only to an AI on this PC (never to `claude` or a server on another computer) · `on` = always · `off` = never (see §6) |
 | `OLLAMA_HOST_URL` | `http://127.0.0.1:11434/api/generate` | `ollama` only: where Ollama listens |
 | `OLLAMA_MODEL_NAME` | *(blank)* | `ollama` only: pin an exact model, e.g. `qwen2.5:7b`. Blank = auto-pick the first model Ollama serves |
 | `FALLBACK_LLM` | `gemma2:27b` | `ollama` only: model name used if Ollama is unreachable |
 | `MAX_RECORDING_SECONDS` | `300` | A recording left running stops by itself after this many seconds, and is transcribed as usual |
 | `ENABLE_AUDIO_CHIMES` | `True` | Beeps on start/stop/success |
 | `ENABLE_TOAST_NOTIFICATIONS` | `True` | Windows toast pop-ups |
+| `LOG_DICTATION_TEXT` | `False` | `flow_debug.log` records each dictation's size, not its words. `True` writes the words too, for debugging (see §9) |
 | `HOTKEY_*` | see §2 | Key bindings |
 | `HOTKEY_READ` | `f4` | Read the highlighted text aloud (see §10) |
 | `READER_VOICE` | `af_heart` | Which Kokoro voice speaks (see §10) |
@@ -86,26 +88,18 @@ Tips:
 
 ## 3. Choosing a Whisper model
 Set `WHISPER_MODEL_NAME`. Larger = more accurate (Arabic gains the most) but slower
-and more memory.
-
-| Model | Download | GPU memory (`float16` / `int8_float16`) | Notes |
-|-------|----------|------------------------------------------|-------|
-| `tiny` / `base` | 75 / 145 MB | ≈0.2–0.3 GB / less | fastest, low accuracy, weak Arabic |
-| `small` | 480 MB | ≈0.7 / 0.35 GB | the CPU default — good English, fair Arabic |
-| `medium` | 1.5 GB | ≈2 / 1 GB | good balance; the NVIDIA-laptop default |
-| `large-v3` | 3 GB | **3.9 / 2.0 GB** | **default** — best accuracy, best Arabic |
-| `distil-large-v3` | 1.5 GB | ≈2 / 1 GB | faster large-quality — **English only**, useless for the Arabic keys |
-| `mobiuslabsgmbh/faster-whisper-large-v3-turbo` | 1.6 GB | — | **English as accurate as `large-v3` and 35% faster** (0.29 vs 0.46 s per clip); **Arabic much worse** (56% vs 35% character errors). Only for English-only use |
-
-Bold figures were measured on an RTX 4070 (the turbo comparison with
-`tools/bench/bench_stt.py`, on synthetic clips); the rest are estimates from model size. On
-a CPU, `large-v3` took 12.8 s for a 14 s clip — prefer `small`. The full per-hardware
-picture, with measured speeds: [docs/HARDWARE.md](docs/HARDWARE.md).
+and more memory. Every model, with its size, memory, speed and accuracy, and which one
+suits your PC: [docs/HARDWARE.md §4](docs/HARDWARE.md#speech-model--whisper_model_name).
 
 A model you have not used before is downloaded from Hugging Face the next time the
 engine starts (the console says so); after that it loads from the local cache with no
 network call. No Hugging Face account or `HF_TOKEN` is needed. `WHISPER_MODEL_NAME`
 also accepts the path to a local model folder.
+
+**Every model above is downloaded at a fixed version**, as are the built-in AI's
+Gemma models and the reader's voice: `zeroflow/models.py` lists the exact Hugging Face
+commit of each, so a fresh install never takes an upload nobody has checked. A model
+you name yourself that is not in that list is taken at its latest version.
 
 ---
 
@@ -170,26 +164,17 @@ WHISPER_COMPUTE_TYPE="float16"    # GPU precision: float16 | int8_float16 | int8
 - **`WHISPER_COMPUTE_TYPE="int8_float16"`** halves the speech model's graphics memory
   (large-v3 measured 3.9 GB → 2.0 GB) for about 0.2 s more per clip. Use it on cards
   under 11 GB. It only affects the GPU; the CPU always uses `int8`.
-- **GPU (NVIDIA):** keep `nvidia-cublas-cu12` and `nvidia-cudnn-cu12` in
-  `requirements.txt` (installed by default).
-- **CPU-only:** remove those two lines to save ~1.2 GB.
+- The GPU needs the NVIDIA libraries and the CUDA build of `torch` (the voice); which
+  packages each kind of PC installs: [INSTALL.md step 4](docs/INSTALL.md#4-install-the-python-packages).
 
 Where the model ended up is shown in the start-up banner — e.g. `Speech to text:
 [Whisper small · CPU · int8]` — and written to `flow_debug.log`. Every dictation also
 logs how long it took (`1.21s for 14.2s of audio`), which is the number to watch when
 tuning.
 
-The **voice model** (reader) needs the CUDA build of `torch` for the GPU, and
-`pip install -r requirements.txt -c constraints.txt` alone fetches the CPU-only build.
-(`constraints.txt` pins every package underneath to a set known to work together; see
-[INSTALL.md](docs/INSTALL.md).) On an NVIDIA machine, install it first:
-
-```bash
-pip install torch==2.5.1+cu121 --index-url https://download.pytorch.org/whl/cu121
-```
-
-If the CPU build is installed anyway, the reader still works — on the CPU — and says so
-in `reader_debug.log`. `READER_DEVICE` (§10) chooses the device explicitly.
+If the CPU build of `torch` is installed on an NVIDIA PC, the reader still works — on
+the CPU — and says so in `reader_debug.log`. `READER_DEVICE` (§10) chooses the device
+explicitly.
 
 ---
 
@@ -267,7 +252,12 @@ AI_URL="https://api.openai.com/v1/chat/completions"
 AI_MODEL="the-model-id"
 AI_API_KEY="sk-..."
 ```
-Anthropic's Claude has its own provider:
+Anthropic's Claude has its own provider. Its package is not part of the main install;
+add it once:
+```powershell
+.\venv\Scripts\python.exe -m pip install anthropic -c constraints.txt
+```
+then:
 ```ini
 AI_PROVIDER="claude"
 AI_API_KEY="sk-ant-..."    # blank = the key in ANTHROPIC_API_KEY
@@ -286,9 +276,10 @@ is a complete example to copy (about 50 lines). Add it to `PROVIDERS` in
 `zeroflow/llm/__init__.py`, then set `AI_PROVIDER` to its name.
 
 > ⚠️ **Privacy:** with a **cloud** provider (`claude`, or `openai` pointed at a cloud
-> service), the text you dictate (and clipboard context in Polish mode) is sent to that
-> company's servers. The built-in AI, Ollama, LM Studio and llama.cpp keep everything on
-> your machine. Your `AI_API_KEY` lives only in `.env`, which is git-ignored.
+> service), the text you dictate is sent to that company's servers. Your clipboard is
+> not: Polish's clipboard context goes only to an AI on this PC, unless you set
+> `POLISH_CLIPBOARD_CONTEXT=on`. The built-in AI, Ollama, LM Studio and llama.cpp keep
+> everything on your machine. Your `AI_API_KEY` lives only in `.env`, which is git-ignored.
 
 ---
 
@@ -311,8 +302,8 @@ Example: to make Polish more aggressive, add a rule to `STANDARD_SYSTEM_PROMPT` 
 **A language guard sits behind every prompt.** The key decides the language, so the
 engine checks the answer: an Arabic answer must contain Arabic, an English one English,
 and neither may contain Chinese, Japanese or Korean script. If the model answers in the
-wrong language it pastes your own words instead, and `flow_debug.log` records what the
-model said. Arabic answers also lose any vowel marks the model adds unasked (tanween on
+wrong language it pastes your own words instead, and `flow_debug.log` records that it
+did (and what the model said, with `LOG_DICTATION_TEXT=True`). Arabic answers also lose any vowel marks the model adds unasked (tanween on
 alif stays: *جدًا*). Some small models need this: `qwen2.5:7b` answered Arabic Polish in
 Chinese in 5 tries out of 5 with the old prompt. Which models write the best Arabic:
 [docs/HARDWARE.md §4](docs/HARDWARE.md#ai-model).
@@ -335,13 +326,11 @@ Also in **`zeroflow/personas.py`**:
       "new_line":   ["new line", "سطر جديد"],        # said first → Shift+Enter
       "bullet":     ["bullet", "point", "قائمة"],    # said first → "• " prefix
       "code_block": ["format code", "تنسيق كود"],    # said first → wrapped in `backticks`
-      "press_enter":["and send", "انتر"],            # said last  → Enter after pasting
   }
   ```
-  The first three only count at the **start** of a dictation and `press_enter` only
-  at the **end**. Triggers match **whole words**, case-insensitively, and see past the
-  punctuation Whisper adds ("New line. Hello" and "…see you then, and send." both
-  work). Because a trigger is a whole word, "Pointless" never becomes a bullet — but a
+  They only count at the **start** of a dictation. Triggers match **whole words**,
+  case-insensitively, and see past the punctuation Whisper adds ("New line. Hello"
+  works). Because a trigger is a whole word, "Pointless" never becomes a bullet — but a
   sentence that really starts with "Point…" does, so drop `"point"` if that gets in
   your way.
 - **`PUNCTUATION_MAP`** — trailing spoken punctuation → real punctuation (regex → mark).
@@ -360,7 +349,7 @@ Also in **`zeroflow/personas.py`**:
 | `flow_vocabulary.txt` | learned terms | deduped on write; `Shift+F1` prunes it |
 | `flow_vocabulary.txt.bak` | the list before the last `Shift+F1` | replaced each run — copy it back to undo |
 | `flow_history.md` | history of injected text | trimmed back past ~500 KB, after each write |
-| `flow_debug.log` | dictation diagnostics | auto-rotates (~3 MB cap) |
+| `flow_debug.log` | dictation diagnostics — each dictation's size and timing, not its words (`LOG_DICTATION_TEXT`) | auto-rotates (~3 MB cap) |
 | `reader_debug.log` | reader diagnostics | auto-rotates (~3 MB cap) |
 | `builtin_ai.log` | the built-in AI's own output | appended; delete it any time |
 
@@ -431,5 +420,5 @@ Two knobs affect how quickly speech starts, both rarely worth changing:
 
 | Variable | Default | What it does |
 |----------|---------|--------------|
-| `READER_FIRST_BATCH_CHARS` | `120` | Size of the first batch sent to the voice model. Smaller = speech starts sooner, but more calls |
+| `READER_FIRST_BATCH_CHARS` | `120` | Size of the first batch sent to the voice model. Smaller = speech starts sooner, but more calls. The batch ends where a sentence ends — or, in a first sentence longer than this, after a comma |
 | `READER_BATCH_CHARS` | `300` | Size of every batch after the first, once audio is already playing |

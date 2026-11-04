@@ -93,7 +93,6 @@ VOICE_MACROS = {
     "new_line": ["new line", "سطر جديد"],
     "bullet": ["bullet", "point", "قائمة"],
     "code_block": ["format code", "تنسيق كود"],
-    "press_enter": ["and send", "انتر"]
 }
 
 # Whisper's hint (initial_prompt) for Arabic dictation. The shared vocabulary is mostly

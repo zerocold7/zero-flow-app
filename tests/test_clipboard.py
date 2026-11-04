@@ -1,6 +1,6 @@
 """Copying the selection: one routine for F4 (read aloud) and Shift+F3 (fix a line).
 
-The clipboard here is a stand-in, and the Ctrl+C press is replaced, so no test ever
+The clipboard here is a stand-in for win_clipboard, and the Ctrl+C press is replaced, so no test ever
 sends a real key or touches the real clipboard.
 """
 import os
@@ -14,20 +14,32 @@ from zeroflow import clipboard
 
 
 class FakeClipboard:
-    """pyperclip stand-in. `selection` is what a Ctrl+C would copy (None: nothing
+    """win_clipboard stand-in. `content` is the text on it, `extra` what else the user
+    had (an image, say); `selection` is what a Ctrl+C would copy (None: nothing
     selected); `fill_after` polls pass before a slow app fills the clipboard."""
 
     def __init__(self, content="what the user had", selection="selected text", fill_after=0):
         self.content = content
+        self.extra = "an image"
         self.selection = selection
         self.fill_after = fill_after
         self.copied = False
         self.polls = 0
 
-    def copy(self, text):
-        self.content = text
+    def snapshot(self):
+        return [("text", self.content), ("image", self.extra)]
 
-    def paste(self):
+    def restore(self, saved):
+        saved = dict(saved)
+        self.content, self.extra = saved.get("text", ""), saved.get("image")
+
+    def set_text(self, text):
+        self.content, self.extra = text, None
+
+    def clear(self):
+        self.content, self.extra = "", None
+
+    def get_text(self):
         if self.copied and self.selection is not None:
             self.polls += 1
             if self.polls > self.fill_after:
@@ -41,7 +53,7 @@ class FakeClipboard:
 class ClipboardTestCase(unittest.TestCase):
     def use(self, fake):
         self.keys = []
-        for patcher in (mock.patch.object(clipboard, "pyperclip", fake),
+        for patcher in (mock.patch.object(clipboard, "system_clipboard", fake),
                         mock.patch.object(clipboard, "_press_copy", side_effect=fake.press_copy),
                         mock.patch.object(clipboard.keyboard, "send", side_effect=self.keys.append),
                         mock.patch.object(clipboard.time, "sleep")):
@@ -83,8 +95,8 @@ class TestCopySelection(ClipboardTestCase):
 class TestPaste(ClipboardTestCase):
     def test_pastes_and_restores_the_clipboard(self):
         fake = self.use(FakeClipboard())
-        clipboard.paste_text("dictated", press_enter=True)
-        self.assertEqual(self.keys, ["ctrl+v", "enter"])
+        clipboard.paste_text("dictated")
+        self.assertEqual(self.keys, ["ctrl+v"])                # nothing but the paste
         self.assertEqual(fake.content, "what the user had")
 
     def test_the_clipboard_is_restored_even_if_the_paste_fails(self):

@@ -1,12 +1,6 @@
 """
-The whole engine in one window: dictation in this process, the reader as a child.
-
-    F5-F10 / Shift+F1-F3   dictate, translate, fix a line   (speech -> text)
-    F4                     read the highlighted text aloud   (text -> speech)
-    Esc                    cancel a recording / silence the reader
-
-Why a child process and not a thread — and how the two coordinate — is explained in
-zero_flow.py's docstring and ARCHITECTURE.md.
+The whole engine in one window (zero_flow.py): dictation in this process, the reader
+as a child. Why a child process and not a thread: ARCHITECTURE.md §1 and §12.
 """
 import logging
 import os

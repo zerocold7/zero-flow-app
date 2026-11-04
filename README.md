@@ -45,7 +45,7 @@ editor: anywhere `Ctrl+V` works.
 - **Fix a line** (`Shift+F3`): with the cursor at the end of a line you typed, press it and
   the AI corrects that line in place.
 - **Spoken commands:** start with *"new line"*, *"bullet"* or *"format code"*; end with
-  *"and send"*, *"period"*, *"comma"* or *"question mark"*. Arabic has its own set
+  *"period"*, *"comma"* or *"question mark"*. Arabic has its own set
   ([Keys](#keys)).
 - **Learns your words:** names and technical terms the AI picks up are saved to a
   vocabulary file, so they are spelled right next time.
@@ -137,8 +137,8 @@ Laptop F-keys changing the volume instead? Press `Fn + Esc`.
 
 **Spoken commands.** At the **start** of a dictation: *"new line"* (starts a new line),
 *"bullet"* (`• ` prefix), *"format code"* (wraps it in backticks). At the **end**:
-*"and send"* (presses Enter after pasting), *"period"*, *"comma"*, *"question mark"*.
-Arabic: *"سطر جديد"*, *"قائمة"* (bullet), *"تنسيق كود"* (code), *"انتر"*, and at the end
+*"period"*, *"comma"*, *"question mark"*. Arabic: *"سطر جديد"*, *"قائمة"* (bullet),
+*"تنسيق كود"* (code), and at the end
 *"نقطة"*, *"فاصلة"*, *"علامة استفهام"* for **.** **،** **؟**
 
 **Tray menu** (by the clock): choose the voice, turn on Smart LLM Cleaning for the reader,

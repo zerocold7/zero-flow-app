@@ -9,6 +9,7 @@ mistake is kept in `problems`, which the engine reports by name when it starts.
 """
 import ipaddress
 import os
+import sys
 from urllib.parse import urlparse
 
 from dotenv import load_dotenv
@@ -18,6 +19,22 @@ from zeroflow.paths import BASE_DIR
 load_dotenv(os.path.join(BASE_DIR, ".env"))
 
 problems = []                 # one sentence per bad value; reported at start-up
+
+# The Python the engine is tested on; also in check_hardware.py (a test keeps them equal).
+TESTED_PYTHON = "3.12"
+
+
+def python_notice(version: tuple[int, int]) -> str | None:
+    """A start-up notice when the engine runs on a Python it is not tested on."""
+    running = f"{version[0]}.{version[1]}"
+    if running == TESTED_PYTHON:
+        return None
+    return (f"This is Python {running}; the engine is tested on Python {TESTED_PYTHON}. "
+            f"If something fails, reinstall with {TESTED_PYTHON} (docs/INSTALL.md step 1).")
+
+
+if notice := python_notice(sys.version_info[:2]):
+    problems.append(notice)
 
 _YES = ("true", "1", "t", "yes", "y", "on")
 _NO = ("false", "0", "f", "no", "n", "off")
@@ -78,6 +95,20 @@ def whole_number(name: str, default: int, minimum: int | None = None,
     return value
 
 
+def hotkey(name: str, default: str) -> str:
+    """A key or chord ("f5", "shift+f3", "ctrl+alt+r"). A key the keyboard library does
+    not know ("f55") used to stop the engine at start-up when it was bound."""
+    raw = _raw(name)
+    if raw is None:
+        return default
+    import keyboard
+    try:
+        keyboard.parse_hotkey(raw)
+    except ValueError:
+        return _bad(name, raw, "a key the keyboard knows", default)
+    return raw
+
+
 def choice(name: str, default: str, allowed: tuple[str, ...]) -> str:
     raw = _raw(name)
     if raw is None:
@@ -120,6 +151,21 @@ if AI_PROVIDER == "openai" and key_sent_in_the_clear(AI_URL, AI_API_KEY):
     problems.append(f'AI_URL="{AI_URL}" is plain http, so AI_API_KEY is sent unencrypted — '
                     f'use an https:// address.')
 
+def clipboard_context_sent(setting: str, provider: str, ai_url: str, ollama_url: str) -> bool:
+    """Whether Polish hands the AI the clipboard as context. "auto": only an AI on this
+    PC gets it — the clipboard often holds a password just copied, and a cloud AI would
+    send it to that company with every Polish."""
+    if setting != "auto":
+        return setting == "on"
+    if provider == "builtin":
+        return True
+    if provider == "ollama":
+        return _this_pc(urlparse(ollama_url).hostname)
+    if provider == "openai":
+        return _this_pc(urlparse(ai_url).hostname)
+    return False                                 # claude, or a provider not known here
+
+
 # The built-in AI's llama.cpp build: "auto" picks it from the graphics card (NVIDIA →
 # cuda, AMD/Intel card → vulkan, otherwise cpu).
 LLAMA_VARIANT = choice("LLAMA_VARIANT", "auto", ("auto", "cuda", "vulkan", "cpu"))
@@ -141,6 +187,14 @@ OLLAMA_KEEP_ALIVE = text("OLLAMA_KEEP_ALIVE", "30m")
 # memory against 2.99 GB at 8,192, with the same speed and answers. 8,192 still fits
 # a five-minute dictation and its answer. 0 keeps whatever the model file says.
 OLLAMA_NUM_CTX = whole_number("OLLAMA_NUM_CTX", 8192, minimum=0)
+# Polish's clipboard context: "auto" (only to an AI on this PC), "on" or "off".
+# (decided for the provider in use: zeroflow.llm.SEND_CLIPBOARD_CONTEXT)
+POLISH_CLIPBOARD_CONTEXT = choice("POLISH_CLIPBOARD_CONTEXT", "auto", ("auto", "on", "off"))
+
+# ---------------------------------------------------------------- the debug log
+# flow_debug.log records each dictation's size, not its words: a dictated password
+# would otherwise sit in the log. True writes the words too, for debugging.
+LOG_DICTATION_TEXT = switch("LOG_DICTATION_TEXT", False)
 
 # ---------------------------------------------------------------- sound and notices
 ENABLE_AUDIO_CHIMES = switch("ENABLE_AUDIO_CHIMES", True)
@@ -174,9 +228,9 @@ _HOTKEY_SETTINGS = {
     # Shared with the reader on purpose: one key cancels a recording and silences it.
     "panic":       ("HOTKEY_PANIC", "esc"),
 }
-HOTKEYS = {action: text(name, default) for action, (name, default) in _HOTKEY_SETTINGS.items()}
+HOTKEYS = {action: hotkey(name, default) for action, (name, default) in _HOTKEY_SETTINGS.items()}
 # The reader's key: read the highlighted text aloud.
-HOTKEY_READ = text("HOTKEY_READ", "f4")
+HOTKEY_READ = hotkey("HOTKEY_READ", "f4")
 
 
 def report_clashing_keys(keys: dict[str, str]) -> None:
