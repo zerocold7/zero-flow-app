@@ -9,7 +9,6 @@ from unittest import mock
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-from reader import app as reader_app
 from zeroflow import engine, supervisor, ui
 
 KEYS = {name: f"ctrl+alt+{n}" for n, name in enumerate(
@@ -43,12 +42,6 @@ class TestBanners(BannerTestCase):
             self.assertIn(key.upper(), text)
         self.assertIn("Kokoro", text)
 
-    def test_the_reader_banner_shows_its_keys(self):
-        with mock.patch.object(reader_app, "HOTKEY_READ", "ctrl+alt+r"), \
-             mock.patch.object(reader_app, "HOTKEY_PANIC", "ctrl+alt+s"):
-            text = self.shown(reader_app.print_boot_sequence)
-        self.assertIn("CTRL+ALT+R", text)
-        self.assertIn("CTRL+ALT+S", text)
 
 
 if __name__ == "__main__":

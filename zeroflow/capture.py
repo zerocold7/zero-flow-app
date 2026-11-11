@@ -25,6 +25,7 @@ class Capture:
             return
         self._chunks.append(indata.copy())
         level = int(min(np.linalg.norm(indata) * 10, 20))
+        ui.set_level(level / 20)
         bars = "|" * level + " " * (20 - level)
         sys.stdout.write(f"\r{ui.C_ACCENT}[{ui.C_GOOD}{bars}{ui.C_ACCENT}] Capturing Voice Data...{ui.C_RESET}")
         sys.stdout.flush()

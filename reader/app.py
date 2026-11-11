@@ -3,28 +3,21 @@ Zero- Flow Engine — the reader half.
 
     highlight text  →  [read hotkey]  →  clean  →  Kokoro speaks it
 
-Runs two ways, both of them as this process's `main()`:
-
-  * **standalone** (`python -m reader`) — prints its own banner and owns the console;
-  * **as the engine's child** (`zero_flow.py` sets `ZEROFLOW_CHILD=1`) — inherits the
-    parent's console window and prints into it, so the pair looks like one program.
-    It skips the banner and leaves the console title to the parent, but it still owns
-    the single tray icon, because every control in that menu toggles state that lives
-    here. The only thing it has to tell the parent is that the user chose to quit.
+Runs only as the engine's child process (ADR 0001): the engine owns the tray, the overlay
+and the Settings window, and switching "Reader on" off ends this process, which frees
+the voice model's memory. It reads its settings (voice, speed, device, Smart mode) when
+it starts; saving a setting restarts the engine, and with it this process.
 """
 import logging
-import os
 import threading
 import time
 import traceback
 
 import keyboard
-import pystray
-from pystray import MenuItem
 
 from reader import voice_engine
 from reader.text_cleaner import clean_text_instant, clean_text_smart
-from zeroflow import llm, settings, signals, ui
+from zeroflow import settings, signals, ui
 from zeroflow.clipboard import POLL_INTERVAL, copy_selection
 
 # =====================================================================
@@ -35,9 +28,6 @@ HOTKEY_READ = settings.HOTKEY_READ
 HOTKEY_PANIC = settings.HOTKEYS["panic"]
 SMART_MODE_DEFAULT = settings.READER_SMART_MODE
 
-# Set by zero_flow.py when this process is the engine's child, sharing its console.
-CHILD_MODE = bool(os.getenv("ZEROFLOW_CHILD"))
-
 # =====================================================================
 # RUNTIME STATE
 # =====================================================================
@@ -45,15 +35,14 @@ CHILD_MODE = bool(os.getenv("ZEROFLOW_CHILD"))
 # own thread: a plain "busy" flag, checked and then set a few steps later, let a second
 # press slip in between — two selection copies, two reads.
 reading = threading.Lock()
-is_suspended = False
-use_smart_mode = SMART_MODE_DEFAULT
+use_smart_mode = SMART_MODE_DEFAULT   # settings: READER_SMART_MODE, read at start
 
 # =====================================================================
 # THE PIPELINE
 # =====================================================================
 def process_and_speak():
     """Capture the selection, clean it, and speak it."""
-    if is_suspended or not reading.acquire(blocking=False):
+    if not reading.acquire(blocking=False):
         return
     try:
         _read_selection()
@@ -107,10 +96,7 @@ def _read_selection():
 
 
 def _title(state):
-    """Set the console title — unless the parent owns the console, in which case the
-    two processes would just overwrite each other's titles."""
-    if not CHILD_MODE:
-        ui.update_console_title(state)
+    """The engine owns the console title; this process leaves it alone."""
 
 
 def trigger_read():
@@ -134,127 +120,57 @@ def watch_for_silence_requests():
             logging.info("Reader silenced: the dictation half started recording.")
 
 # =====================================================================
-# TRAY MENU
-# =====================================================================
-def toggle_suspend(icon, item):
-    global is_suspended
-    is_suspended = not is_suspended
-    if is_suspended:
-        voice_engine.interrupt_audio()
-    print(f"{ui.C_ACCENT}🔵 [Settings]{ui.C_RESET} Reader {'SUSPENDED' if is_suspended else 'ACTIVE'}")
-
-
-def toggle_smart_mode(icon, item):
-    global use_smart_mode
-    use_smart_mode = not use_smart_mode
-    print(f"{ui.C_ACCENT}🔵 [Settings]{ui.C_RESET} Smart LLM cleaning is now "
-          f"{'ON' if use_smart_mode else 'OFF'}")
-
-
-def change_voice(icon, item):
-    voice_engine.set_voice(item.text)
-
-
-def unload_ai_model(icon, item):
-    """Free the AI's memory until the next request needs it. Whichever half started
-    the AI unloads it: this one if its Smart clean did, otherwise the dictation half,
-    asked by a signal — so only one of them answers."""
-    if llm.unload_ai():
-        print(f"{ui.C_ACCENT}🔵 [Settings]{ui.C_RESET} AI model unloaded.")
-    else:
-        signals.request_ai_unload()
-
-
-def exit_application(icon, item):
-    """Quit. This is the engine's only exit control when running as the child, so it
-    has to bring the parent down too. A standalone reader only quits itself: the exit
-    signal is shared, and it used to shut down a full engine running alongside."""
-    voice_engine.interrupt_audio()
-    if CHILD_MODE:
-        signals.request_exit()
-    icon.stop()
-    os._exit(0)
-
-
-def tray_items():
-    """The reader's menu entries, without the Exit item build_tray_menu() adds."""
-    voice_items = [
-        MenuItem(label, change_voice, radio=True,
-                 checked=(lambda lbl: lambda item: voice_engine.current_voice
-                          == voice_engine.VOICES[lbl])(label))
-        for label in voice_engine.VOICES
-    ]
-    return (
-        MenuItem("Suspend Reader", toggle_suspend, checked=lambda item: is_suspended),
-        MenuItem("Smart LLM Cleaning", toggle_smart_mode, checked=lambda item: use_smart_mode),
-        pystray.Menu.SEPARATOR,
-        *voice_items,
-        pystray.Menu.SEPARATOR,
-        MenuItem("Unload AI model", unload_ai_model),
-    )
-
-
-def build_tray_menu():
-    label = "Exit Engine" if CHILD_MODE else "Exit Reader"
-    return pystray.Menu(*tray_items(), pystray.Menu.SEPARATOR,
-                        MenuItem(label, exit_application))
-
-# =====================================================================
 # HOTKEYS
 # =====================================================================
+_bound = []
+
+
+def bind_keys():
+    _bound.append(keyboard.add_hotkey(HOTKEY_READ, trigger_read, suppress=True))
+    # Esc is deliberately NOT suppressed, so it keeps working normally everywhere.
+    # The dictation half binds it too; the keyboard library runs both callbacks.
+    _bound.append(keyboard.add_hotkey(HOTKEY_PANIC, voice_engine.interrupt_audio))
+
+
+def unbind_keys():
+    while _bound:
+        try:
+            keyboard.remove_hotkey(_bound.pop())
+        except (KeyError, ValueError):
+            pass
+
+
+def follow_keys_pause(poll: float = 0.15):
+    """While the Settings window is open (in the engine) this process lets go of its keys
+    too, so a key pressed to be captured there is not also a read."""
+    paused = False
+    while True:
+        now = signals.keys_paused()
+        if now != paused:
+            paused = now
+            unbind_keys() if paused else bind_keys()
+        time.sleep(poll)
+
+
 def register_hotkeys():
     """Bind the reader's keys and start its background threads. Safe to call from
     either entry point."""
     # suppress=True keeps the read key out of the focused app, the same rule the
     # dictation record keys follow (a leaked F4 would reach the app mid-capture).
-    keyboard.add_hotkey(HOTKEY_READ, trigger_read, suppress=True)
-    # Esc is deliberately NOT suppressed, so it keeps working normally everywhere.
-    # The dictation half binds it too; the keyboard library runs both callbacks.
-    keyboard.add_hotkey(HOTKEY_PANIC, voice_engine.interrupt_audio)
+    bind_keys()
     threading.Thread(target=watch_for_silence_requests, daemon=True).start()
+    threading.Thread(target=follow_keys_pause, daemon=True).start()
     # Warm the voice model in the background so the first read is not the slow one.
     threading.Thread(target=voice_engine.preload, daemon=True).start()
 
 # =====================================================================
-# CONSOLE
-# =====================================================================
-def print_boot_sequence():
-    ui.print_banner("Z E R O -   F L O W   ·   R E A D E R",
-                    [("Voice model", "Kokoro-82M · warming in background"),
-                     ("Smart clean", llm.model_name())],
-                    [("ACTIONS", None, [
-                        [(HOTKEY_READ, "read the highlighted text", ui.C_GOOD),
-                         (HOTKEY_PANIC, "silence", ui.C_ERR)],
-                        "Voice, smart cleaning and suspend live in the tray menu."])])
-
-# =====================================================================
-# STANDALONE ENTRY POINT
+# ENTRY POINT
 # =====================================================================
 def main():
-    logging.info(f"=== Zero- Reader Boot Sequence Initiated (child={CHILD_MODE}) ===")
-    # As the engine's child, the engine holds the "reader" claim for us.
-    if not CHILD_MODE:                           # as a child, the engine reports them
-        ui.report_setting_problems(settings.problems, settings.ENABLE_TOASTS)
-    if not CHILD_MODE and not signals.claim_single_instance("reader"):
-        ui.already_running("Zero- Flow Reader")
-        return
-    if CHILD_MODE:
-        # The parent has already drawn the banner and owns the console; adding our
-        # own here (with its cls) would wipe it.
-        print(f"{ui.C_ACCENT}[reader]{ui.C_RESET} read-aloud half ready "
-              f"({HOTKEY_READ.upper()} to speak the selection).")
-    else:
-        _title("ONLINE")
-        print_boot_sequence()
-        ui.set_window_icon()
-        ui.show_toast("🔊 Zero- Reader Online",
-                      f"Press {HOTKEY_READ.upper()} to read the selection.",
-                      settings.ENABLE_TOASTS)
-
-    name = "Zero- Flow Engine" if CHILD_MODE else "Zero- Flow Reader"
-    tray_icon = pystray.Icon("ZeroFlowReader", ui.load_tray_icon("logo_tray.ico"),
-                             name, build_tray_menu())
-    threading.Thread(target=tray_icon.run, daemon=True).start()
-
+    """Run the reader as the engine's child (zeroflow/supervisor.py starts it). There is
+    no tray and no banner here: the engine owns the tray, the overlay and the console."""
+    logging.info("=== Zero- Reader Boot Sequence Initiated ===")
     register_hotkeys()
+    print(f"{ui.C_ACCENT}[reader]{ui.C_RESET} read-aloud half ready "
+          f"({HOTKEY_READ.upper()} to speak the selection).")
     keyboard.wait()

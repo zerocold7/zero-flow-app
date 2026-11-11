@@ -11,8 +11,7 @@ numpy==1.26.4
 python-dotenv==1.2.2
 win11toast==0.36.3
 colorama==0.4.6
-pystray==0.19.5
-Pillow==13.0.0
+PySide6-Essentials==6.12.0
 
 # --- NVIDIA GPU acceleration (CUDA 12) ---
 # Required for faster-whisper device="cuda". Without these, CTranslate2 cannot

@@ -12,7 +12,7 @@ provider AI_PROVIDER names, with its failures reported the same way.
 import logging
 import re
 
-from zeroflow import personas, settings
+from zeroflow import personas
 from zeroflow import llm
 from zeroflow.text import URL_PATTERN  # shared: also strips www. addresses
 

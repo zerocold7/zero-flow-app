@@ -64,7 +64,7 @@ the machine. The one exception is your choice: pointing it at a cloud AI instead
 > **This is the main repository of Zero- Flow Engine.** Version 2 lives here; it replaces
 > `local-voice-flow` (1.x), which is no longer developed.
 >
-> **Status:** `2.0.0-alpha.5`. Version 2 is in alpha, so expect changes between
+> **Status:** `2.0.0-alpha.6`. Version 2 is in alpha, so expect changes between
 > releases; see the [CHANGELOG](CHANGELOG.md).
 
 ## How it works
@@ -152,12 +152,12 @@ clock to find it.
 
 | Launcher | Runs |
 |---|---|
-| **`Launch_Zero.bat`** | **Both halves in one window, one tray icon — use this** |
-| `Launch_Flow.bat` | Dictation only |
-| `Launch_Reader.bat` | Reader only |
+| **`Zero_Flow.pyw`** | **Both halves, no console, one tray icon — use this** |
+| `Launch_Zero.bat` | The same, with a console window showing what it does (for development) |
 
-Each has a twin that starts with no window — `Launch_Zero_Silent.vbs`,
-`Launch_Flow_Silent.vbs`, `Launch_Reader_Silent.vbs` — stopped from the tray icon. To start with Windows, see the [FAQ](docs/FAQ.md#can-it-start-with-windows).
+There is one Engine. Switch **Dictation on** and **Reader on** from the tray menu or
+the Settings window; with both off it sits in the tray as **Paused**, holding no models
+and no keys. To start with Windows, tick *Start with Windows* in Settings.
 
 ## Documentation
 

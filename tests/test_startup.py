@@ -2,7 +2,7 @@
 
 CTranslate2 (faster-whisper's engine) imports torch and transformers for its model
 converters, which this engine never uses: about 6 s on every start, and in every test
-run that imports local_flow. local_flow skips them for that one import. These tests
+run that imports the engine. zeroflow.stt skips them for that one import. These tests
 fail if the skip stops working (say, after a CTranslate2 upgrade) or if it leaves the
 modules unimportable for code that genuinely needs them.
 """
@@ -13,7 +13,7 @@ import unittest
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-import local_flow  # noqa: F401  — the import under test
+from zeroflow import engine  # noqa: F401  — the import under test
 
 
 class TestConverterImportsSkipped(unittest.TestCase):
@@ -27,7 +27,7 @@ class TestConverterImportsSkipped(unittest.TestCase):
         """Read from CTranslate2's own module, so it holds whatever else the test run
         has imported since."""
         self.assertFalse(hasattr(self.converters(), "torch"),
-                         "CTranslate2 imported torch while local_flow loaded — ~6 s per start")
+                         "CTranslate2 imported torch while the engine loaded — ~6 s per start")
 
     def test_ctranslate2_did_not_import_transformers(self):
         self.assertFalse(hasattr(self.converters(), "transformers"))

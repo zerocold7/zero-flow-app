@@ -178,22 +178,6 @@ class TestKeysAndStart(EngineTestCase):
         self.assertTrue(all(suppress for key, suppress in bound.items()
                             if key != engine.HOTKEYS["panic"]))
 
-    def test_a_second_dictation_half_stops_at_the_door(self):
-        with mock.patch.object(engine.signals, "claim_single_instance", return_value=False), \
-             mock.patch.object(engine.ui, "already_running") as told, \
-             mock.patch.object(engine, "boot") as boot:
-            engine.main()
-        told.assert_called_once()
-        boot.assert_not_called()
-
-    def test_a_crash_alone_exits_with_an_error_code(self):
-        with mock.patch.object(engine, "main", side_effect=RuntimeError("boom")), \
-             mock.patch.object(engine.ui, "alert"), \
-             self.assertLogs(level="CRITICAL"):
-            self.assertEqual(engine.run(), 1)
-        with mock.patch.object(engine, "main"):
-            self.assertEqual(engine.run(), 0)
-
 
 class TestActionKeysRunApart(unittest.TestCase):
     def test_a_failing_action_is_logged_and_the_keyboard_is_never_blocked(self):

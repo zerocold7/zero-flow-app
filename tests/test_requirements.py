@@ -33,6 +33,8 @@ NOT_IMPORTED = {
 }
 # Imported only when its optional feature is chosen; installed by hand for it.
 OPTIONAL = {"anthropic": "AI_PROVIDER=claude (llm/claude.py)"}
+# Pinned for working on the engine (requirements-dev.txt), never installed for running it.
+DEV_ONLY = {"pytest-qt"}
 # Installed on NVIDIA PCs only (docs/INSTALL.md step 4): a CPU-only install skips them,
 # so their pins are fine there even though nothing installed them.
 NVIDIA_ONLY = "nvidia-"
@@ -136,7 +138,7 @@ class TestRequirements(unittest.TestCase):
         optional = pulled_in(Requirement(name) for name in OPTIONAL)
         url_pinned = {canonicalize_name(r.name) for r in requirement_lines() if r.url}
         self.assertEqual(main - pinned() - url_pinned, set(), "pulled in but not pinned")
-        unused = pinned() - main - optional
+        unused = pinned() - main - optional - DEV_ONLY
         if not any(name.startswith(NVIDIA_ONLY) for name in main):     # a CPU-only install
             unused = {name for name in unused if not name.startswith(NVIDIA_ONLY)}
         self.assertEqual(unused, set(), "pinned but never installed")

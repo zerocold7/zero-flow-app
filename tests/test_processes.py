@@ -22,7 +22,6 @@ from unittest import mock
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.insert(0, ROOT)
 
-from zeroflow import engine
 from zeroflow import logs
 from zeroflow import paths
 from zeroflow import signals as flow_signals
@@ -81,24 +80,33 @@ class TestSecondCopyStopsAtTheDoor(unittest.TestCase):
         told.assert_called_once()
 
     def test_the_whole_engine(self):
-        self.refused(supervisor, supervisor.main, (engine, "boot"))
+        from zeroflow import app           # the first thing the claim must stop
+        self.refused(supervisor, supervisor.main, (app, "run"))
 
-    def test_the_dictation_half_alone(self):
-        self.refused(engine, engine.main, (engine, "boot"))
 
-    def test_the_reader_alone(self):
-        with mock.patch.object(reader_app, "CHILD_MODE", False):
-            self.refused(reader_app, reader_app.main, (reader_app, "register_hotkeys"))
+    def test_a_restarted_engine_waits_for_the_old_one_to_let_go(self):
+        """--restart: the new Engine keeps trying for the claim while the old one closes."""
+        role = f"test-{uuid.uuid4()}"
+        code = f"""
+            import time
+            from zeroflow import signals
+            assert signals.claim_single_instance({role!r})
+            print("held", flush=True)
+            time.sleep(1.5)
+        """
+        holder = subprocess.Popen([sys.executable, "-c", textwrap.dedent(code)], cwd=ROOT,
+                                  stdout=subprocess.PIPE, text=True)
+        try:
+            holder.stdout.readline()                                   # it holds the claim
+            self.assertFalse(flow_signals.claim_single_instance(role))               # no wait: refused
+            self.assertTrue(flow_signals.claim_single_instance(role, wait=10))       # waits, then gets it
+        finally:
+            holder.wait(timeout=30)
 
-    def test_the_engines_own_reader_does_not_claim(self):
-        """The engine holds the reader's claim; its child must not be turned away."""
-        with mock.patch.object(reader_app, "CHILD_MODE", True), \
-             mock.patch.object(reader_app.signals, "claim_single_instance",
-                               return_value=False) as claim, \
-             mock.patch.object(reader_app, "register_hotkeys"), \
-             mock.patch.object(reader_app.keyboard, "wait"), \
-             mock.patch.object(reader_app.pystray, "Icon"), \
-             mock.patch("builtins.print"):
+    def test_the_reader_child_makes_no_claim_of_its_own(self):
+        """The Engine holds the Reader's claim; its child must not be turned away."""
+        with mock.patch.object(reader_app.signals, "claim_single_instance",
+                               return_value=False) as claim,              mock.patch.object(reader_app, "register_hotkeys"),              mock.patch.object(reader_app.keyboard, "wait"),              mock.patch("builtins.print"):
             reader_app.main()
         claim.assert_not_called()
 
@@ -227,20 +235,6 @@ class TestReaderSupervision(unittest.TestCase):
             self.assertEqual(self.supervise(1, [1]), 0)
 
 
-class TestReaderExitButton(unittest.TestCase):
-    def press_exit(self, child_mode):
-        with mock.patch.object(reader_app, "CHILD_MODE", child_mode), \
-             mock.patch.object(reader_app.voice_engine, "interrupt_audio"), \
-             mock.patch.object(reader_app.signals, "request_exit") as request_exit, \
-             mock.patch.object(reader_app.os, "_exit"):
-            reader_app.exit_application(mock.Mock(), None)
-        return request_exit.called
-
-    def test_a_standalone_reader_does_not_shut_down_the_engine(self):
-        self.assertFalse(self.press_exit(child_mode=False))
-
-    def test_the_engines_reader_shuts_the_whole_engine_down(self):
-        self.assertTrue(self.press_exit(child_mode=True))
 
 
 if __name__ == "__main__":

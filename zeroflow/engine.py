@@ -11,6 +11,7 @@ Action keys:
 
 See ARCHITECTURE.md for the full design rationale.
 """
+import gc
 import logging
 import os
 import queue
@@ -27,7 +28,7 @@ import sounddevice as sd
 # stt first: it loads faster-whisper, which must claim its CUDA libraries before any
 # WinRT library (win11toast, via ui) is loaded. See zero_flow.py.
 from zeroflow import stt
-from zeroflow import personas, settings, signals, ui
+from zeroflow import microphone, personas, settings, signals, ui
 from zeroflow.capture import Capture
 from zeroflow.clipboard import copy_selection, paste_text, read_clipboard_context
 from zeroflow.history import cap_history_file, log_to_history
@@ -149,6 +150,29 @@ def purge_diagnostic_files() -> None:
     ui.play_tone("clean", ENABLE_AUDIO_CHIMES)
 
 
+_mic_notice_for = None            # the missing microphone's name, once the user has been told
+
+
+def microphone_device() -> int | None:
+    """The chosen microphone's device number, or None for the Windows default — which is
+    also what a chosen microphone that is not plugged in falls back to, with one toast
+    per missing name. It is chosen again the next recording, so it returns by itself."""
+    global _mic_notice_for
+    if not settings.MICROPHONE:
+        return None
+    index, fell_back = microphone.resolve(settings.MICROPHONE, sd.query_devices(),
+                                          sd.query_devices(kind="input")["hostapi"])
+    if fell_back and _mic_notice_for != settings.MICROPHONE:
+        _mic_notice_for = settings.MICROPHONE
+        logging.warning(f"The microphone '{settings.MICROPHONE}' is not connected; using the Windows default.")
+        ui.show_toast("🎙️ Microphone not found",
+                      f"'{settings.MICROPHONE}' is not connected. Using the Windows default "
+                      f"until it returns.", ENABLE_TOASTS)
+    elif not fell_back:
+        _mic_notice_for = None
+    return index
+
+
 def is_recording() -> bool:
     return current_capture is not None
 
@@ -180,6 +204,7 @@ def refine_text(text: str, mode: str, context: str = "") -> str:
 
     if cfg["op"] == "polish":
         ui.update_console_title("AI POLISHING")
+        ui.set_status("ai")
         prompt = personas.ARABIC_POLISH_PROMPT if cfg["lang"] == "ar" else personas.STANDARD_SYSTEM_PROMPT
         # Only the English prompt asks the model to tag new words (personas.py).
         answer = ask_ai(text, context, prompt, learn=cfg["lang"] == "en")
@@ -193,6 +218,7 @@ def refine_text(text: str, mode: str, context: str = "") -> str:
 
     if cfg["op"] == "translate":
         ui.update_console_title("AI TRANSLATING")
+        ui.set_status("ai")
         # Direction is fixed by the mode (not detected), so it's always correct.
         if cfg["to"] == "en":
             direction, prompt = "AR→EN", personas.TRANSLATE_TO_EN_PROMPT
@@ -227,13 +253,23 @@ def inject_text(text: str, lead: str | None = None) -> None:
 
 
 def process_recording(capture: Capture) -> None:
+    """One recording from the open microphone to the pasted words; the overlay is
+    cleared at the end unless a newer recording is already showing."""
+    try:
+        _process_recording(capture)
+    finally:
+        if not is_recording():
+            ui.clear_status()
+
+
+def _process_recording(capture: Capture) -> None:
     """Open the mic, capture until stopped, then transcribe → refine → inject.
 
     Everything this recording needs travels in `capture`, because the next recording
     can start while this one is still closing its microphone or transcribing."""
     mode = capture.mode
     try:
-        with sd.InputStream(samplerate=SAMPLE_RATE, channels=1,
+        with sd.InputStream(samplerate=SAMPLE_RATE, channels=1, device=microphone_device(),
                             callback=capture.callback, dtype='float32'):
             if not capture.stopped.wait(MAX_RECORDING_SECONDS):
                 capture.stop()
@@ -299,6 +335,7 @@ def polish_context(mode: str) -> str:
 def transcribe_and_inject(audio: np.ndarray, mode: str, context: str) -> None:
     """Stages 2-4 for one captured clip: transcribe, refine, paste."""
     ui.update_console_title("DECODING")
+    ui.set_status("transcribing")
     started = time.time()
     text, lang = transcribe_audio(audio, MODES[mode]["lang"])
     # The speed figure docs/HARDWARE.md tunes against: seconds spent per clip.
@@ -348,13 +385,13 @@ threading.Thread(target=_feedback_worker, name="hotkey-feedback", daemon=True).s
 
 
 def _started_feedback(mode_name: str) -> None:
+    ui.set_detail(MODES[mode_name]["label"].title())
     ui.set_tray_state(True)
     print(f"\n{ui.C_ACCENT}🔴 [{MODES[mode_name]['label']}] Capturing audio...{ui.C_RESET}")
     ui.play_tone("start", ENABLE_AUDIO_CHIMES)
 
 
 def _stopped_feedback() -> None:
-    ui.set_tray_state(False)
     ui.play_tone("stop", ENABLE_AUDIO_CHIMES)
 
 
@@ -439,23 +476,36 @@ def _correct_current_line() -> None:
         ui.play_tone("stop", ENABLE_AUDIO_CHIMES)
 
 
-def boot() -> None:
-    """Load the model and get the dictation half ready. Shared by both entry points
-    (this file standalone, and the supervisor in zero_flow.py)."""
+def boot(load: bool = True) -> None:
+    """Start-up work for the whole Engine, and — unless `load` is False (Dictation is
+    switched off) — loading the speech and AI models."""
 
     ui.update_console_title("INITIALIZING HARDWARE")
     ui.report_setting_problems(settings.problems, ENABLE_TOASTS)
     # Clear any stale recording flag left behind if a previous run was force-killed
     # mid-capture — otherwise a running reader would keep refusing to speak.
     signals.set_recording(False)
-    # Load the AI model alongside Whisper rather than on the first Polish (~4 s) —
-    # unless AI_LOAD_AT_START=False keeps it out of memory until it is needed.
-    if AI_LOAD_AT_START:
-        threading.Thread(target=warm_up_ai, daemon=True).start()
     threading.Thread(target=watch_for_unload_requests, daemon=True).start()
-    stt.model = stt.load_whisper_model()
+    if load:
+        load_models()
     cap_history_file()
     ui.update_console_title("ONLINE")
+
+
+def load_models() -> None:
+    """Load Whisper, and the AI alongside it rather than on the first Polish (~4 s) —
+    unless AI_LOAD_AT_START is off, which keeps it out of memory until it is needed."""
+    if AI_LOAD_AT_START:
+        threading.Thread(target=warm_up_ai, daemon=True).start()
+    stt.model = stt.load_whisper_model()
+
+
+def free_models() -> None:
+    """Dictation off: give back the speech model's and the AI's memory."""
+    unload_ai()
+    stt.model = None
+    stt._cpu_model = None
+    gc.collect()
 
 
 def unload_ai_model() -> None:
@@ -476,18 +526,43 @@ def watch_for_unload_requests() -> None:
 
 
 def register_hotkeys() -> None:
-    """Bind the dictation keys. Shared by both entry points."""
+    """Bind the dictation keys."""
     # Record modes (F5–F10). suppress=True consumes the key so it never reaches the
     # focused app (e.g. F5 = browser refresh). The lambda captures each mode name.
     for mode in MODES:
-        keyboard.add_hotkey(HOTKEYS[mode], (lambda m: lambda: on_record_hotkey(m))(mode), suppress=True)
+        _bound.append(keyboard.add_hotkey(HOTKEYS[mode],
+                                          (lambda m: lambda: on_record_hotkey(m))(mode), suppress=True))
 
     # Action keys do heavy work (LLM calls, key-sending), so dispatch each to a worker
     # thread — never block the keyboard listener (that froze the whole keyboard).
-    keyboard.add_hotkey(HOTKEYS["fix"],         run_async(correct_current_line), suppress=True)
-    keyboard.add_hotkey(HOTKEYS["maintenance"], run_async(run_memory_maintenance), suppress=True)
-    keyboard.add_hotkey(HOTKEYS["purge"],       run_async(purge_diagnostic_files), suppress=True)
-    keyboard.add_hotkey(HOTKEYS["panic"],       on_cancel_hotkey)
+    _bound.append(keyboard.add_hotkey(HOTKEYS["fix"], run_async(correct_current_line), suppress=True))
+    _bound.append(keyboard.add_hotkey(HOTKEYS["maintenance"], run_async(run_memory_maintenance), suppress=True))
+    _bound.append(keyboard.add_hotkey(HOTKEYS["purge"], run_async(purge_diagnostic_files), suppress=True))
+    _bound.append(keyboard.add_hotkey(HOTKEYS["panic"], on_cancel_hotkey))
+
+
+_bound = []          # what register_hotkeys bound, so "Dictation on" off can let go of the keys
+
+
+def pause_hotkeys() -> None:
+    """The Settings window is open: let go of the keys so a key pressed there reaches it."""
+    unregister_hotkeys()
+
+
+def resume_hotkeys() -> None:
+    """The Settings window closed: bind the keys again (not twice)."""
+    if not _bound:
+        register_hotkeys()
+
+
+def unregister_hotkeys() -> None:
+    """Dictation off: release every key it holds, and end a recording in progress."""
+    while _bound:
+        try:
+            keyboard.remove_hotkey(_bound.pop())
+        except (KeyError, ValueError):
+            pass
+    on_cancel_hotkey()
 
 
 def report_fatal_error(what: str) -> None:
@@ -497,16 +572,6 @@ def report_fatal_error(what: str) -> None:
     print(f"{ui.C_ERR}❌ The {what} stopped with an error — details in flow_debug.log.{ui.C_RESET}")
     ui.alert("Zero- Flow stopped", f"The {what} stopped with an error and is not running.\n\n"
                                    f"The details are in flow_debug.log, in %LOCALAPPDATA%\\ZeroFlow\\logs.")
-
-
-def run() -> int:
-    """Run the dictation half on its own (local_flow.py); exit code 1 after a crash."""
-    try:
-        main()
-    except Exception:
-        report_fatal_error("dictation engine")
-        return 1
-    return 0
 
 
 def key_sections(panic: str = "cancel") -> list:
@@ -530,16 +595,3 @@ def show_banner() -> None:
                     [("Speech to text", f"Whisper {WHISPER_MODEL_NAME} · {stt.model_runtime}"),
                      ("AI model", model_name())],
                     key_sections())
-
-
-def main() -> None:
-    if not signals.claim_single_instance("dictation"):
-        ui.already_running()
-        return
-    boot()
-    show_banner()
-    ui.show_toast("🚀 Zero- Flow Online", "Background engine is active and listening.", ENABLE_TOASTS)
-    ui.setup_system_tray(on_unload_ai=unload_ai_model)
-    ui.set_window_icon()
-    register_hotkeys()
-    keyboard.wait()

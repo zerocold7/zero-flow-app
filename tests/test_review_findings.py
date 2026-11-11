@@ -94,7 +94,6 @@ class Finding3TheReaderStaysQuietOnceTheMicOpens(unittest.TestCase):
              mock.patch.object(app, "clean_text_instant",
                                side_effect=clean_while_dictation_starts), \
              mock.patch.object(app, "use_smart_mode", False), \
-             mock.patch.object(app, "is_suspended", False), \
              mock.patch.object(app, "_title"), \
              mock.patch.object(app.ui, "play_tone"), \
              mock.patch.object(voice_engine, "stream_audio") as speak, \

@@ -44,8 +44,7 @@ class TestSmartCleaning(unittest.TestCase):
 
 class ReaderTestCase(unittest.TestCase):
     def setUp(self):
-        for patcher in (mock.patch.object(app, "is_suspended", False),
-                        mock.patch.object(app, "use_smart_mode", False),
+        for patcher in (mock.patch.object(app, "use_smart_mode", False),
                         mock.patch("sys.stdout")):
             patcher.start()
             self.addCleanup(patcher.stop)
@@ -62,33 +61,15 @@ class ReaderTestCase(unittest.TestCase):
         return copy, smart, speak
 
 
-class TestTrayToggles(ReaderTestCase):
-    def test_suspended_the_read_key_does_nothing_and_speech_stops(self):
-        with mock.patch.object(voice_engine, "interrupt_audio") as stop:
-            app.toggle_suspend(None, None)
-        stop.assert_called_once()
-        copy, _, speak = self.press_f4()
-        copy.assert_not_called()
-        speak.assert_not_called()
-        with mock.patch.object(voice_engine, "interrupt_audio"):
-            app.toggle_suspend(None, None)                # and back on
-        copy, _, speak = self.press_f4()
-        speak.assert_called_once()
-
-    def test_smart_cleaning_is_used_once_switched_on(self):
+class TestSmartMode(ReaderTestCase):
+    def test_smart_cleaning_is_used_only_when_the_setting_is_on(self):
         _, smart, speak = self.press_f4()
         smart.assert_not_called()
         self.assertEqual(speak.call_args.args[0], "Some text.")
-        app.toggle_smart_mode(None, None)
-        _, smart, speak = self.press_f4()
+        with mock.patch.object(app, "use_smart_mode", True):
+            _, smart, speak = self.press_f4()
         smart.assert_called_once()
         self.assertEqual(speak.call_args.args[0], "smart")
-
-    def test_a_voice_picked_in_the_menu_is_used(self):
-        with mock.patch.object(voice_engine, "current_voice", "af_heart"), \
-             mock.patch("sys.stdout"):
-            app.change_voice(None, types.SimpleNamespace(text="British Female (Emma)"))
-            self.assertEqual(voice_engine.current_voice, "bf_emma")
 
 
 class TestVoiceDevice(unittest.TestCase):

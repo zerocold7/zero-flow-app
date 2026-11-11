@@ -33,7 +33,7 @@ import warnings
 
 import sounddevice as sd
 
-from zeroflow import models, settings, ui
+from zeroflow import models, settings, signals, ui, voices
 
 warnings.filterwarnings("ignore", category=UserWarning)
 warnings.filterwarnings("ignore", category=FutureWarning)
@@ -45,12 +45,8 @@ OUTPUT_SAMPLE_RATE = 24000
 REPO_ID = "hexgrad/Kokoro-82M"
 LANG_CODE = "a"                                  # 'a' = American English
 
-# Menu label -> Kokoro voice id.
-VOICES = {
-    "American Female (Heart)": "af_heart",
-    "American Female (Bella)": "af_bella",
-    "British Female (Emma)": "bf_emma",
-}
+# Shown name -> Kokoro voice id (zeroflow/voices.py, shared with the Settings window).
+VOICES = voices.VOICES
 DEFAULT_VOICE = settings.READER_VOICE
 
 # "auto" (GPU when available), "cpu", or "cuda". Honoured under every launcher.
@@ -71,6 +67,7 @@ current_voice = DEFAULT_VOICE
 # chunk rendered before the interrupt is recognisably stale and is never played.
 audio_queue = queue.Queue()
 _generation = 0
+_rendering = False      # a read is still synthesising: more chunks are coming
 # How often the playback worker checks for an interrupt while a chunk is playing.
 PLAYBACK_POLL_SECONDS = 0.01
 
@@ -173,6 +170,8 @@ def _playback_worker():
                     break
                 time.sleep(PLAYBACK_POLL_SECONDS)
             sd.stop()                            # closes the stream
+            if audio_queue.empty() and not _rendering:
+                signals.set_reading(False)       # the overlay's "Reading" ends
         except Exception as e:
             # One bad chunk (a device unplugged mid-read, say) must not end this thread:
             # the reader would carry on "speaking" into a queue nobody plays.
@@ -253,14 +252,22 @@ def stream_audio(text, generation=None):
         generation = _generation
     if generation != _generation:
         return
+    global _rendering
     pipeline = get_pipeline()
     voice = _voice(current_voice)
-    for batch in _iter_batches(text):
-        for _, _, audio in pipeline(batch, voice=voice, speed=1.0):
-            if generation != _generation:
-                return
-            if audio is not None:
-                audio_queue.put((generation, audio))
+    _rendering = True
+    signals.set_reading(True)
+    try:
+        for batch in _iter_batches(text):
+            for _, _, audio in pipeline(batch, voice=voice, speed=settings.READER_SPEED):
+                if generation != _generation:
+                    return
+                if audio is not None:
+                    audio_queue.put((generation, audio))
+    finally:
+        _rendering = False
+        if audio_queue.empty() and generation != _generation:
+            signals.set_reading(False)
 
 
 def current_generation():
@@ -277,6 +284,7 @@ def interrupt_audio():
     global _generation
     _generation += 1
     generation = _generation
+    signals.set_reading(False)
     with audio_queue.mutex:                      # free the memory now; the worker
         audio_queue.queue.clear()                # would skip these chunks anyway
     return generation

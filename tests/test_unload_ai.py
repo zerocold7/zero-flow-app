@@ -100,30 +100,6 @@ class TestTheEngine(unittest.TestCase):
         self.assertIn(engine.watch_for_unload_requests, self.threads_started_by_boot(False))
 
 
-class TestTheTrayItem(unittest.TestCase):
-    def test_the_reader_tray_offers_it(self):
-        from reader import app
-        labels = [str(item.text) for item in app.tray_items() if hasattr(item, "text")]
-        self.assertIn("Unload AI model", labels)
-
-    def test_the_reader_unloads_its_own_and_asks_the_engine(self):
-        from reader import app
-        with mock.patch.object(app.llm, "unload_ai", return_value=False) as own, \
-             mock.patch.object(app.signals, "request_ai_unload") as ask_engine, \
-             contextlib.redirect_stdout(io.StringIO()):
-            app.unload_ai_model(None, None)
-        own.assert_called_once()
-        ask_engine.assert_called_once()
-
-    def test_a_reader_that_started_the_ai_unloads_it_alone(self):
-        """With AI_LOAD_AT_START=False the reader's Smart clean can be the first to start
-        the AI. Asking the engine too made it answer "not loaded" right after."""
-        from reader import app
-        with mock.patch.object(app.llm, "unload_ai", return_value=True), \
-             mock.patch.object(app.signals, "request_ai_unload") as ask_engine, \
-             contextlib.redirect_stdout(io.StringIO()):
-            app.unload_ai_model(None, None)
-        ask_engine.assert_not_called()
 
 
 if __name__ == "__main__":

@@ -71,6 +71,8 @@ def _model_path() -> str:
         print(f"{ui.C_ACCENT}⬇️  Downloading the AI model, {_model_label()} "
               f"(3–5 GB, first run only)...{ui.C_RESET}")
         logging.info(f"Downloading the built-in AI model {AI_BUILTIN_REPO}/{AI_BUILTIN_FILE}.")
+        ui.show_toast("⬇️ Downloading the AI model", "3–5 GB, the first time only. Polish and "
+                      "Translate wait for it; Raw dictation does not.", ENABLE_TOASTS)
         return hf_hub_download(AI_BUILTIN_REPO, AI_BUILTIN_FILE, revision=revision)
 
 
