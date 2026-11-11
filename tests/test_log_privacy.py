@@ -74,7 +74,8 @@ class TestSaid(unittest.TestCase):
 
     def test_shown_when_asked(self):
         with mock.patch.object(logs, "LOG_DICTATION_TEXT", True):
-            self.assertEqual(logs.said("hello"), "'hello'")
+            # Marked, so Copy diagnostics can leave the line out (tests/test_diagnostics.py).
+            self.assertEqual(logs.said("hello"), "[dictated] 'hello'")
 
     def test_nothing_is_nothing(self):
         self.assertEqual(logs.said(None), "None")
