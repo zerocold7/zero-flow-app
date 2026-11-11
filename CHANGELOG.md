@@ -6,7 +6,7 @@ All notable work on the **Zero- Flow Engine**. Newest first.
 
 ## [2.0.0] — in progress
 
-### [2.0.0-alpha.5] — unreleased — Settings, vocabulary and history move out of the program folder
+### [2.0.0-alpha.5] — 2026-11-11 — Settings, vocabulary and history move out of the program folder
 
 #### 🗂️ One settings file (phase 5a)
 - **Settings live in `%APPDATA%\ZeroFlow\settings.json`**, a JSON object of
