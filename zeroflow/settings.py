@@ -182,10 +182,24 @@ storage.apply_models_dir({"MODELS_DIR": MODELS_DIR}, os.environ)
 # of memory until the first Polish or Translate needs it (that one waits ~4 s).
 AI_LOAD_AT_START = switch("AI_LOAD_AT_START", True)
 # Which provider runs it (zeroflow/llm): "builtin" (llama-server, run by the engine), "ollama",
-# "openai" for any server speaking the OpenAI chat format — then AI_URL, AI_MODEL and, for a
-# cloud service, AI_API_KEY — or "claude" (Anthropic, with AI_API_KEY and optionally AI_MODEL).
-AI_PROVIDER = text("AI_PROVIDER", "builtin").lower()
-AI_URL = text("AI_URL", "http://127.0.0.1:8080/v1/chat/completions")
+# or "custom": any AI service named by AI_URL, AI_MODEL and, for a cloud service, an API key.
+# Claude is a preset of it (AI_URL = Anthropic's address). The old values "openai" and
+# "claude" are read as "custom".
+CUSTOM_DEFAULT_URL = "http://127.0.0.1:8080/v1/chat/completions"
+
+
+def normalise_provider(provider: str, url: str) -> tuple[str, str]:
+    """("openai", url) and ("claude", _) are older names for a Custom provider."""
+    provider = provider.lower()
+    if provider == "openai":
+        return "custom", url
+    if provider == "claude":
+        return "custom", credentials.ANTHROPIC_ADDRESS
+    return provider, url
+
+
+AI_PROVIDER, AI_URL = normalise_provider(text("AI_PROVIDER", "builtin"),
+                                         text("AI_URL", CUSTOM_DEFAULT_URL))
 AI_MODEL = text("AI_MODEL", "")
 # Read from .env only on the first start; from then on, from Credential Manager under the
 # provider's address (zeroflow.credentials). Never kept in the settings file.
@@ -213,7 +227,10 @@ def _this_pc(host: str | None) -> bool:
         return False                                     # a name, or no host at all
 
 
-if AI_PROVIDER == "openai" and key_sent_in_the_clear(AI_URL, AI_API_KEY):
+this_pc = _this_pc            # for the Settings window's "sent to this server" notice
+
+
+if AI_PROVIDER == "custom" and key_sent_in_the_clear(AI_URL, AI_API_KEY):
     problems.append(f'AI_URL="{AI_URL}" is plain http, so AI_API_KEY is sent unencrypted — '
                     f'use an https:// address.')
 
@@ -227,7 +244,7 @@ def clipboard_context_sent(setting: str, provider: str, ai_url: str, ollama_url:
         return True
     if provider == "ollama":
         return _this_pc(urlparse(ollama_url).hostname)
-    if provider == "openai":
+    if provider in ("custom", "openai"):
         return _this_pc(urlparse(ai_url).hostname)
     return False                                 # claude, or a provider not known here
 
@@ -314,6 +331,22 @@ READER_VOICE = text("READER_VOICE", "af_heart")
 READER_DEVICE = choice("READER_DEVICE", "auto", ("auto", "cpu", "cuda"))
 # Off by default: the regex clean is instant, the LLM pass costs a few seconds.
 READER_SMART_MODE = switch("READER_SMART_MODE", False)
+# How fast the voice speaks: 1.0 is normal.
+READER_SPEED = number("READER_SPEED", 1.0, minimum=0.5)
+
+# ---------------------------------------------------------------- the halves, the mic, the look
+# Each half can be switched off from the tray or the Settings window; off frees its memory.
+DICTATION_ON = switch("DICTATION_ON", True)
+READER_ON = switch("READER_ON", True)
+# The microphone, by name; blank is the Windows default. A name that is not plugged in
+# falls back to the default for that start, and is used again once it returns.
+MICROPHONE = text("MICROPHONE", "")
+# The language of the windows and menus: "auto" follows Windows.
+INTERFACE_LANGUAGE = choice("INTERFACE_LANGUAGE", "auto", ("auto", "en", "ar"))
+# The two languages Dictation listens to and translates between. English + Arabic only, today.
+LANGUAGE_PAIR = choice("LANGUAGE_PAIR", "en-ar", ("en-ar",))
+# Keep the list of past dictations. Off writes nothing to it.
+KEEP_HISTORY = switch("KEEP_HISTORY", True)
 
 # ---------------------------------------------------------------- retired settings
 # Settings that became constants in the code that uses them (docs/settings-table.md),

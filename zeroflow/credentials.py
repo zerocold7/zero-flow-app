@@ -25,7 +25,7 @@ def provider_address(provider: str, ai_url: str) -> str | None:
     """The address a provider's key is stored under; None for one that takes no key."""
     if provider == "claude":
         return ANTHROPIC_ADDRESS
-    if provider == "openai":
+    if provider in ("openai", "custom"):
         return address_of(ai_url)
     return None
 

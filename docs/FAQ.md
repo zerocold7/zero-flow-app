@@ -95,8 +95,8 @@ kept out of clipboard history (`Win + V`) and cloud clipboard sync. (Before vers
 2.0, only text came back.)
 
 ### Can it start with Windows?
-Yes: `Win + R` → `shell:startup` → create a shortcut there to `Launch_Zero_Silent.vbs`.
-It then starts hidden at every sign-in; stop it from the tray icon (**Exit Engine**).
+Yes: open **Settings** from the tray icon and tick **Start with Windows** (General tab).
+It then starts with no window at every sign-in; stop it from the tray icon (**Exit Engine**).
 
 ### It's too slow / my laptop gets hot
 Run `python check_hardware.py` to make sure the settings match your PC, then see
@@ -126,10 +126,9 @@ Chinese. `flow_debug.log` (in `%LOCALAPPDATA%\ZeroFlow\logs`) says which:
 
 ### It says "already running"
 Only one copy of the engine runs at a time — two would paste every dictation twice. The
-first copy is probably running hidden (started with a `*_Silent.vbs` launcher or at
+first copy is probably running without a window (started with `Zero_Flow.pyw` or at
 sign-in): look for its icon by the clock, and use **Exit Engine** there before starting
-it another way. The same goes for running the full engine (`Launch_Zero`) beside one of
-its halves (`Launch_Flow` or `Launch_Reader`).
+it another way.
 
 ### Where are my settings, logs and learned words?
 Outside the project folder, and none of it is uploaded anywhere. Paste a path into the

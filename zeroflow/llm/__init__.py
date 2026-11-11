@@ -14,6 +14,7 @@ spinner, the empty-answer check, and learning a word the model tagged `[LEARN: â
 """
 import logging
 import traceback
+from urllib.parse import urlparse
 
 from zeroflow import settings, ui
 from zeroflow.llm import builtin, claude, ollama, openai_compatible
@@ -23,7 +24,10 @@ PROVIDERS = {"builtin": builtin, "ollama": ollama, "openai": openai_compatible, 
 
 
 def choose(name: str):
-    """The provider called `name`; Ollama, with the mistake reported, if there is none."""
+    """The provider called `name`; Ollama, with the mistake reported, if there is none.
+    "custom" is Claude when its address is Anthropic's, otherwise any OpenAI-format server."""
+    if name == "custom":
+        name = "claude" if urlparse(settings.AI_URL).hostname == "api.anthropic.com" else "openai"
     if name == "builtin" and not builtin.available():
         settings.problems.append("The built-in AI is not installed on this PC â€” run "
                                  "tools/get_llama.py, or set AI_PROVIDER=ollama. Using ollama.")

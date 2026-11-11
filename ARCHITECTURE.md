@@ -18,9 +18,10 @@ a local LLM to clean up or translate text.
 
 | File | Responsibility |
 |------|----------------|
-| `local_flow.py`, `zero_flow.py` | Entry points the launchers run: the dictation half alone, or the whole engine. A few lines each |
+| `zero_flow.py`, `Zero_Flow.pyw` | The one entry point (`.pyw` starts it on the venv's pythonw, no console) |
 | `zeroflow/engine.py` | Flow: hotkeys, recording, transcribe → refine → paste, the action keys |
-| `zeroflow/supervisor.py` | The whole engine: runs dictation and hosts the reader as a child sharing its console |
+| `zeroflow/supervisor.py` | The whole engine: runs dictation, hosts the reader as a child, restarts the Engine on save |
+| `zeroflow/app.py`, `overlay.py`, `halves.py`, `settings_window.py`, `hotkey_capture.py`, `provider_form.py`, `key_saving.py`, `i18n.py`, `microphone.py` | The Qt interface on the main thread (ADR 0001): tray, overlay, Dictation on / Reader on, the Settings window, key capture, the AI Provider page and where the API key goes, translation tables, the microphone picker |
 | `zeroflow/stt.py` | Whisper: loading (GPU, CPU fallback), transcription, the invented-ending filter. The only module that imports faster-whisper |
 | `zeroflow/capture.py`, `clipboard.py`, `win_clipboard.py`, `hotkeys.py` | One recording's audio; paste and copy through the clipboard; the Win32 clipboard (every format, kept out of history); key helpers |
 | `zeroflow/llm/` | The AI model: `ask_ai` routes to the provider set by `AI_PROVIDER` — `builtin.py` (llama-server, run by the engine; installed by `llama_runtime.py`), `ollama.py`, `openai_compatible.py` or `claude.py` (interface in `base.py`) |
@@ -39,15 +40,14 @@ a local LLM to clean up or translate text.
 | `tests/`        | `unittest` tests, run in the venv: text logic, recording and AI failure paths, playback threading, vocabulary and history files, process supervision (`.\venv\Scripts\python.exe -m unittest discover -s tests -t .`) |
 
 **How they are hosted.** `zero_flow.py` is a supervisor, not a merge: it runs the
-dictation half in its own process and launches the reader as a **child process**,
-started without `CREATE_NEW_CONSOLE` so Windows hands it the parent's console. The
-child prints into the same window and owns the single tray icon, which is why the
-pair looks like one program while remaining two.
+dictation half and the Qt interface (tray, overlay, Settings window) in its own
+process and launches the reader as a **child process**. The Engine owns the tray; the
+child has none. "Reader on" off ends the child, which frees the voice model's memory;
+"Dictation on" off unloads Whisper and the AI and lets go of the keys.
 
 | Entry point | Processes | Voice model | Notes |
 |-------------|-----------|-------------|-------|
-| `zero_flow.py` | 2 (parent + child) | GPU | One window, one tray icon, crash isolation |
-| `local_flow.py` + `reader/` | 2 | GPU | The same pair, two visible windows |
+| `zero_flow.py` | 2 (parent + child) | GPU | One tray icon, crash isolation; the Reader is only ever this process's child |
 
 Separate processes are not a compromise here, they are the requirement: hosting both
 halves as threads in one process forces the voice model onto the CPU, because Whisper
@@ -516,7 +516,7 @@ is never seen.
 ## 10a. Processes: one copy, a supervised reader, nothing left behind
 - **One copy at a time.** Each start claims its role with a named mutex
   (`signals.claim_single_instance`): `zero_flow.py` claims both "dictation" and
-  "reader", `local_flow.py` "dictation", a standalone reader "reader". A second copy
+  "reader". A restarted Engine (`--restart`) keeps trying for up to 10 s while the old one closes. A second copy
   says it is already running and closes — two engines used to paste every dictation
   twice. Windows drops a claim when its process ends, however it ends.
 - **The reader is supervised.** It exits with code 1 when it crashes (it used to exit

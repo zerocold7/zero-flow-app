@@ -10,10 +10,20 @@ Zero- Flow Engine — private, offline voice dictation and read-aloud for Window
     stt                       Whisper: loading, transcription, invented endings
     capture, clipboard        one recording's audio; paste and copy through the clipboard
     hotkeys, engine           key helpers; the dictation pipeline itself
-    supervisor                the whole engine: dictation here, the reader as a child
+    supervisor, app           the whole engine: dictation here, the reader as a child;
+                              the Qt tray, overlay and Settings window
 
-Entry points stay at the top of the project: local_flow.py, zero_flow.py, and
-`python -m reader`. Nothing here imports torch or the voice model; only stt imports
+Entry points stay at the top of the project: zero_flow.py (started by Zero_Flow.pyw),
+and `python -m reader`, which only the Engine runs. Nothing here imports torch or the voice model; only stt imports
 faster-whisper, so the reader process never loads Whisper's CUDA libraries.
 """
-__version__ = "2.0.0-alpha.5"
+import os as _os
+import sys as _sys
+
+# Under pythonw there is no console and sys.stdout is None: anything that prints would
+# crash. Point both at the null device (ui.print_banner also skips itself then).
+for _name in ("stdout", "stderr"):
+    if getattr(_sys, _name) is None:
+        setattr(_sys, _name, open(_os.devnull, "w", encoding="utf-8"))
+
+__version__ = "2.0.0-alpha.6"

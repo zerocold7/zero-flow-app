@@ -4,6 +4,7 @@ import os
 import re
 from datetime import datetime
 
+from zeroflow import settings
 from zeroflow.paths import HISTORY_FILE
 
 
@@ -12,7 +13,7 @@ HISTORY_MAX_BYTES = 500_000
 
 
 def log_to_history(text: str, mode: str) -> None:
-    if not text:
+    if not text or not settings.KEEP_HISTORY:
         return
     try:
         with open(HISTORY_FILE, "a", encoding="utf-8") as f:

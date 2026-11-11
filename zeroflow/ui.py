@@ -2,10 +2,10 @@
 Zero- Flow Engine — shared console and desktop UI.
 
 Everything the user sees or hears that is not the dictated text or the spoken voice:
-console colours and the boot banner, the console title and window icon, the "AI
-Processing" spinner, audio chimes, Windows toast notifications, and the standalone
-dictation half's tray icon. (Under `zero_flow.py` the tray icon belongs to the reader
-child instead — see reader/app.py.)
+console colours and the boot banner (when there is a console), the "AI Processing"
+spinner, audio chimes, Windows toast notifications, and the hand-over to the Qt overlay
+(`set_status`, `set_level`, `clear_status`: they do nothing until the app has set
+`bridge`, and they only emit signals, so any thread may call them).
 
 Chimes and toasts run on their own threads: a blocking call on a keyboard-hook thread
 freezes the whole keyboard. `win11toast` is imported lazily for a load-order reason
@@ -19,9 +19,7 @@ import threading
 import time
 import winsound
 
-import pystray
 from colorama import Fore, Style, init
-from PIL import Image, ImageDraw
 
 from zeroflow.paths import BASE_DIR
 
@@ -36,7 +34,39 @@ C_RESET = Style.RESET_ALL
 
 _spinner = None           # the AI spinner's thread, once one has run
 _spinner_stop = None      # and its stop signal
-tray_icon = None
+bridge = None             # zeroflow.overlay.UiBridge, set by the app once Qt is up
+
+
+def set_status(state: str) -> None:
+    """The overlay shows "recording", "transcribing", "ai" or "reading"."""
+    if bridge is not None:
+        bridge.status.emit(state)
+
+
+def clear_status() -> None:
+    if bridge is not None:
+        bridge.cleared.emit()
+
+
+def set_tray_state(is_recording: bool) -> None:
+    """The microphone opened (the overlay shows Recording) or closed (it clears; the
+    next stage sets its own status)."""
+    if is_recording:
+        set_status("recording")
+    else:
+        clear_status()
+
+
+def set_detail(text: str) -> None:
+    """The Mode of the recording about to show ("Arabic · Polish"): the key that starts a
+    recording decides it, whichever key stops it."""
+    if bridge is not None:
+        bridge.detail.emit(text)
+
+
+def set_level(level: float) -> None:
+    if bridge is not None:
+        bridge.level.emit(float(level))
 
 
 def update_console_title(status: str) -> None:
@@ -147,6 +177,8 @@ def print_banner(title: str, about: list[tuple[str, str]], sections: list) -> No
     large-v3 · GPU · float16"), so a tuning change is visible at a glance. `sections`
     is (heading, note, rows); a row is a list of (key, what it does, colour), or a
     plain line of text."""
+    if getattr(sys.stdout, "name", "") == os.devnull:   # started without a console (pythonw)
+        return
     os.system('cls' if os.name == 'nt' else 'clear')
     rule = "─" * 56
     lines = [f"{C_ACCENT}┌{rule}┐{C_RESET}",
@@ -189,40 +221,3 @@ def stop_processing_spinner() -> None:
         return
     _spinner_stop.set()
     _spinner.join(1)
-
-
-def create_image(color1: str, color2: str) -> Image.Image:
-    image = Image.new('RGB', (64, 64), color1)
-    dc = ImageDraw.Draw(image)
-    dc.rectangle((16, 16, 48, 48), fill=color2)
-    return image
-
-
-def load_tray_icon(filename: str, fallback_fg: str = 'white') -> Image.Image:
-    try:
-        return Image.open(os.path.join(BASE_DIR, filename))
-    except Exception:
-        return create_image('black', fallback_fg)
-
-
-def exit_action(icon, item):
-    icon.stop()
-    os._exit(0)
-
-
-def setup_system_tray(on_unload_ai=None) -> None:
-    """The dictation half's own tray icon (when it runs without the reader)."""
-    global tray_icon
-    icon_image = load_tray_icon("logo_tray.ico", 'white')
-    items = [pystray.MenuItem("Unload AI model", lambda icon, item: on_unload_ai()),
-             pystray.Menu.SEPARATOR] if on_unload_ai else []
-    tray_icon = pystray.Icon("ZeroFlow", icon_image, "Zero- Flow Engine", menu=pystray.Menu(
-        *items, pystray.MenuItem("Exit Engine", exit_action)
-    ))
-    threading.Thread(target=tray_icon.run, daemon=True).start()
-
-
-def set_tray_state(is_recording: bool) -> None:
-    if tray_icon:
-        # Single transparent icon; recording state is shown in the tooltip title.
-        tray_icon.title = "Zero- Flow Engine  ●  RECORDING" if is_recording else "Zero- Flow Engine"

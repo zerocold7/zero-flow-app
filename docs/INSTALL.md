@@ -160,9 +160,9 @@ The full key list, and the spoken commands, are in the [README](../README.md).
 ---
 
 ## Starting automatically with Windows
-Press `Win + R`, type `shell:startup`, Enter. Right-click in that folder → *New →
-Shortcut* → browse to `Launch_Zero_Silent.vbs`. The engine then starts hidden at every
-sign-in; stop it from its tray icon (**Exit Engine**).
+Open **Settings** from the tray icon and tick **Start with Windows** (General tab). The
+engine then starts with no window at every sign-in; stop it from its tray icon
+(**Exit Engine**).
 
 ## Updating
 

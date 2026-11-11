@@ -133,6 +133,8 @@ def migrate(old_dir: str, data_dir: str, keys, environ, settings_path: str | Non
     if MODELS_NAME not in raw:
         values[MODELS_NAME] = default_models_dir(environ)
     key = values.pop(KEY_NAME, "")
+    values["AI_PROVIDER"], values["AI_URL"] = settings.normalise_provider(
+        values["AI_PROVIDER"], values["AI_URL"])
 
     for old, new in DATA_NAMES.items():
         source = os.path.join(old_dir, old)

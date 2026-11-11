@@ -6,6 +6,40 @@ All notable work on the **Zero- Flow Engine**. Newest first.
 
 ## [2.0.0] — in progress
 
+### [2.0.0-alpha.6] — 2026-11-11 — Tray, overlay and the Settings window (phase 5b)
+
+#### 🪟 One program with a real interface
+- **Qt replaces pystray.** The tray icon, a small **overlay** and the **Settings window**
+  (PySide6) run on the Engine's main thread (ADR 0001). The tray menu: Dictation on,
+  Reader on, Settings, Unload AI model, Open logs folder, Exit Engine.
+- **One entry point, no console:** `Zero_Flow.pyw` (starts the project's `pythonw`).
+  `Launch_Zero.bat` stays as a developer launcher with a console. The `.vbs` launchers
+  and the Dictation-only and Reader-only launchers (`local_flow.py`, `Launch_Flow`,
+  `Launch_Reader`) are gone; the Reader runs only as the Engine's child.
+- **Overlay:** a pill at the bottom centre that never takes focus, lets clicks pass
+  through and stays on top; it shows Recording (with a level meter), Transcribing, AI
+  and Reading. A tooltip-type window, so Windows never activates it.
+- **Dictation on / Reader on** apply at once, free the half's memory (the speech model
+  and AI, or the Reader process and its voice model) and let go of its keys. Both off
+  is **Paused**. Both are saved (`DICTATION_ON`, `READER_ON`).
+- **Saving other settings restarts the Engine:** the old one starts the new one with
+  `--restart`, which waits up to 10 s for the single-copy claim. Measured on this PC:
+  5.3–5.4 s until Dictation can run (`tools/measure_restart.py`).
+- **Hotkeys:** "press a key" boxes. Esc and Windows-key combinations are refused, a key
+  already in use is reported by name, F5 and F7 warn (browsers and Office use them).
+  The window says it cannot see other apps' keys.
+- **Microphone** picked by name (`MICROPHONE`); one that is unplugged falls back to the
+  Windows default with one toast, and is used again when it returns.
+- **AI Provider** is now Built-in, Ollama or Custom. `openai` and `claude` in an old
+  settings file are read as Custom (Claude is a preset). A Custom provider that is not
+  on this PC shows "your dictated text is sent to this server". The API key goes to
+  Credential Manager only, and a failed save changes nothing.
+- **Other new settings:** `INTERFACE_LANGUAGE` (English and Arabic ship; Arabic switches
+  to right-to-left), `LANGUAGE_PAIR`, `KEEP_HISTORY`, `READER_SPEED`; *Start with
+  Windows* is the HKCU Run key, not the file.
+- **Removed:** the Reader's own tray menu (voice, speed and Smart mode are settings now),
+  `Pillow` and `pystray` (no longer used).
+
 ### [2.0.0-alpha.5] — 2026-11-11 — Settings, vocabulary and history move out of the program folder
 
 #### 🗂️ One settings file (phase 5a)

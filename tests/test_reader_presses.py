@@ -34,7 +34,6 @@ class TestTwoPresses(unittest.TestCase):
              mock.patch.object(app, "copy_selection", return_value="read this"), \
              mock.patch.object(app, "clean_text_instant", side_effect=lambda t: t), \
              mock.patch.object(app, "use_smart_mode", False), \
-             mock.patch.object(app, "is_suspended", False), \
              mock.patch.object(app, "_title"), \
              mock.patch.object(app.ui, "play_tone"), \
              mock.patch("sys.stdout"):
@@ -55,7 +54,6 @@ class TestTwoPresses(unittest.TestCase):
              mock.patch.object(app, "copy_selection", return_value="read this"), \
              mock.patch.object(app, "clean_text_instant", side_effect=lambda t: t), \
              mock.patch.object(app, "use_smart_mode", False), \
-             mock.patch.object(app, "is_suspended", False), \
              mock.patch.object(app, "_title"), \
              mock.patch.object(app.ui, "play_tone"), \
              mock.patch("sys.stdout"):
@@ -71,7 +69,6 @@ class TestTwoPresses(unittest.TestCase):
              mock.patch.object(app, "copy_selection", return_value="read this"), \
              mock.patch.object(app, "clean_text_instant", side_effect=lambda t: t), \
              mock.patch.object(app, "use_smart_mode", False), \
-             mock.patch.object(app, "is_suspended", False), \
              mock.patch.object(app, "_title"), \
              mock.patch.object(app.ui, "play_tone"), \
              mock.patch.object(app.traceback, "print_exc"), \

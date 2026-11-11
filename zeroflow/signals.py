@@ -32,12 +32,15 @@ import ctypes
 import logging
 import subprocess
 import threading
+import time
 
 WAIT_OBJECT_0 = 0x00000000
 WAIT_ABANDONED = 0x00000080
 INFINITE = 0xFFFFFFFF
 
 _RECORDING_NAME = "Local\\ZeroFlow.recording"
+_READING_NAME = "Local\\ZeroFlow.reading"
+_KEYS_PAUSED_NAME = "Local\\ZeroFlow.keys_paused"
 _SILENCE_NAME = "Local\\ZeroFlow.silence_reader"
 _EXIT_NAME = "Local\\ZeroFlow.exit"
 _UNLOAD_AI_NAME = "Local\\ZeroFlow.unload_ai"
@@ -107,6 +110,46 @@ def is_recording() -> bool:
     return _kernel32.WaitForSingleObject(handle, 0) == WAIT_OBJECT_0
 
 
+def set_reading(state: bool) -> None:
+    """Reader: announce that it is speaking (or no longer is), for the overlay."""
+    handle = _event(_READING_NAME, manual_reset=True)
+    if not handle:
+        return
+    if state:
+        _kernel32.SetEvent(handle)
+    else:
+        _kernel32.ResetEvent(handle)
+
+
+def is_reading() -> bool:
+    """Engine: True while the reader is speaking."""
+    handle = _event(_READING_NAME, manual_reset=True)
+    if not handle:
+        return False
+    return _kernel32.WaitForSingleObject(handle, 0) == WAIT_OBJECT_0
+
+
+def set_keys_paused(state: bool) -> None:
+    """Engine: the Settings window is open, so every half lets go of its keys. Without
+    this a key pressed to be captured there would also start a recording, or never reach
+    the window at all (the keys are bound to swallow it)."""
+    handle = _event(_KEYS_PAUSED_NAME, manual_reset=True)
+    if not handle:
+        return
+    if state:
+        _kernel32.SetEvent(handle)
+    else:
+        _kernel32.ResetEvent(handle)
+
+
+def keys_paused() -> bool:
+    """Reader: True while the Settings window has the keys."""
+    handle = _event(_KEYS_PAUSED_NAME, manual_reset=True)
+    if not handle:
+        return False
+    return _kernel32.WaitForSingleObject(handle, 0) == WAIT_OBJECT_0
+
+
 def request_reader_silence() -> None:
     """Flow: ask the reader to stop speaking. Harmless if it isn't running."""
     handle = _event(_SILENCE_NAME, manual_reset=False)
@@ -168,9 +211,10 @@ ERROR_ALREADY_EXISTS = 183
 _instance_handles = {}
 
 
-def claim_single_instance(role: str) -> bool:
+def claim_single_instance(role: str, wait: float = 0.0) -> bool:
     """Claim `role` ("dictation", "reader") for this process. False if another
-    process — or an earlier call here — already holds it.
+    process — or an earlier call here — already holds it. `wait`: keep trying this many
+    seconds, for an Engine restarted by the one that is still closing.
 
     Two engines both answered every hotkey, so every dictation was pasted twice.
     The claim is a named mutex that Windows drops when the process ends, however it
@@ -179,13 +223,18 @@ def claim_single_instance(role: str) -> bool:
         return True                              # no way to tell: behave as before
     if role in _instance_handles:
         return False
-    handle = _kernel32.CreateMutexW(None, False, f"Local\\ZeroFlow.instance.{role}")
-    if not handle:
-        logging.warning(f"Single-instance check unavailable for '{role}'.")
-        return True
-    if ctypes.get_last_error() == ERROR_ALREADY_EXISTS:
+    deadline = time.monotonic() + wait
+    while True:
+        handle = _kernel32.CreateMutexW(None, False, f"Local\\ZeroFlow.instance.{role}")
+        if not handle:
+            logging.warning(f"Single-instance check unavailable for '{role}'.")
+            return True
+        if ctypes.get_last_error() != ERROR_ALREADY_EXISTS:
+            break
         _kernel32.CloseHandle(handle)
-        return False
+        if time.monotonic() >= deadline:
+            return False
+        time.sleep(0.2)
     _instance_handles[role] = handle             # held until this process ends
     return True
 
