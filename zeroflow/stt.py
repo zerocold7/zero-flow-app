@@ -3,6 +3,7 @@
 The only module that imports faster-whisper — so the reader process, which never
 imports it, keeps its own CUDA libraries to itself (see zero_flow.py).
 """
+import glob
 import logging
 import os
 import sys
@@ -80,12 +81,31 @@ def resolve_whisper_model() -> str:
     if os.path.isdir(WHISPER_MODEL_NAME):
         return WHISPER_MODEL_NAME                # a local model folder was configured
     try:
-        return _download_whisper(local_files_only=True)
+        folder = _download_whisper(local_files_only=True)
     except FileNotFoundError:                    # huggingface_hub's LocalEntryNotFoundError
         logging.info(f"Whisper model '{WHISPER_MODEL_NAME}' is not cached yet; downloading it.")
         print(f"{ui.C_ACCENT}⬇️  Downloading the speech model '{WHISPER_MODEL_NAME}' "
               f"(first run only)...{ui.C_RESET}")
         return _download_whisper()
+    # The cache hands back its folder even when a file in it has gone: config.json
+    # vanished once, and every dictation failed until it was fetched again by hand.
+    if missing := missing_whisper_files(folder):
+        logging.warning(f"Whisper model '{WHISPER_MODEL_NAME}' lacks {', '.join(missing)}; "
+                        f"downloading the missing files.")
+        print(f"{ui.C_ACCENT}⬇️  The speech model lacks {', '.join(missing)} — "
+              f"downloading it again...{ui.C_RESET}")
+        return _download_whisper()
+    return folder
+
+
+def missing_whisper_files(folder: str) -> list[str]:
+    """The WHISPER_FILES that `folder` lacks; an empty file counts as missing."""
+    missing = []
+    for pattern in WHISPER_FILES:
+        found = glob.glob(os.path.join(folder, pattern))
+        if not any(os.path.getsize(path) > 0 for path in found):
+            missing.append(pattern)
+    return missing
 
 
 def load_whisper_model() -> WhisperModel:

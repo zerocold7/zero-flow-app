@@ -13,7 +13,7 @@ import sys
 import threading
 from logging.handlers import RotatingFileHandler
 
-from zeroflow.paths import log_dir, log_path
+from zeroflow.paths import log_path, ready_log_dir
 from zeroflow.settings import LOG_DICTATION_TEXT
 
 _handler = None           # this process's debug log, once init_logging has run
@@ -62,7 +62,7 @@ def _log_crashes(component: str) -> None:
         exc_info=(args.exc_type, args.exc_value, args.exc_traceback))
     global _crash_file
     try:
-        _crash_file = open(os.path.join(log_dir(), f"{component}_crash.log"), "a", encoding="utf-8")
+        _crash_file = open(os.path.join(ready_log_dir(), f"{component}_crash.log"), "a", encoding="utf-8")
         faulthandler.enable(file=_crash_file)
     except Exception as e:
         logging.warning(f"Native crash logging unavailable: {e}")

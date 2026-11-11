@@ -1,7 +1,10 @@
-"""Every setting the engine reads from .env, in one place, each one checked.
+"""Every setting the engine uses, in one place, each one checked.
 
-.env is read from the program folder (not from wherever the engine was started), and
-before anything else, so every value below sees it. Restart the engine after editing.
+They come from one file, %APPDATA%\\ZeroFlow\\settings.json (ADR 0002; a developer
+points ZEROFLOW_SETTINGS at another). On the first start there is no such file: the
+values are read from the old .env in the program folder, and at the end of this module
+the migration (zeroflow.storage) writes them into the new file. .env is never read again.
+Restart the engine after editing the file.
 
 A value that is not what its setting needs ("five" seconds, "gpu" for a device that
 takes auto or cpu) does not stop the engine: the default is used instead, and the
@@ -12,13 +15,28 @@ import os
 import sys
 from urllib.parse import urlparse
 
-from dotenv import load_dotenv
-
+from zeroflow import credentials, paths, storage
 from zeroflow.paths import BASE_DIR
 
-load_dotenv(os.path.join(BASE_DIR, ".env"))
-
 problems = []                 # one sentence per bad value; reported at start-up
+
+# Every setting, filled in as each one is read below: name → (checker, default, limits).
+# The migration re-runs the same checks on .env with `resolve`.
+SPEC = {}
+_recording = True
+
+SETTINGS_FILE = paths.settings_file()
+_first_start = not os.path.exists(SETTINGS_FILE)
+if _first_start:
+    _VALUES, _where = storage.read_env(os.path.join(BASE_DIR, ".env")), ".env"
+else:
+    _where = paths.SETTINGS_NAME
+    try:
+        _VALUES = storage.load(SETTINGS_FILE)
+    except (OSError, ValueError) as e:
+        _VALUES = {}
+        problems.append(f"{SETTINGS_FILE} could not be read ({e}) — every setting is at its "
+                        f"default this time. The file is left as it is.")
 
 # The Python the engine is tested on; also in check_hardware.py (a test keeps them equal).
 TESTED_PYTHON = "3.12"
@@ -40,22 +58,53 @@ _YES = ("true", "1", "t", "yes", "y", "on")
 _NO = ("false", "0", "f", "no", "n", "off")
 
 
+def _note(name: str, checker, default, **limits) -> None:
+    if _recording:
+        SPEC.setdefault(name, (checker, default, limits))
+
+
 def _raw(name: str) -> str | None:
-    value = os.getenv(name)
-    return value.strip() if value is not None and value.strip() else None
+    """The setting as text ("true", "300"), whether the file holds text, a number or a
+    yes/no; None when it is missing or blank."""
+    value = _VALUES.get(name)
+    if value is None:
+        return None
+    if isinstance(value, bool):
+        value = "true" if value else "false"
+    value = str(value).strip()
+    return value or None
 
 
 def _bad(name: str, raw: str, wanted: str, default):
-    problems.append(f'{name}="{raw}" in .env is not {wanted} — using {default}.')
+    problems.append(f'{name}="{raw}" in {_where} is not {wanted} — using {default}.')
     return default
 
 
+def resolve(raw: dict) -> tuple[dict, list[str]]:
+    """Every setting's value from `raw` (NAME → text, as in .env), with the same checks
+    and defaults as at start-up, and the problems found. A name that is no setting is
+    reported and left out."""
+    global _VALUES, _where, problems
+    kept = _VALUES, _where, problems
+    _VALUES, _where, problems = raw, ".env", []
+    try:
+        values = {name: checker(name, default, **limits)
+                  for name, (checker, default, limits) in SPEC.items()}
+        found = problems + [f"{name} in .env is not a setting Zero- Flow knows — left out."
+                            for name in raw if name not in SPEC]
+    finally:
+        _VALUES, _where, problems = kept
+    return values, found
+
+
 def text(name: str, default: str) -> str:
+    _note(name, text, default)
     return _raw(name) or default
 
 
 def switch(name: str, default: bool) -> bool:
     """A yes/no setting: true/false, yes/no, on/off or 1/0, in any case."""
+    _note(name, switch, default)
     raw = _raw(name)
     if raw is None:
         return default
@@ -67,6 +116,7 @@ def switch(name: str, default: bool) -> bool:
 
 
 def number(name: str, default: float, minimum: float | None = None) -> float:
+    _note(name, number, default, minimum=minimum)
     raw = _raw(name)
     if raw is None:
         return default
@@ -81,6 +131,7 @@ def number(name: str, default: float, minimum: float | None = None) -> float:
 
 def whole_number(name: str, default: int, minimum: int | None = None,
                  maximum: int | None = None) -> int:
+    _note(name, whole_number, default, minimum=minimum, maximum=maximum)
     raw = _raw(name)
     if raw is None:
         return default
@@ -98,6 +149,7 @@ def whole_number(name: str, default: int, minimum: int | None = None,
 def hotkey(name: str, default: str) -> str:
     """A key or chord ("f5", "shift+f3", "ctrl+alt+r"). A key the keyboard library does
     not know ("f55") used to stop the engine at start-up when it was bound."""
+    _note(name, hotkey, default)
     raw = _raw(name)
     if raw is None:
         return default
@@ -110,6 +162,7 @@ def hotkey(name: str, default: str) -> str:
 
 
 def choice(name: str, default: str, allowed: tuple[str, ...]) -> str:
+    _note(name, choice, default, allowed=allowed)
     raw = _raw(name)
     if raw is None:
         return default
@@ -117,6 +170,12 @@ def choice(name: str, default: str, allowed: tuple[str, ...]) -> str:
         return raw.lower()
     return _bad(name, raw, " or ".join(allowed), default)
 
+
+# ---------------------------------------------------------------- the models folder
+# Where the speech, voice and AI models are downloaded and kept. Set here, before
+# anything imports huggingface_hub, which reads HF_HOME once, at import.
+MODELS_DIR = text("MODELS_DIR", storage.default_models_dir(os.environ))
+storage.apply_models_dir({"MODELS_DIR": MODELS_DIR}, os.environ)
 
 # ---------------------------------------------------------------- the AI model
 # Load the AI while Whisper loads, so the first Polish is instant. False leaves it out
@@ -128,7 +187,14 @@ AI_LOAD_AT_START = switch("AI_LOAD_AT_START", True)
 AI_PROVIDER = text("AI_PROVIDER", "builtin").lower()
 AI_URL = text("AI_URL", "http://127.0.0.1:8080/v1/chat/completions")
 AI_MODEL = text("AI_MODEL", "")
+# Read from .env only on the first start; from then on, from Credential Manager under the
+# provider's address (zeroflow.credentials). Never kept in the settings file.
 AI_API_KEY = text("AI_API_KEY", "")
+if not AI_API_KEY and (_address := credentials.provider_address(AI_PROVIDER, AI_URL)):
+    try:
+        AI_API_KEY = credentials.WindowsStore().get(_address) or ""
+    except OSError as e:
+        problems.append(f"The API key for {_address} could not be read: {e}.")
 
 
 def key_sent_in_the_clear(url: str, api_key: str) -> bool:
@@ -242,7 +308,7 @@ def report_clashing_keys(keys: dict[str, str]) -> None:
         chord = "+".join(sorted(part.strip() for part in key.lower().split("+")))
         other = first.setdefault(chord, name)
         if other != name:
-            problems.append(f'{other} and {name} in .env are both "{key}" — '
+            problems.append(f'{other} and {name} in {_where} are both "{key}" — '
                             f'that key does both. Give each its own key.')
 
 
@@ -261,3 +327,26 @@ READER_SMART_MAX_CHARS = whole_number("READER_SMART_MAX_CHARS", 1000, minimum=0)
 READER_LLM_TIMEOUT = number("READER_LLM_TIMEOUT", 10.0, minimum=1)
 READER_FIRST_BATCH_CHARS = whole_number("READER_FIRST_BATCH_CHARS", 120, minimum=20)
 READER_BATCH_CHARS = whole_number("READER_BATCH_CHARS", 300, minimum=20)
+
+# ---------------------------------------------------------------- the first start
+_recording = False
+
+
+def _first_start_migration() -> None:
+    """Move .env, the vocabulary and the history into the data folder (zeroflow.storage).
+    If that fails the engine does not start: running on, it would write new words and
+    dictations where the next start's migration overwrites them."""
+    try:
+        moved = storage.migrate(BASE_DIR, paths.data_dir(), credentials.WindowsStore(),
+                                os.environ, SETTINGS_FILE)
+    except Exception as e:
+        raise RuntimeError(f"Zero- Flow could not set up {paths.data_dir()}: {e}. "
+                           f"Your old files are unchanged; fix this and start again.") from e
+    problems.extend(p for p in moved.problems if p not in problems)
+    if moved.key_left_in_env:
+        problems.append(f"Your API key is now kept in Windows Credential Manager, but the "
+                        f"old .env in {BASE_DIR} still holds it. Delete the AI_API_KEY line there.")
+
+
+if _first_start:
+    _first_start_migration()

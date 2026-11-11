@@ -4,9 +4,12 @@ a given PC runs.
 check_hardware.py is standard-library only; these tests feed it made-up hardware, so
 they pass on any machine and never touch the real .env.
 """
+import json
 import os
+import shutil
 import subprocess
 import sys
+import tempfile
 import unittest
 from unittest import mock
 
@@ -201,17 +204,19 @@ class TestPresets(unittest.TestCase):
 
     def test_every_preset_and_no_env_at_all_load_with_no_problem(self):
         """A value the engine rejects would fall back to its default unseen by whoever
-        applied the preset. Each runs in a fresh process, with no .env read, so this
-        PC's own settings cannot hide or cause a problem."""
-        load = ("import dotenv; dotenv.load_dotenv = lambda *a, **k: None\n"
-                "from zeroflow import settings; print(repr(settings.problems))")
-        base = {k: v for k, v in os.environ.items()
-                if k not in hw.parse_env(hw._read(os.path.join(REPO, ".env.example")))}
+        applied the preset. Each runs in a fresh process with a settings file holding
+        only the preset, so this PC's own settings cannot hide or cause a problem."""
+        load = "from zeroflow import settings; print(repr(settings.problems))"
+        folder = tempfile.mkdtemp(prefix="zeroflow-preset-")
+        self.addCleanup(shutil.rmtree, folder, True)
+        settings_file = os.path.join(folder, "settings.json")
         for tier in [None, *hw.TIERS]:
-            env = dict(base, **(hw.load_preset(tier) if tier else {}))
+            with open(settings_file, "w", encoding="utf-8") as f:
+                json.dump(hw.load_preset(tier) if tier else {}, f)
+            env = dict(os.environ, ZEROFLOW_SETTINGS=settings_file)
             out = subprocess.run([sys.executable, "-c", load], cwd=REPO, env=env,
                                  capture_output=True, text=True, timeout=60)
-            self.assertEqual(out.stdout.strip(), "[]", f"{tier or 'no .env'}: {out.stdout}{out.stderr[-500:]}")
+            self.assertEqual(out.stdout.strip(), "[]", f"{tier or 'no settings'}: {out.stdout}{out.stderr[-500:]}")
 
 
 class TestMergeEnv(unittest.TestCase):

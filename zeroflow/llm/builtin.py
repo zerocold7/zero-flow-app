@@ -20,7 +20,7 @@ import requests
 
 from zeroflow import models, signals, ui
 from zeroflow.llm import llama_runtime, openai_compatible
-from zeroflow.paths import log_dir
+from zeroflow.paths import ready_log_dir
 from zeroflow.settings import (AI_BUILTIN_FILE, AI_BUILTIN_PORT, AI_BUILTIN_REPO, AI_NUM_CTX,
                                ENABLE_TOASTS)
 
@@ -121,7 +121,7 @@ def _start() -> bool:
     except Exception as e:
         return _unavailable(e)
     print(f"{ui.C_ACCENT}🧠 Loading the AI model...{ui.C_RESET}", flush=True)
-    log = open(os.path.join(log_dir(), "builtin_ai.log"), "a", encoding="utf-8")
+    log = open(os.path.join(ready_log_dir(), "builtin_ai.log"), "a", encoding="utf-8")
     try:
         _process = subprocess.Popen(command, stdout=log, stderr=subprocess.STDOUT,
                                     creationflags=CREATE_NO_WINDOW)

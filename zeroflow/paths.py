@@ -1,23 +1,53 @@
-"""Where the engine's files live: all in the program folder (the project root)."""
+"""Where the engine's files live.
+
+The program folder holds the code, the logos and the AI runtime. Your own files live
+apart from it (ADR 0002): the settings file, the Learned vocabulary and the Dictation
+history in %APPDATA%\\ZeroFlow, the logs in %LOCALAPPDATA%\\ZeroFlow\\logs. A developer
+points ZEROFLOW_SETTINGS at another settings file; its folder then holds the rest.
+"""
 import os
 
-# The program folder — one level above this package. Logos, .env, the vocabulary and
-# the history all live there.
+# The program folder — one level above this package.
 BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-VOCAB_CACHE_FILE = os.path.join(BASE_DIR, "flow_vocabulary.txt")
-HISTORY_FILE = os.path.join(BASE_DIR, "flow_history.md")
+SETTINGS_NAME = "settings.json"
+VOCABULARY_NAME = "vocabulary.txt"
+HISTORY_NAME = "history.md"
+
+
+def _home(variable: str) -> str:
+    return os.environ.get(variable) or os.path.expanduser("~")
+
+
+def settings_file() -> str:
+    return os.getenv("ZEROFLOW_SETTINGS") or os.path.join(_home("APPDATA"), "ZeroFlow", SETTINGS_NAME)
+
+
+def data_dir() -> str:
+    """The settings file's folder: it also holds the vocabulary and the history."""
+    return os.path.dirname(settings_file())
+
+
+VOCAB_CACHE_FILE = os.path.join(data_dir(), VOCABULARY_NAME)
+HISTORY_FILE = os.path.join(data_dir(), HISTORY_NAME)
 
 
 def log_dir() -> str:
-    """Where the debug and crash logs go: the program folder, unless ZEROFLOW_LOG_DIR
-    says otherwise. The test suite points it at a temporary folder, so its deliberate
-    crashes never read like real faults in the logs you look at. Read when a log is
-    opened, not at import, so setting it any time before then works."""
-    return os.getenv("ZEROFLOW_LOG_DIR") or BASE_DIR
+    """Where the debug and crash logs go: %LOCALAPPDATA%\\ZeroFlow\\logs, unless
+    ZEROFLOW_LOG_DIR says otherwise. The test suite points it at a temporary folder, so
+    its deliberate crashes never read like real faults in the logs you look at. Read
+    when a log is opened, not at import, so setting it any time before then works."""
+    return os.getenv("ZEROFLOW_LOG_DIR") or os.path.join(_home("LOCALAPPDATA"), "ZeroFlow", "logs")
+
+
+def ready_log_dir() -> str:
+    """log_dir(), created if it is not there yet (it is not, on a first start)."""
+    folder = log_dir()
+    os.makedirs(folder, exist_ok=True)
+    return folder
 
 
 def log_path(component: str) -> str:
-    return os.path.join(log_dir(), f"{component}_debug.log")
+    return os.path.join(ready_log_dir(), f"{component}_debug.log")
 
 
 def use_temporary_log_dir(prefix: str) -> None:
