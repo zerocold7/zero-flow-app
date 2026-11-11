@@ -15,7 +15,7 @@ import os
 import sys
 from urllib.parse import urlparse
 
-from zeroflow import credentials, paths, storage
+from zeroflow import credentials, first_run, paths, storage
 from zeroflow.paths import BASE_DIR
 
 problems = []                 # one sentence per bad value; reported at start-up
@@ -27,8 +27,15 @@ _recording = True
 
 SETTINGS_FILE = paths.settings_file()
 _first_start = not os.path.exists(SETTINGS_FILE)
-if _first_start:
+# A first start migrates the old files only when they are this Windows user's; with
+# nothing of theirs to migrate, the first-run wizard (zeroflow/wizard.py) runs instead,
+# and nothing is written until it finishes.
+_migrating = _first_start and first_run.old_files_are_mine(BASE_DIR)
+NEEDS_SETUP = _first_start and not _migrating
+if _migrating:
     _VALUES, _where = storage.read_env(os.path.join(BASE_DIR, ".env")), ".env"
+elif _first_start:
+    _VALUES, _where = {}, paths.SETTINGS_NAME
 else:
     _where = paths.SETTINGS_NAME
     try:
@@ -375,5 +382,5 @@ def _first_start_migration() -> None:
                         f"old .env in {BASE_DIR} still holds it. Delete the AI_API_KEY line there.")
 
 
-if _first_start:
+if _migrating:
     _first_start_migration()

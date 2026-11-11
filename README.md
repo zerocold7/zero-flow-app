@@ -64,7 +64,7 @@ the machine. The one exception is your choice: pointing it at a cloud AI instead
 > **This is the main repository of Zero- Flow Engine.** Version 2 lives here; it replaces
 > `local-voice-flow` (1.x), which is no longer developed.
 >
-> **Status:** `2.0.0-alpha.6`. Version 2 is in alpha, so expect changes between
+> **Status:** `2.0.0-alpha.7`. Version 2 is in alpha, so expect changes between
 > releases; see the [CHANGELOG](CHANGELOG.md).
 
 ## How it works
