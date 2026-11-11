@@ -91,7 +91,7 @@ def resolve(raw: dict) -> tuple[dict, list[str]]:
         values = {name: checker(name, default, **limits)
                   for name, (checker, default, limits) in SPEC.items()}
         found = problems + [f"{name} in .env is not a setting Zero- Flow knows — left out."
-                            for name in raw if name not in SPEC]
+                            for name in raw if name not in SPEC and name not in RETIRED]
     finally:
         _VALUES, _where, problems = kept
     return values, found
@@ -235,24 +235,15 @@ def clipboard_context_sent(setting: str, provider: str, ai_url: str, ollama_url:
 # The built-in AI's llama.cpp build: "auto" picks it from the graphics card (NVIDIA →
 # cuda, AMD/Intel card → vulkan, otherwise cpu).
 LLAMA_VARIANT = choice("LLAMA_VARIANT", "auto", ("auto", "cuda", "vulkan", "cpu"))
-# The built-in AI's model (Google's Gemma 4 E4B, Apache 2.0), its working memory in
-# tokens, and the local port its server listens on (this PC only).
+# The built-in AI's model (Google's Gemma 4 E4B, Apache 2.0).
 AI_BUILTIN_REPO = text("AI_BUILTIN_REPO", "google/gemma-4-E4B-it-qat-q4_0-gguf")
 AI_BUILTIN_FILE = text("AI_BUILTIN_FILE", "gemma-4-E4B_q4_0-it.gguf")
-AI_NUM_CTX = whole_number("AI_NUM_CTX", 8192, minimum=512)
-AI_BUILTIN_PORT = whole_number("AI_BUILTIN_PORT", 39281, minimum=1024, maximum=65535)
 OLLAMA_HOST_URL = text("OLLAMA_HOST_URL", "http://127.0.0.1:11434/api/generate")
 # Pin an exact model (e.g. qwen2.5:7b); blank = the first model Ollama has installed.
 OLLAMA_MODEL_NAME = text("OLLAMA_MODEL_NAME", "")
-FALLBACK_LLM = text("FALLBACK_LLM", "gemma2:27b")
 # How long Ollama keeps the model in memory after a request. Its own default is 5
 # minutes, and reloading afterwards made the next Polish wait 3-12 s. "0" unloads at once.
 OLLAMA_KEEP_ALIVE = text("OLLAMA_KEEP_ALIVE", "30m")
-# The AI model's working memory, in tokens. A model file may ask for far more than a
-# dictation needs — gemma4-e4b's asks for 131,072, which held 3.58 GB of graphics
-# memory against 2.99 GB at 8,192, with the same speed and answers. 8,192 still fits
-# a five-minute dictation and its answer. 0 keeps whatever the model file says.
-OLLAMA_NUM_CTX = whole_number("OLLAMA_NUM_CTX", 8192, minimum=0)
 # Polish's clipboard context: "auto" (only to an AI on this PC), "on" or "off".
 # (decided for the provider in use: zeroflow.llm.SEND_CLIPBOARD_CONTEXT)
 POLISH_CLIPBOARD_CONTEXT = choice("POLISH_CLIPBOARD_CONTEXT", "auto", ("auto", "on", "off"))
@@ -291,10 +282,12 @@ _HOTKEY_SETTINGS = {
     "fix":         ("HOTKEY_FIX", "shift+f3"),
     "maintenance": ("HOTKEY_MAINTENANCE", "shift+f1"),
     "purge":       ("HOTKEY_PURGE", "shift+f2"),
-    # Shared with the reader on purpose: one key cancels a recording and silences it.
-    "panic":       ("HOTKEY_PANIC", "esc"),
 }
 HOTKEYS = {action: hotkey(name, default) for action, (name, default) in _HOTKEY_SETTINGS.items()}
+# Fixed, not a setting: Esc always cancels a recording and silences the reader (one key
+# for both, on purpose). A setting for it could only make it clash with another key.
+CANCEL_KEY = "esc"
+HOTKEYS["panic"] = CANCEL_KEY
 # The reader's key: read the highlighted text aloud.
 HOTKEY_READ = hotkey("HOTKEY_READ", "f4")
 
@@ -312,7 +305,8 @@ def report_clashing_keys(keys: dict[str, str]) -> None:
                             f'that key does both. Give each its own key.')
 
 
-report_clashing_keys({name: HOTKEYS[action] for action, (name, _) in _HOTKEY_SETTINGS.items()}
+report_clashing_keys({"Esc (cancel, fixed)": CANCEL_KEY}
+                     | {name: HOTKEYS[action] for action, (name, _) in _HOTKEY_SETTINGS.items()}
                      | {"HOTKEY_READ": HOTKEY_READ})
 
 # ---------------------------------------------------------------- the reader
@@ -320,13 +314,13 @@ READER_VOICE = text("READER_VOICE", "af_heart")
 READER_DEVICE = choice("READER_DEVICE", "auto", ("auto", "cpu", "cuda"))
 # Off by default: the regex clean is instant, the LLM pass costs a few seconds.
 READER_SMART_MODE = switch("READER_SMART_MODE", False)
-# Above this length the LLM pass is skipped: a local model needs several seconds per
-# thousand characters, which is longer than the wait for speech to simply start.
-READER_SMART_MAX_CHARS = whole_number("READER_SMART_MAX_CHARS", 1000, minimum=0)
-# The reader is interactive, so it waits less patiently than the dictation engine.
-READER_LLM_TIMEOUT = number("READER_LLM_TIMEOUT", 10.0, minimum=1)
-READER_FIRST_BATCH_CHARS = whole_number("READER_FIRST_BATCH_CHARS", 120, minimum=20)
-READER_BATCH_CHARS = whole_number("READER_BATCH_CHARS", 300, minimum=20)
+
+# ---------------------------------------------------------------- retired settings
+# Settings that became constants in the code that uses them (docs/settings-table.md),
+# or were removed. An old .env that still names one migrates without a complaint.
+RETIRED = ("HOTKEY_PANIC", "AI_NUM_CTX", "OLLAMA_NUM_CTX", "AI_BUILTIN_PORT", "FALLBACK_LLM",
+           "READER_SMART_MAX_CHARS", "READER_LLM_TIMEOUT", "READER_FIRST_BATCH_CHARS",
+           "READER_BATCH_CHARS")
 
 # ---------------------------------------------------------------- the first start
 _recording = False

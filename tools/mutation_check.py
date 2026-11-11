@@ -225,7 +225,7 @@ MUTATIONS = [
      "tests.test_arabic.TestOllamaRequest.test_warm_up_reports_a_model_ollama_does_not_have"),
     ("fallback model is not cached",
      "        if not settled:\n            return name\n", "",
-     "tests.test_arabic.TestModelDiscovery.test_the_fallback_is_not_kept_once_ollama_is_running"),
+     "tests.test_arabic.TestModelDiscovery.test_ollama_down_gives_no_name_and_it_is_not_kept"),
     ("whisper hears the clip at full scale",
      "    if peak > 0:\n        clip = clip / peak\n", "",
      "tests.test_transcribe.TestWhatWhisperHears"),

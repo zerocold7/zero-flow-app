@@ -5,7 +5,7 @@ Measured on an RTX 4070 against Ollama with the same model family: loads in 3.1 
 6.8-7.1 s), answers a Polish in 0.26 s (0.37 s), the same English and Arabic, ~3.2 GB of
 graphics memory. With Whisper and the reader's voice, 9.3 GB of the card's 12.3 GB.
 
-The server listens on a fixed local port (AI_BUILTIN_PORT, this PC only). Whoever needs it
+The server listens on a fixed local port (AI_BUILTIN_PORT below, this PC only). Whoever needs it
 first starts it; anyone else — the reader is a separate process — finds it running and
 uses it, so the model is never loaded twice. Started by the engine, it is tied to the
 engine's lifetime (a Job Object, see zeroflow.signals), so it never outlives it.
@@ -21,8 +21,13 @@ import requests
 from zeroflow import models, signals, ui
 from zeroflow.llm import llama_runtime, openai_compatible
 from zeroflow.paths import ready_log_dir
-from zeroflow.settings import (AI_BUILTIN_FILE, AI_BUILTIN_PORT, AI_BUILTIN_REPO, AI_NUM_CTX,
-                               ENABLE_TOASTS)
+from zeroflow.settings import AI_BUILTIN_FILE, AI_BUILTIN_REPO, ENABLE_TOASTS
+
+# The model's working memory, in tokens: a five-minute dictation and its answer fit in
+# 8,192. Was a setting; nobody needs to tune it (docs/settings-table.md).
+AI_NUM_CTX = 8192
+# The local port the server listens on (127.0.0.1, this PC only).
+AI_BUILTIN_PORT = 39281
 
 # How long a start may take before giving up: loading the model from disk takes ~3 s on
 # a graphics card and longer on a CPU or a slow disk. (The first ever start downloads the

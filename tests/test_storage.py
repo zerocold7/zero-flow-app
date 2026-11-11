@@ -89,6 +89,9 @@ class TestRealFiles(MigrationCase):
         for name in names:
             if name == storage.KEY_NAME:            # goes to Credential Manager instead
                 continue
+            if name in settings.RETIRED:            # now a constant in the code
+                self.assertNotIn(name, saved)
+                continue
             self.assertIn(name, saved, f"{name} was not migrated")
             # The value the engine reads from .env today (same checks, same defaults).
             self.assertEqual(saved[name], storage.read_from_env(os.path.join(self.old, ".env"), name),
@@ -159,6 +162,12 @@ class TestWhenItRuns(MigrationCase):
         result = self.migrate()
         self.assertEqual(self.saved()["MAX_RECORDING_SECONDS"], 300)
         self.assertTrue(any("MAX_RECORDING_SECONDS" in p for p in result.problems))
+
+    def test_a_retired_setting_is_left_out_without_a_complaint(self):
+        self.write_old(".env", "FALLBACK_LLM=gemma2:27b\nREADER_BATCH_CHARS=300\nHOTKEY_PANIC=esc\n")
+        result = self.migrate()
+        self.assertEqual(result.problems, [])
+        self.assertFalse(set(settings.RETIRED) & set(self.saved()))
 
     def test_a_name_the_engine_does_not_know_is_reported_not_kept(self):
         self.write_old(".env", "WHISPER_MODLE_NAME=small\n")

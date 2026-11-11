@@ -1,7 +1,8 @@
-# Settings table (draft for approval, Phase 5a → 5b)
+# Settings table (approved 2026-11-11, Phase 5a → 5b)
 
-Every setting in `zeroflow/settings.py`, and where each one goes in the Settings window.
-**Main** = the main tabs. **Advanced** = the Advanced tab. **Fixed** = becomes a constant in the code and leaves the settings file.
+Every setting Zero- Flow had at the start of Phase 5, and where each one goes in the Settings window.
+**Main** = the main tabs. **Advanced** = the Advanced tab. **Fixed** = now a constant in the code that uses it, and no longer in the settings file.
+The Fixed and removed ones are listed in `settings.RETIRED`, so an old `.env` that still names them migrates without a complaint.
 New settings that 5b brings are listed at the end. Terms as in `CONTEXT.md`.
 
 ## Keys
@@ -81,4 +82,4 @@ New settings that 5b brings are listed at the end. Terms as in `CONTEXT.md`.
 | Start with Windows | off | Main. Kept in the HKCU Run key, not in the file. |
 | Reader speed | 1.0 | Main |
 
-**Count:** 42 settings today (a script checked that every one is named in this table, and nothing else is). 21 go to Main, 12 to Advanced, 8 become Fixed and 1 is removed. 5b adds 7 new ones.
+**Count:** 42 settings at the start of Phase 5 (a script checked that every one is named in this table, and nothing else is). 21 go to Main, 12 to Advanced, 8 are Fixed and 1 is removed, which leaves 33 in the settings file. 5b adds 7 new ones.

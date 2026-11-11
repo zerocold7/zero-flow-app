@@ -63,8 +63,8 @@ SENTENCE_SPLIT = re.compile(r'(?<=[.!?؟۔…])\s+|\n+')
 # semicolon or colon, Latin or Arabic.
 CLAUSE_SPLIT = re.compile(r'(?<=[,;:،؛])\s+')
 # The first batch is kept short: it is the only one the listener waits on.
-FIRST_BATCH_CHARS = settings.READER_FIRST_BATCH_CHARS
-BATCH_CHARS = settings.READER_BATCH_CHARS
+FIRST_BATCH_CHARS = 120     # measured tuning, not a choice (docs/settings-table.md)
+BATCH_CHARS = 300
 
 current_voice = DEFAULT_VOICE
 # Holds (generation, audio) pairs. interrupt_audio() bumps the generation, so every
