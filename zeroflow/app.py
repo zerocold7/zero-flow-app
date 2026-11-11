@@ -78,6 +78,7 @@ class EngineApp:
         self.halves.problem.connect(lambda text: ui.show_toast("⚠️ Zero- Flow", text))
         self.window = None
         self.wizard = None
+        self.data_windows = {}
         self._build_tray()
         self._reading = QTimer()
         self._reading.timeout.connect(self._follow_reader)
@@ -97,6 +98,12 @@ class EngineApp:
         settings_action.triggered.connect(self.open_settings)
         unload_action = QAction(tr("tray.unload"), menu)
         unload_action.triggered.connect(lambda: self._worker(engine.unload_ai_model))
+        history_action = QAction(tr("tray.history"), menu)
+        history_action.triggered.connect(self.open_history)
+        vocabulary_action = QAction(tr("tray.vocabulary"), menu)
+        vocabulary_action.triggered.connect(self.open_vocabulary)
+        diagnostics_action = QAction(tr("tray.diagnostics"), menu)
+        diagnostics_action.triggered.connect(lambda: self._worker(self.copy_diagnostics))
         logs_action = QAction(tr("tray.logs"), menu)
         logs_action.triggered.connect(lambda: os.startfile(paths.ready_log_dir()))
         exit_action = QAction(tr("tray.exit"), menu)
@@ -107,7 +114,10 @@ class EngineApp:
         for shown, key in shown_keys():
             keys_menu.addAction(f"{shown}    {key}").setEnabled(False)
         menu.addSeparator()
-        for action in (settings_action, unload_action, logs_action):
+        for action in (settings_action, history_action, vocabulary_action, unload_action):
+            menu.addAction(action)
+        menu.addSeparator()
+        for action in (diagnostics_action, logs_action):
             menu.addAction(action)
         menu.addSeparator()
         menu.addAction(exit_action)
@@ -172,6 +182,38 @@ class EngineApp:
         self.window.show()
         self.window.raise_()
         self.window.activateWindow()
+
+    # ------------------------------------------------- history, vocabulary, diagnostics
+    def _open_data_window(self, name: str, make) -> None:
+        """One window of each kind; asked again, the open one comes to the front."""
+        window = self.data_windows.get(name)
+        if window is None or not window.isVisible():
+            window = self.data_windows[name] = make()
+        window.show()
+        window.raise_()
+        window.activateWindow()
+
+    def open_history(self) -> None:
+        from zeroflow.data_windows import HistoryWindow
+        self._open_data_window("history", lambda: HistoryWindow(
+            paths.HISTORY_FILE, keep_history=settings.KEEP_HISTORY,
+            keys_pause=self._pause_keys, keys_resume=self._resume_keys))
+
+    def open_vocabulary(self) -> None:
+        from zeroflow.data_windows import VocabularyWindow
+        self._open_data_window("vocabulary", lambda: VocabularyWindow(
+            paths.VOCAB_CACHE_FILE, keys_pause=self._pause_keys, keys_resume=self._resume_keys))
+
+    @staticmethod
+    def copy_diagnostics() -> None:
+        """Worker thread: detect() asks the registry and nvidia-smi, which takes a moment."""
+        from zeroflow import diagnostics, win_clipboard
+        try:
+            diagnostics.copy(credentials.WindowsStore(), copy=win_clipboard.set_text)
+            ui.show_toast("📋 Zero- Flow", tr("diag.copied"))
+        except Exception as e:
+            logging.error(f"Copy diagnostics failed: {type(e).__name__}: {e}")
+            ui.show_toast("⚠️ Zero- Flow", tr("diag.failed") + type(e).__name__)
 
     # ------------------------------------------------------------------ first-run wizard
     def open_setup(self, first_start: bool) -> None:

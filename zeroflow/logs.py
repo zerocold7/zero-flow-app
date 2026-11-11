@@ -20,11 +20,18 @@ _handler = None           # this process's debug log, once init_logging has run
 _crash_file = None        # kept open for the life of the process: faulthandler writes to it
 
 
+# Put before dictated words in the log, so Copy diagnostics can find every line that
+# holds them and leave it out (zeroflow/diagnostics.py).
+DICTATED_MARK = "[dictated] "
+
+
 def said(text: str | None) -> str:
     """Dictated words as the log shows them: their size only, unless LOG_DICTATION_TEXT
     is on — the history file is where dictations are kept, not the debug log."""
-    if text is None or LOG_DICTATION_TEXT:
-        return repr(text)
+    if text is None:
+        return "None"
+    if LOG_DICTATION_TEXT:
+        return DICTATED_MARK + repr(text)
     return f"({len(text)} chars)"
 
 

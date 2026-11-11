@@ -32,6 +32,44 @@ def load_vocabulary() -> list[str]:
     return list(vocab)
 
 
+def learned_words(path: str = VOCAB_CACHE_FILE) -> list[str]:
+    """The learned vocabulary file's words, in its order — what the editor shows. The
+    built-in words (personas.BASE_VOCABULARY) are not in it and cannot be edited."""
+    if not os.path.exists(path):
+        return []
+    with open(path, encoding="utf-8") as f:
+        return [line.strip() for line in f if line.strip()]
+
+
+def _write_words(path: str, words: list[str]) -> None:
+    """Replace the file in one step. Call with VOCAB_LOCK held."""
+    temporary = path + ".tmp"
+    with open(temporary, "w", encoding="utf-8") as f:
+        f.write("".join(f"{word}\n" for word in words))
+    os.replace(temporary, path)
+
+
+def word_problem(word: str, words: list[str], ignore: str | None = None) -> str | None:
+    """Why `word` cannot go in the list ("blank", "repeated", "long"), or None.
+    `ignore` is the word being changed, which may keep its own spelling."""
+    if not word:
+        return "blank"
+    if len(word.split()) > MAX_TERM_WORDS:
+        return "long"
+    if any(w.lower() == word.lower() for w in words if w != ignore):
+        return "repeated"
+    return None
+
+
+def change_learned_words(path: str, change) -> list[str]:
+    """Apply `change(words) -> words` to the file as it is now, under VOCAB_LOCK, so a
+    word a Polish learned meanwhile is kept. Returns the new list."""
+    with VOCAB_LOCK:
+        words = change(learned_words(path))
+        _write_words(path, words)
+        return words
+
+
 def _squash(text: str) -> str:
     return re.sub(r"[\s\-_.]", "", text.lower())
 

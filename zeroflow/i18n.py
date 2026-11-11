@@ -70,6 +70,25 @@ EN = {
     "wiz.done": "Ready",
     "wiz.done_text": "Press Finish: Zero- Flow restarts in about 5 seconds. Then click where "
                      "you want to type, hold a key and speak:",
+    "tray.history": "Dictation history…", "tray.vocabulary": "Learned vocabulary…",
+    "tray.diagnostics": "Copy diagnostics",
+    "hist.title": "Dictation history", "hist.search": "Search",
+    "hist.copy": "Copy", "hist.delete": "Delete", "hist.clear": "Clear all",
+    "hist.copied": "Copied.",
+    "hist.clear_ask": "Delete the whole Dictation history? This cannot be undone.",
+    "hist.off": "\"Keep dictation history\" is off: new dictations are not saved. "
+                "Turn it on in Settings.",
+    "vocab.title": "Learned vocabulary",
+    "vocab.hint": "Names and terms Dictation should spell correctly. Changes apply to the "
+                  "next dictation.",
+    "vocab.add": "Add", "vocab.change": "Change", "vocab.delete": "Delete",
+    "vocab.tidy": "Tidy vocabulary", "vocab.saved": "Saved.",
+    "vocab.blank": "Type a word first.", "vocab.repeated": "That word is in the list already.",
+    "vocab.long": "A term is a name or a short phrase, at most 4 words.",
+    "vocab.tidy_running": "The AI is tidying the list…", "vocab.tidy_done": "Tidy finished.",
+    "vocab.tidy_failed": "Tidy failed: ",
+    "diag.copied": "Diagnostics copied. They hold no dictated words and no keys.",
+    "diag.failed": "Diagnostics could not be copied: ",
 }
 
 AR = {
@@ -136,6 +155,24 @@ AR = {
     "wiz.done": "جاهز",
     "wiz.done_text": "اضغط إنهاء: يُعاد تشغيل زيرو فلو خلال نحو 5 ثوانٍ. ثم انقر حيث تريد "
                      "الكتابة، واضغط مفتاحًا وتحدّث:",
+    "tray.history": "سجل الإملاء…", "tray.vocabulary": "المفردات المحفوظة…",
+    "tray.diagnostics": "نسخ معلومات التشخيص",
+    "hist.title": "سجل الإملاء", "hist.search": "بحث",
+    "hist.copy": "نسخ", "hist.delete": "حذف", "hist.clear": "مسح الكل",
+    "hist.copied": "تم النسخ.",
+    "hist.clear_ask": "حذف سجل الإملاء كله؟ لا يمكن التراجع عن ذلك.",
+    "hist.off": "خيار \"حفظ سجل الإملاء\" متوقف: لا يُحفظ الإملاء الجديد. فعّله من الإعدادات.",
+    "vocab.title": "المفردات المحفوظة",
+    "vocab.hint": "أسماء ومصطلحات يجب أن يكتبها الإملاء بشكل صحيح. تُطبَّق التغييرات على "
+                  "الإملاء التالي.",
+    "vocab.add": "إضافة", "vocab.change": "تعديل", "vocab.delete": "حذف",
+    "vocab.tidy": "ترتيب المفردات", "vocab.saved": "تم الحفظ.",
+    "vocab.blank": "اكتب كلمة أولًا.", "vocab.repeated": "هذه الكلمة موجودة في القائمة.",
+    "vocab.long": "المصطلح اسم أو عبارة قصيرة، 4 كلمات على الأكثر.",
+    "vocab.tidy_running": "الذكاء يرتب القائمة…", "vocab.tidy_done": "انتهى الترتيب.",
+    "vocab.tidy_failed": "فشل الترتيب: ",
+    "diag.copied": "تم نسخ معلومات التشخيص. لا تحتوي على كلمات مملاة ولا مفاتيح.",
+    "diag.failed": "تعذر نسخ معلومات التشخيص: ",
 }
 
 TABLES = {"en": EN, "ar": AR}

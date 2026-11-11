@@ -6,6 +6,31 @@ All notable work on the **Zero- Flow Engine**. Newest first.
 
 ## [2.0.0] — in progress
 
+### [2.0.0-alpha.8] — 2026-11-11 — History, vocabulary and diagnostics (phase 5d)
+
+#### 🗂️ What Zero- Flow keeps, through windows
+- **Dictation history…** in the tray: every dictation, newest first, with a search
+  (any case, English and Arabic), **Copy**, **Delete** and **Clear all** (asks first;
+  the history only, unlike Shift+F2, which also clears the Debug log). With "Keep
+  dictation history" off, the window says so and nothing is written. Copy keeps the
+  text out of clipboard history.
+- **Learned vocabulary…** in the tray: add, change and delete words, and **Tidy
+  vocabulary**, which runs Shift+F1's own maintenance on a worker. A blank, repeated
+  or sentence-long word is refused. Changes reach the next dictation with no restart.
+- Both windows change the files as they are at that moment, under their locks, so a
+  dictation or a learned word written while a window is open is never lost. Like
+  Settings, they let go of the program's keys while open.
+
+#### 🩺 Copy diagnostics
+- **Copy diagnostics** in the tray puts on the clipboard the version, `detect()`'s
+  facts, the settings in effect, whether a key is saved, the history and vocabulary
+  counts, and the last 200 lines of each Debug log (Dictation's and the Reader's).
+- It never holds a key, dictated words or the history. The saved key, anything shaped
+  like a known key, and an address's user part and query are hidden. A log line that
+  holds dictated words (now marked `[dictated]` when "Show dictated words in the log"
+  is on) or the text of any history entry is replaced by a note that it was left out.
+  Tests plant a key and words in every place they could leak from.
+
 ### [2.0.0-alpha.7] — 2026-11-11 — First-run wizard (phase 5c)
 
 #### 🧭 Set up through a window
