@@ -58,7 +58,8 @@ The reading voice is English.
 No. The models are public and download once without an account. Earlier versions asked
 Hugging Face about the models on every start, which made it print *"You are sending
 unauthenticated requests to the HF Hub"*; the engine no longer contacts it at all once
-the models are on disk.
+the models are on disk. If a downloaded Whisper model is missing a file (or one is empty),
+the engine fetches just the missing files at the pinned version.
 
 ### Which apps can it type into?
 Any app where `Ctrl+V` pastes text — Word, browsers, chat apps, code editors, Notepad.
@@ -74,7 +75,7 @@ stops the recording over and over. `Esc` cancels a recording.
 ### My laptop's F-keys change the volume instead
 Most laptops use F1–F12 for brightness and volume by default. Press `Fn + Esc` to turn
 on Fn-Lock (on many Lenovo, HP and ASUS models), or hold `Fn` with the key. You can also
-move the hotkeys to other keys in `.env` — [CONFIGURATION.md §2](../CONFIGURATION.md#2-changing-hotkeys).
+move the hotkeys to other keys in `settings.json` — [CONFIGURATION.md §2](../CONFIGURATION.md#2-changing-hotkeys).
 
 ### It typed "Thanks for watching!" — I never said that
 Whisper learned from subtitled videos, and a breath or a keystroke after your last word
@@ -82,7 +83,7 @@ is where it writes how those videos end: "Thank you.", "Have a good night.",
 "اشتركوا في القناة". The engine drops such an ending when the audio shows it was never
 said — it sits on sound far quieter than your speech, or Whisper was unsure of it — and
 keeps a "thank you" you really said. Endings that only videos have ("Thanks for
-watching", "اشتركوا في القناة") are always dropped from the end of a dictation. `flow_debug.log` records each one it drops
+watching", "اشتركوا في القناة") are always dropped from the end of a dictation. `flow_debug.log` (in `%LOCALAPPDATA%\ZeroFlow\logs`) records each one it drops
 ("Dropped an invented ending"). If one still gets through, speak a little closer to the
 microphone and stop the recording soon after you finish. To test it on your own voice:
 `tools/bench/record_mine.py` (see [ARCHITECTURE.md §7](../ARCHITECTURE.md#7-anti-hallucination-measures)).
@@ -106,7 +107,7 @@ win: use the raw modes `F5`/`F7`, which never run the AI model.
 ### Polish or Translate gives me my words back unchanged
 Either the AI model did not answer — the console then says **"AI unavailable"** — or it
 answered in the wrong language and the engine pasted your own words rather than, say,
-Chinese. `flow_debug.log` says which:
+Chinese. `flow_debug.log` (in `%LOCALAPPDATA%\ZeroFlow\logs`) says which:
 - `Built-in AI unavailable: …` — the reason follows. *runtime is not installed*: run
   `.\venv\Scripts\python.exe tools\get_llama.py` ([INSTALL.md step 6](INSTALL.md#6-install-the-built-in-ai))
   and restart the engine. A download error: the AI model could not be fetched the
@@ -115,10 +116,10 @@ Chinese. `flow_debug.log` says which:
   The built-in AI restarts itself once; if this repeats, look higher in the log for
   `The built-in AI stopped (code …)`. If the graphics card is short of memory, try the
   smaller model ([CONFIGURATION.md §6](../CONFIGURATION.md#a-the-built-in-ai-default)).
-- With `AI_PROVIDER="ollama"`: `Ollama request failed` means Ollama is not running
+- With `"AI_PROVIDER": "ollama"`: `Ollama request failed` means Ollama is not running
   (its icon sits by the clock); `Ollama returned HTTP 404` means no model by the name
   in `OLLAMA_MODEL_NAME` — check `ollama list`, or `ollama pull` it.
-- `Claude gave no answer: …` — with `AI_PROVIDER="claude"`: the reason names a
+- `Claude gave no answer: …` — with `"AI_PROVIDER": "claude"`: the reason names a
   rejected API key, a model the key may not use, or a rate limit.
 - `The AI did not answer in 'ar'` — the model drifted out of Arabic. Some small models
   do this often; [HARDWARE.md](HARDWARE.md#ai-model) lists which ones stay in Arabic.
@@ -131,15 +132,21 @@ it another way. The same goes for running the full engine (`Launch_Zero`) beside
 its halves (`Launch_Flow` or `Launch_Reader`).
 
 ### Where are my settings, logs and learned words?
-All in the project folder, and none of it is uploaded anywhere:
+Outside the project folder, and none of it is uploaded anywhere. Paste a path into the
+Explorer address bar to open it:
 
 | File | What |
 |---|---|
-| `.env` | your settings |
-| `flow_debug.log`, `reader_debug.log` | what each half did — look here first when something goes wrong |
-| `flow_history.md` | everything you dictated (trimmed automatically; `Shift+F2` clears it) |
-| `flow_vocabulary.txt` | names and terms the engine has learned (`Shift+F1` tidies it) |
+| `%APPDATA%\ZeroFlow\settings.json` | your settings (edit it, then restart the engine) |
+| `%APPDATA%\ZeroFlow\history.md` | everything you dictated (trimmed automatically; `Shift+F2` clears it) |
+| `%APPDATA%\ZeroFlow\vocabulary.txt` | names and terms the engine has learned (`Shift+F1` tidies it) |
+| `%LOCALAPPDATA%\ZeroFlow\logs\` | `flow_debug.log`, `reader_debug.log`: what each half did — look here first when something goes wrong. Also the crash logs and `builtin_ai.log` |
+| `%LOCALAPPDATA%\ZeroFlow\models` | the downloaded models (the `MODELS_DIR` setting) |
+| Windows Credential Manager | an API key for a cloud AI, as `ZeroFlow:<address>` — never in a file |
+
+An old `.env`, `flow_history.md` or `flow_vocabulary.txt` in the project folder was copied
+to the new places on the first start and is not read again.
 
 ### How do I update or uninstall it?
 See [INSTALL.md — Updating](INSTALL.md#updating) and [Uninstalling](INSTALL.md#uninstalling).
-Updates never touch your `.env`, history or vocabulary.
+Updates never touch your settings, history or vocabulary.

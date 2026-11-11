@@ -196,13 +196,13 @@ class Finding7RecordKeysReturnAtOnce(unittest.TestCase):
 class Finding8AWrongKeyIsReportedNotFatal(unittest.TestCase):
     def test_an_unknown_key_takes_the_default(self):
         with mock.patch.object(settings, "problems", []) as problems, \
-             mock.patch.dict(os.environ, {"HOTKEY_FIX": "f55"}):
+             mock.patch.dict(settings._VALUES, {"HOTKEY_FIX": "f55"}):
             self.assertEqual(settings.hotkey("HOTKEY_FIX", "shift+f3"), "shift+f3")
         self.assertEqual(len(problems), 1)
         self.assertIn('HOTKEY_FIX="f55"', problems[0])
 
     def test_a_good_key_is_kept(self):
-        with mock.patch.dict(os.environ, {"HOTKEY_FIX": "ctrl+alt+r"}):
+        with mock.patch.dict(settings._VALUES, {"HOTKEY_FIX": "ctrl+alt+r"}):
             self.assertEqual(settings.hotkey("HOTKEY_FIX", "shift+f3"), "ctrl+alt+r")
 
 

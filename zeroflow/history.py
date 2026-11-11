@@ -1,4 +1,4 @@
-"""flow_history.md: every dictation, kept to a fixed size."""
+"""The Dictation history (history.md in the data folder): every dictation, kept to a fixed size."""
 import logging
 import os
 import re
@@ -7,7 +7,7 @@ from datetime import datetime
 from zeroflow.paths import HISTORY_FILE
 
 
-# flow_history.md is trimmed back to its newest content once it grows past this.
+# The history file is trimmed back to its newest content once it grows past this.
 HISTORY_MAX_BYTES = 500_000
 
 
@@ -27,7 +27,7 @@ HISTORY_ENTRY = re.compile(r"^\[\d\d:\d\d:\d\d\] \[", re.MULTILINE)
 
 
 def cap_history_file() -> None:
-    """Trim flow_history.md to about half of HISTORY_MAX_BYTES once it passes the cap,
+    """Trim the history file to about half of HISTORY_MAX_BYTES once it passes the cap,
     so the dictation history can never grow without bound. Runs after every write.
 
     The cut lands on an entry's first line, so no dictation is kept half-written."""
@@ -41,6 +41,6 @@ def cap_history_file() -> None:
         kept = tail[start.start():] if start else ""
         with open(HISTORY_FILE, "w", encoding="utf-8") as f:
             f.write(f"[... older history trimmed on {datetime.now():%Y-%m-%d %H:%M} ...]\n\n{kept}")
-        logging.info("flow_history.md trimmed (exceeded size cap).")
+        logging.info("History file trimmed (exceeded size cap).")
     except Exception as e:
         logging.error(f"History cap failed: {e}")

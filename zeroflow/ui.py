@@ -78,15 +78,15 @@ def alert(title: str, text: str, icon: int = MB_ICONERROR) -> None:
 
 
 def report_setting_problems(problems: list[str], enable_toasts: bool = True) -> None:
-    """Say which .env settings were ignored, and why — in the console, the log and a
-    toast, since a hidden engine's console is never seen."""
+    """Say which settings were ignored, and why, and any notice about them — in the
+    console, the log and a toast, since a hidden engine's console is never seen."""
     for problem in problems:
-        logging.warning(f"Setting ignored: {problem}")
+        logging.warning(f"Setting notice: {problem}")
         print(f"{C_WARN}⚠️  {problem}{C_RESET}")
     if problems:
         show_toast("⚠️ Check your settings",
-                   f"{len(problems)} setting(s) in .env were ignored — the defaults are "
-                   f"used. Details in the log.", enable_toasts)
+                   f"{len(problems)} thing(s) in your settings need a look. "
+                   f"Details in the log.", enable_toasts)
 
 
 def already_running(what: str = "Zero- Flow") -> None:

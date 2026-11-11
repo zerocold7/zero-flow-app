@@ -8,7 +8,9 @@ with torch. Now each model the engine names is pinned to a commit
 """
 import os
 import re
+import shutil
 import sys
+import tempfile
 import unittest
 from unittest import mock
 
@@ -43,20 +45,52 @@ class TestTheTable(unittest.TestCase):
             self.assertIsNotNone(models.revision(stt.whisper_repo(name) or name), name)
 
 
+WHISPER_FOLDER = ("config.json", "preprocessor_config.json", "model.bin", "tokenizer.json",
+                  "vocabulary.json")
+
+
 class TestWhisper(unittest.TestCase):
-    def resolve(self, name, cached=True):
+    def model_folder(self, files=WHISPER_FOLDER):
+        folder = tempfile.mkdtemp(prefix="zeroflow-whisper-")
+        self.addCleanup(shutil.rmtree, folder, True)
+        for name in files:
+            with open(os.path.join(folder, name), "w") as f:
+                f.write("x")
+        return folder
+
+    def resolve(self, name, cached=True, folder=None):
         calls = []
+        folder = folder or self.model_folder()
 
         def fake_download(repo, **kwargs):
             calls.append((repo, kwargs))
             if kwargs.get("local_files_only") and not cached:
                 raise FileNotFoundError("not cached")
-            return "model-dir"
+            return folder
         with mock.patch.object(stt, "WHISPER_MODEL_NAME", name), \
              mock.patch.object(stt, "snapshot_download", side_effect=fake_download), \
              mock.patch("sys.stdout"):
-            self.assertEqual(stt.resolve_whisper_model(), "model-dir")
+            self.assertEqual(stt.resolve_whisper_model(), folder)
         return calls
+
+    def test_a_cached_folder_missing_a_file_is_completed(self):
+        """Live test, 2026-11-11: config.json vanished from the cached large-v3 folder,
+        and every dictation failed (type_error.305) for days, on the CPU as well, because
+        the cached folder was used as it was. A missing file is now fetched again."""
+        incomplete = self.model_folder([f for f in WHISPER_FOLDER if f != "config.json"])
+        calls = self.resolve("large-v3", folder=incomplete)
+        self.assertEqual(len(calls), 2)
+        self.assertFalse(calls[1][1].get("local_files_only"))
+        self.assertEqual(calls[1][1]["revision"], models.REVISIONS["Systran/faster-whisper-large-v3"])
+
+    def test_an_empty_file_counts_as_missing(self):
+        folder = self.model_folder()
+        open(os.path.join(folder, "model.bin"), "w").close()
+        self.assertEqual(stt.missing_whisper_files(folder), ["model.bin"])
+
+    def test_a_complete_folder_is_used_without_the_network(self):
+        (_, kwargs), = self.resolve("large-v3")
+        self.assertTrue(kwargs["local_files_only"])
 
     def test_a_short_name_is_fetched_at_its_pinned_revision(self):
         (repo, kwargs), = self.resolve("large-v3")

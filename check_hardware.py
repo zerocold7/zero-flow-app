@@ -3,10 +3,11 @@ Zero- Flow Engine — hardware check.
 
 Looks at this PC (graphics card and its memory, RAM, CPU), picks the matching preset
 from presets/, and prints the settings to use and anything still missing. With
---apply it writes those settings into .env, keeping everything else you have set.
+--apply it writes those settings into your settings file (or into .env before the
+engine's first start, which moves .env into the settings file), keeping everything else.
 
     python check_hardware.py                     # report + recommendation
-    python check_hardware.py --apply             # ...and write the settings into .env
+    python check_hardware.py --apply             # ...and write the settings in
     python check_hardware.py --tier cpu-only     # use a tier of your choosing
 
 Standard library only, so it runs straight after cloning, before `pip install`.
@@ -23,6 +24,8 @@ import shutil
 import subprocess
 import sys
 import urllib.request
+
+from zeroflow import paths as zeroflow_paths, storage
 
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 PRESETS_DIR = os.path.join(BASE_DIR, "presets")
@@ -353,7 +356,7 @@ def software_checks(tier, settings):
         notes.append((False, "nvidia-cublas-cu12 / nvidia-cudnn-cu12 are missing, so the speech "
                              "model cannot use your card: keep those two lines in requirements.txt"))
 
-    env = parse_env(_read(ENV_FILE)) if os.path.exists(ENV_FILE) else {}
+    env = current_settings()
     provider = settings.get("AI_PROVIDER", "builtin")
     if provider == "builtin":
         variant = settings.get("LLAMA_VARIANT", "cpu")
@@ -382,7 +385,7 @@ def software_checks(tier, settings):
         else:
             notes.append((True, f"Ollama is running and has {wanted}"))
     else:
-        notes.append((True, f"the AI runs through {provider} (AI_URL / AI_API_KEY in .env)"))
+        notes.append((True, f"the AI runs through {provider} (AI_URL in the settings, its key in Credential Manager)"))
 
     size = settings["WHISPER_MODEL_NAME"]
     repo = size if "/" in size else f"Systran/faster-whisper-{size}"
@@ -415,9 +418,23 @@ def merge_env(text, settings):
     return "\n".join(out) + "\n"
 
 
+def current_settings():
+    """The settings in effect: the settings file once the engine has made it, before
+    that the old .env (which the engine's first start moves into the settings file)."""
+    if os.path.exists(zeroflow_paths.settings_file()):
+        values = storage.load(zeroflow_paths.settings_file())
+        return {name: str(value).lower() if isinstance(value, bool) else str(value)
+                for name, value in values.items()}
+    return parse_env(_read(ENV_FILE)) if os.path.exists(ENV_FILE) else {}
+
+
 def apply(settings):
-    """Write `settings` into .env (created from .env.example if there is none yet).
-    The previous .env is kept as .env.bak."""
+    """Write `settings` into the settings file, if the engine has made one; returns its
+    path. Otherwise into .env (created from .env.example if there is none yet), where
+    the first start finds them; the previous .env is kept as .env.bak."""
+    if os.path.exists(zeroflow_paths.settings_file()):
+        storage.update(zeroflow_paths.settings_file(), dict(settings))
+        return zeroflow_paths.settings_file()
     if os.path.exists(ENV_FILE):
         shutil.copyfile(ENV_FILE, ENV_FILE + ".bak")
         source = ENV_FILE
@@ -434,7 +451,7 @@ def apply(settings):
 # =====================================================================
 def main(argv=None):
     parser = argparse.ArgumentParser(description="Recommend Zero- Flow settings for this PC.")
-    parser.add_argument("--apply", action="store_true", help="write the settings into .env")
+    parser.add_argument("--apply", action="store_true", help="write the settings in")
     parser.add_argument("--tier", choices=sorted(TIERS), help="use this tier instead of detecting one")
     args = parser.parse_args(argv)
 
@@ -451,7 +468,7 @@ def main(argv=None):
         print(f"GPU    : {gpu['name']} — {gpu['vram_gb']} GB ({kind})")
 
     tier, settings, reasons = recommend(facts, args.tier)
-    current_env = parse_env(_read(ENV_FILE)) if os.path.exists(ENV_FILE) else {}
+    current_env = current_settings()
     note = keep_chosen_model(settings, current_env)
     if note:
         reasons.append(note)
@@ -469,10 +486,13 @@ def main(argv=None):
 
     if args.apply:
         source = apply(settings)
-        backup = " (previous .env saved as .env.bak)" if source == ENV_FILE else " (from .env.example)"
-        print(f"\nWrote these settings into .env{backup}. Restart the engine to use them.")
+        if source == zeroflow_paths.settings_file():
+            print(f"\nWrote these settings into {source}. Restart the engine to use them.")
+        else:
+            backup = " (previous .env saved as .env.bak)" if source == ENV_FILE else " (from .env.example)"
+            print(f"\nWrote these settings into .env{backup}. Start the engine to use them.")
     else:
-        print("\nTo use them: python check_hardware.py --apply   (or edit .env by hand)")
+        print("\nTo use them: python check_hardware.py --apply")
     print("More: docs/HARDWARE.md")
     return 0
 

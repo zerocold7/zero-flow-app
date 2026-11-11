@@ -64,7 +64,7 @@ the machine. The one exception is your choice: pointing it at a cloud AI instead
 > **This is the main repository of Zero- Flow Engine.** Version 2 lives here; it replaces
 > `local-voice-flow` (1.x), which is no longer developed.
 >
-> **Status:** `2.0.0-alpha.4.5`. Version 2 is in alpha, so expect changes between
+> **Status:** `2.0.0-alpha.5`. Version 2 is in alpha, so expect changes between
 > releases; see the [CHANGELOG](CHANGELOG.md).
 
 ## How it works
@@ -118,8 +118,7 @@ Then install the packages for your tier, write your settings, install the built-
 (Ollama, LM Studio or a cloud AI such as Claude remain options —
 [CONFIGURATION.md §6](CONFIGURATION.md#6-choosing-the-ai-provider)).
 Never done anything like this? The **[Beginner Guide](docs/SETUP-CPU-LAPTOP.md)** walks
-through every click (also as a [printable PDF](docs/Zero-Flow-Setup-Guide.pdf), and
-[in Arabic](docs/SETUP-CPU-LAPTOP.ar.md) · [PDF](docs/Zero-Flow-Setup-Guide.ar.pdf)).
+through every click (also [in Arabic](docs/SETUP-CPU-LAPTOP.ar.md)).
 
 ## Keys
 
@@ -135,7 +134,7 @@ through every click (also as a [printable PDF](docs/Zero-Flow-Setup-Guide.pdf), 
 | `F9` | Translate English → Arabic | | `Esc` | Cancel recording / stop reading |
 | `F10` | Translate Arabic → English | | | |
 
-Every key can be changed in `.env` ([CONFIGURATION.md §2](CONFIGURATION.md#2-changing-hotkeys)).
+Every key can be changed in `settings.json` ([CONFIGURATION.md §2](CONFIGURATION.md#2-changing-hotkeys)).
 Laptop F-keys changing the volume instead? Press `Fn + Esc`.
 
 **Spoken commands.** At the **start** of a dictation: *"new line"* (starts a new line),
@@ -166,7 +165,7 @@ Each has a twin that starts with no window — `Launch_Zero_Silent.vbs`,
 |---|---|---|
 | **Install** — every PC, step by step | [INSTALL.md](docs/INSTALL.md) | [INSTALL.ar.md](docs/INSTALL.ar.md) |
 | **Hardware & tuning** — tiers, measured speeds, fixes | [HARDWARE.md](docs/HARDWARE.md) | [HARDWARE.ar.md](docs/HARDWARE.ar.md) |
-| **Beginner guide** — no graphics card, every click | [SETUP-CPU-LAPTOP.md](docs/SETUP-CPU-LAPTOP.md) · [PDF](docs/Zero-Flow-Setup-Guide.pdf) | [SETUP-CPU-LAPTOP.ar.md](docs/SETUP-CPU-LAPTOP.ar.md) · [PDF](docs/Zero-Flow-Setup-Guide.ar.pdf) |
+| **Beginner guide** — no graphics card, every click | [SETUP-CPU-LAPTOP.md](docs/SETUP-CPU-LAPTOP.md) | [SETUP-CPU-LAPTOP.ar.md](docs/SETUP-CPU-LAPTOP.ar.md) |
 | **FAQ** | [FAQ.md](docs/FAQ.md) | |
 | **Every setting** — keys, models, prompts, other AI providers, languages | [CONFIGURATION.md](CONFIGURATION.md) | |
 | **How it works inside** | [ARCHITECTURE.md](ARCHITECTURE.md) | |
@@ -175,10 +174,11 @@ Each has a twin that starts with no window — `Launch_Zero_Silent.vbs`,
 ## When something goes wrong
 
 1. `python check_hardware.py` — every line under *Checks* should say `[ok]`.
-2. Look at `flow_debug.log` (dictation) and `reader_debug.log` (reader) in the project
-   folder: every fallback and failure is recorded there, with how long each clip took.
-   What you dictated is not (only its length); set `LOG_DICTATION_TEXT=True` in `.env`
-   to see the words while you investigate.
+2. Look at `flow_debug.log` (dictation) and `reader_debug.log` (reader) in
+   `%LOCALAPPDATA%\ZeroFlow\logs`: every fallback and failure is recorded there, with how
+   long each clip took. What you dictated is not (only its length); set
+   `"LOG_DICTATION_TEXT": true` in `%APPDATA%\ZeroFlow\settings.json` to see the words
+   while you investigate.
 3. [HARDWARE.md §5](docs/HARDWARE.md#5-is-it-tuned-right-read-the-signs) matches
    symptoms to fixes; the [FAQ](docs/FAQ.md) covers the rest.
 
@@ -195,7 +195,9 @@ clipboard stays home: Polish only shows it to an AI on your PC.
 
 On the PC itself:
 - **The debug log never holds your words**, only how long each dictation was. Your
-  dictations are kept in one place, `flow_history.md`, which `Shift+F2` clears.
+  dictations are kept in one place, `%APPDATA%\ZeroFlow\history.md`, which `Shift+F2`
+  clears. Your settings are one file beside it; an API key, if you use a cloud AI, is kept
+  in Windows Credential Manager, never in a file.
 - **Your clipboard comes back whole** after every dictation — text, a picture or copied
   files — and the engine's own pastes stay out of clipboard history (`Win+V`) and cloud
   clipboard sync.
@@ -215,7 +217,7 @@ punctuation, quick start/stop/cancel of recordings, AI failures, the vocabulary 
 history files, sentence batching, the reader's audio-thread safety and supervision,
 one-copy-at-a-time, hardware tiers and presets. A few start real Python processes, to
 test how Windows treats them; six more use the real clipboard and run only with
-`ZEROFLOW_REAL_CLIPBOARD=1`.
+`"ZEROFLOW_REAL_CLIPBOARD": 1`.
 
 | Tool | What it proves |
 |---|---|

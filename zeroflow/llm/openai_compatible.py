@@ -1,10 +1,12 @@
 """An AI provider for any server that speaks the OpenAI chat/completions format: LM
 Studio, the llama.cpp server, vLLM, and cloud services such as OpenAI or Groq.
 
-    AI_PROVIDER="openai"
+    AI_PROVIDER="openai"                                 # in settings.json
     AI_URL="http://127.0.0.1:8080/v1/chat/completions"   # your server's address
     AI_MODEL="the-model-id"                              # as the server names it
-    AI_API_KEY=""                                        # cloud services only
+
+For a cloud service the API key is not in settings.json: it is the Windows Credential
+Manager entry "ZeroFlow:<scheme, host and port of AI_URL>", e.g. "ZeroFlow:https://api.openai.com".
 
 With a cloud service, what you dictate goes to that company's servers; the clipboard
 Polish uses as context only with POLISH_CLIPBOARD_CONTEXT=on. Local servers keep it

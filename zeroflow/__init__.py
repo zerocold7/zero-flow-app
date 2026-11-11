@@ -1,7 +1,7 @@
 """
 Zero- Flow Engine — private, offline voice dictation and read-aloud for Windows.
 
-    paths, settings, logs     where files live, .env, the debug and crash logs
+    paths, settings, logs     where files live, settings.json, the debug and crash logs
     signals                   named Windows objects shared by the two processes
     ui, personas              console/toasts/tray/tones; prompts, macros, vocabulary seed
     vocabulary, history       the learned-word list and the dictation history
@@ -16,4 +16,4 @@ Entry points stay at the top of the project: local_flow.py, zero_flow.py, and
 `python -m reader`. Nothing here imports torch or the voice model; only stt imports
 faster-whisper, so the reader process never loads Whisper's CUDA libraries.
 """
-__version__ = "2.0.0-alpha.4.5"
+__version__ = "2.0.0-alpha.5"

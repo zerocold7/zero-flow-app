@@ -93,9 +93,14 @@ This step takes several minutes.
 python check_hardware.py --apply
 ```
 
-This creates `.env` with the settings for your tier (if you already have a `.env`, it
-updates just those lines and saves the old one as `.env.bak`). Every other setting —
-hotkeys, voice, chimes — is explained in [CONFIGURATION.md](../CONFIGURATION.md).
+Your settings live in one file, `%APPDATA%\ZeroFlow\settings.json`. The engine creates it
+the first time it starts. Before that first start, this command creates a `.env` in the
+project folder with the settings for your tier (if you already have a `.env`, it updates
+just those lines and saves the old one as `.env.bak`); the first start reads that `.env`
+once, writes `settings.json` from it and never reads `.env` again. Once `settings.json`
+exists, the command writes into it instead. Every other setting — hotkeys, voice, chimes —
+is explained in [CONFIGURATION.md](../CONFIGURATION.md#1-settingsjson-reference). To change
+a setting later, edit `settings.json` with Notepad and restart the engine.
 
 ## 6. Install the built-in AI
 Polish, Translate and the other AI keys run an AI model on llama.cpp's `llama-server`,
@@ -125,7 +130,7 @@ account, nothing to pull: Google's **Gemma 4 E4B** (5.15 GB, Apache 2.0 licence)
 
 Run `python check_hardware.py` again — every line under *Checks* should now say `[ok]`.
 
-> **Rather use Ollama, or a cloud AI?** Set `AI_PROVIDER` in `.env` —
+> **Rather use Ollama, or a cloud AI?** Set `AI_PROVIDER` in `settings.json` —
 > [CONFIGURATION.md §6](../CONFIGURATION.md#6-choosing-the-ai-provider). If the built-in
 > AI is not installed, the engine says so when it starts (in the window, the log and a
 > pop-up, naming `tools/get_llama.py`) and uses Ollama instead.
@@ -171,7 +176,7 @@ git pull
 Updating from a version that used Ollama? Also run step 6
 (`.\venv\Scripts\python.exe tools\get_llama.py`) — until you do, the engine keeps using
 Ollama and says so at start-up.
-Your `.env`, vocabulary and history are never touched by an update. Re-run
+Your settings, vocabulary and history (in `%APPDATA%\ZeroFlow`) are never touched by an update. Re-run
 `python check_hardware.py` to see whether the recommendations changed.
 
 ## Uninstalling
@@ -179,12 +184,17 @@ Your `.env`, vocabulary and history are never touched by an update. Re-run
    the built-in AI's `runtime\` folder goes with it.
 2. Downloaded models: delete the `models--Systran--faster-whisper-*`,
    `models--hexgrad--Kokoro-82M` and `models--google--gemma-4-E4B-it-qat-q4_0-gguf` (or
-   `…-E2B-…`) folders in `%USERPROFILE%\.cache\huggingface\hub`.
-3. Python and Git uninstall from *Settings → Apps*. If you used Ollama too, remove its
+   `…-E2B-…`) folders in the `hub` folder inside your models folder — by default
+   `%LOCALAPPDATA%\ZeroFlow\models` (the `MODELS_DIR` setting; or `HF_HOME` if you had set it).
+3. Your own files: delete `%APPDATA%\ZeroFlow` (settings, vocabulary, history) and
+   `%LOCALAPPDATA%\ZeroFlow` (logs, models). If you used a cloud AI, remove its key under
+   Control Panel → Credential Manager → Windows Credentials (the entries named `ZeroFlow:…`).
+4. Python and Git uninstall from *Settings → Apps*. If you used Ollama too, remove its
    model first (`ollama rm <name>`), then Ollama itself the same way.
 
 ---
 
 Something not working? [HARDWARE.md §5](HARDWARE.md#5-is-it-tuned-right-read-the-signs)
 for speed problems, the [FAQ](FAQ.md) for everything else, and the two log files —
-`flow_debug.log` and `reader_debug.log` in the project folder — for what actually happened.
+`flow_debug.log` and `reader_debug.log` in `%LOCALAPPDATA%\ZeroFlow\logs` — for what
+actually happened.

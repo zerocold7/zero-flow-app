@@ -107,7 +107,7 @@ def run_memory_maintenance() -> None:
                 with open(VOCAB_CACHE_FILE, "w", encoding="utf-8") as f:
                     f.write("\n".join([cleaned, *added]) + "\n")
             print(f"{ui.C_GOOD}✅ Vocabulary successfully compressed and organized "
-                  f"(previous list saved as flow_vocabulary.txt.bak).{ui.C_RESET}")
+                  f"(previous list saved as vocabulary.txt.bak, in %APPDATA%\\ZeroFlow).{ui.C_RESET}")
             ui.show_toast("✅ Maintenance Complete", "Memory files pruned successfully.", ENABLE_TOASTS)
             ui.play_tone("clean", ENABLE_AUDIO_CHIMES)
         except Exception as e:
@@ -323,7 +323,7 @@ def transcribe_and_inject(audio: np.ndarray, mode: str, context: str) -> None:
     if text:
         text = refine_text(text, mode, context)
     # Kept before the paste: if the paste fails (a clipboard another app holds), the
-    # words are still in flow_history.md rather than lost.
+    # words are still in history.md rather than lost.
     log_to_history(text, mode)
     inject_text(text, lead)
 
@@ -496,7 +496,7 @@ def report_fatal_error(what: str) -> None:
     logging.critical(f"Fatal {what} crash: {traceback.format_exc()}")
     print(f"{ui.C_ERR}❌ The {what} stopped with an error — details in flow_debug.log.{ui.C_RESET}")
     ui.alert("Zero- Flow stopped", f"The {what} stopped with an error and is not running.\n\n"
-                                   f"The details are in flow_debug.log, in the program folder.")
+                                   f"The details are in flow_debug.log, in %LOCALAPPDATA%\\ZeroFlow\\logs.")
 
 
 def run() -> int:
@@ -510,7 +510,7 @@ def run() -> int:
 
 
 def key_sections(panic: str = "cancel") -> list:
-    """The dictation keys, for the start-up banner — as set in .env, not as shipped."""
+    """The dictation keys, for the start-up banner — as set in the settings, not as shipped."""
     hk, magenta = HOTKEYS, ui.Fore.MAGENTA
     return [
         ("DICTATE", "the key forces the language", [

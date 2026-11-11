@@ -20,7 +20,7 @@ class SettingsTestCase(unittest.TestCase):
         self.addCleanup(patcher.stop)
 
     def env(self, **values):
-        return mock.patch.dict(os.environ, {k: str(v) for k, v in values.items()})
+        return mock.patch.dict(settings._VALUES, {k: str(v) for k, v in values.items()})
 
 
 class TestReading(SettingsTestCase):

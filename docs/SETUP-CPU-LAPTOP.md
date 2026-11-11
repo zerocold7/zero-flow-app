@@ -1,8 +1,6 @@
 # Zero- Flow Engine — Beginner Setup Guide (Windows, no GPU needed)
 
-> 📄 Prefer a printable / offline copy? **[Download the PDF version](Zero-Flow-Setup-Guide.pdf)**.
->
-> 🌍 **بالعربية:** **[اقرأ هذا الدليل بالعربية](SETUP-CPU-LAPTOP.ar.md)** (نسخة PDF: [PDF](Zero-Flow-Setup-Guide.ar.pdf)).
+> 🌍 **بالعربية:** **[اقرأ هذا الدليل بالعربية](SETUP-CPU-LAPTOP.ar.md)**.
 >
 > 🎮 **Have an NVIDIA, AMD or Intel graphics card?** Follow the [Install Guide](INSTALL.md) instead — it covers every kind of PC, and the [Hardware Guide](HARDWARE.md) explains what to expect from yours.
 
@@ -87,7 +85,7 @@ cd zero-flow-app
 
 ## Step 5 — Laptop-friendly settings
 
-Create your settings file and open it:
+Create your starting settings file and open it:
 
 ```powershell
 Copy-Item .env.example .env
@@ -102,6 +100,8 @@ WHISPER_DEVICE="cpu"
 LLAMA_VARIANT="cpu"
 READER_DEVICE="cpu"
 ```
+
+> 💡 **What happens to this file:** the engine reads `.env` **once**, the first time you start it (Step 8). It saves your settings in its own file, `%APPDATA%\ZeroFlow\settings.json`, and never reads `.env` again. So this edit counts only before the first start. To change a setting later, edit `settings.json` instead (paste `%APPDATA%\ZeroFlow` into the File Explorer address bar to find it).
 
 > 💡 **Why:** the default speech model (`large-v3`) is built for a big graphics card — on a laptop processor it takes longer than you took to speak. `small` for speech fits comfortably in a 16 GB laptop next to the built-in AI, and the three `cpu` lines tell the engine — the speech model, the AI and the voice — not to look for a graphics card.
 
@@ -143,7 +143,7 @@ The **AI model** itself — Google's **Gemma 4 E4B**, about **5.15 GB** — down
 
 > ⚠️ **If Windows shows a blue "Windows protected your PC" box**, click **More info**, then **Run anyway**. This is just Windows being cautious about a new file — it's your own project file.
 
-A console window opens. The **first** launch downloads the speech model (~500 MB), the reading voice (~350 MB) and the AI model (~5.15 GB) — let it finish; on a slow connection this can take a while. Later launches load everything from your own disk and don't need the internet at all.
+A console window opens. The **first** launch downloads the speech model (~500 MB), the reading voice (~350 MB) and the AI model (~5.15 GB) — let it finish; on a slow connection this can take a while. If a download is cut off, start the engine again: it fetches any missing model files by itself. Later launches load everything from your own disk and don't need the internet at all.
 
 **Dictation is ready** when the window shows a box titled **`Z E R O -   F L O W   E N G I N E`** with the list of keys under it. **Reading aloud is ready** a little later, when this line appears:
 
@@ -230,13 +230,13 @@ Right-click the tray icon to switch voice, to pause the reader (**Suspend Reader
 | **`winget is not recognized`** | Update **App Installer** from the Microsoft Store, then reopen PowerShell. |
 | **It types in the wrong language** | Use the matching key: F5/F6 for English, F7/F8 for Arabic. The key decides the language. |
 | **Hotkeys do nothing in one specific app** | Right-click `Launch_Zero.bat` and choose **Run as administrator**. |
-| **Polish / Translate types my words unchanged** | Look at the console when the engine starts: if it says the built-in AI is not installed, do Step 7 and restart the engine. Otherwise open `flow_debug.log` and look for `Built-in AI unavailable` — the reason follows, and `builtin_ai.log` in `C:\zero-flow-app` has the AI's own messages. |
+| **Polish / Translate types my words unchanged** | Look at the console when the engine starts: if it says the built-in AI is not installed, do Step 7 and restart the engine. Otherwise open `flow_debug.log` and look for `Built-in AI unavailable` — the reason follows, and `builtin_ai.log` has the AI's own messages. Both are in `%LOCALAPPDATA%\ZeroFlow\logs` (paste that into the File Explorer address bar). |
 | **`F4` does nothing** | Make sure the text is **highlighted** first, and that the window has shown `Voice model ready.` The reader won't speak while a dictation is recording. Check you started `Launch_Zero.bat`, not `Launch_Flow.bat`. |
-| **Everything feels too slow** | In `.env` set `WHISPER_MODEL_NAME="base"`, save, and restart the engine. |
+| **Everything feels too slow** | In `%APPDATA%\ZeroFlow\settings.json` set `"WHISPER_MODEL_NAME": "base"`, save, and restart the engine. |
 | **SmartScreen blocks the launcher** | Click **More info**, then **Run anyway**. |
 | **Pressing F5–F10 does nothing at all** | Your laptop's F-keys are in media mode. Press `Fn + Esc` to enable Fn-Lock (Step 9), or hold `Fn` together with the key. |
-| **The laptop gets hot / fans get loud** | Use the raw modes `F5`/`F7` (they skip the AI). Confirm `.env` has `small` (not `medium`). Drop to `base`, or to the smaller AI model, for more cooling. See below. |
-| **Something else went wrong** | Open `flow_debug.log` (dictation) or `reader_debug.log` (reading) in `C:\zero-flow-app` with Notepad — the last lines say what happened. |
+| **The laptop gets hot / fans get loud** | Use the raw modes `F5`/`F7` (they skip the AI). Confirm `settings.json` has `small` (not `medium`). Drop to `base`, or to the smaller AI model, for more cooling. See below. |
+| **Something else went wrong** | Open `flow_debug.log` (dictation) or `reader_debug.log` (reading) in `%LOCALAPPDATA%\ZeroFlow\logs` with Notepad — the last lines say what happened. |
 
 ---
 
@@ -245,14 +245,14 @@ On a CPU laptop, **bigger models = more heat.** The biggest heat source is the A
 
 - **For the least heat, use the raw modes `F5` (English) and `F7` (Arabic).** They type exactly what you say **without** running the AI, so the CPU barely warms up. Only use `F6`/`F8` (polish) and `F9`/`F10` (translate) when you actually need them — those are what run the AI model.
 - **The heat is momentary.** The engine only works the CPU while it's processing (the few seconds after you stop a recording, or while it prepares speech). The rest of the time it sits idle and cool.
-- **Still warm or slow?** Set `WHISPER_MODEL_NAME="base"` in `.env` (faster and cooler), then restart.
-- **Keep `.env` light:** `small` for speech. Avoid `medium` on a laptop — it's the usual cause of fan noise and heat. For a lighter AI, switch to Gemma 4 E2B (see the table below).
+- **Still warm or slow?** Set `"WHISPER_MODEL_NAME": "base"` in `settings.json` (faster and cooler), then restart.
+- **Keep `settings.json` light:** `small` for speech. Avoid `medium` on a laptop — it's the usual cause of fan noise and heat. For a lighter AI, switch to Gemma 4 E2B (see the table below).
 - **Airflow:** use the laptop on a hard surface (not a bed or cushion) so the vents aren't blocked.
 
 ---
 
 ## Making it faster or more accurate
-After changing any of these in `.env`, **save the file and restart the engine** (close the console and run the launcher again).
+After changing any of these in `%APPDATA%\ZeroFlow\settings.json`, **save the file and restart the engine** (close the console and run the launcher again).
 
 **Speech model** (`WHISPER_MODEL_NAME`):
 
@@ -264,10 +264,10 @@ After changing any of these in `.env`, **save the file and restart the engine** 
 
 **AI model** (two lines, `AI_BUILTIN_REPO` and `AI_BUILTIN_FILE` — the new one downloads by itself on the next start):
 
-| Model | Lines in `.env` | Trade-off |
+| Model | Lines in `settings.json` | Trade-off |
 |---|---|---|
-| Gemma 4 E4B (5.15 GB) | `AI_BUILTIN_REPO="google/gemma-4-E4B-it-qat-q4_0-gguf"`<br>`AI_BUILTIN_FILE="gemma-4-E4B_q4_0-it.gguf"` | Recommended — the default; good Arabic + English. |
-| Gemma 4 E2B (3.35 GB) | `AI_BUILTIN_REPO="google/gemma-4-E2B-it-qat-q4_0-gguf"`<br>`AI_BUILTIN_FILE="gemma-4-E2B_q4_0-it.gguf"` | Smaller and lighter, for 8 GB laptops. Its Arabic has not been tested yet. |
+| Gemma 4 E4B (5.15 GB) | `"AI_BUILTIN_REPO": "google/gemma-4-E4B-it-qat-q4_0-gguf"`<br>`"AI_BUILTIN_FILE": "gemma-4-E4B_q4_0-it.gguf"` | Recommended — the default; good Arabic + English. |
+| Gemma 4 E2B (3.35 GB) | `"AI_BUILTIN_REPO": "google/gemma-4-E2B-it-qat-q4_0-gguf"`<br>`"AI_BUILTIN_FILE": "gemma-4-E2B_q4_0-it.gguf"` | Smaller and lighter, for 8 GB laptops. Its Arabic has not been tested yet. |
 
 Prefer Ollama or another AI service? See §6 of [CONFIGURATION.md](../CONFIGURATION.md).
 

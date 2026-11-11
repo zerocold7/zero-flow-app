@@ -42,15 +42,17 @@ Checks:
   [ok] the AI model downloads on first start (about 5.15 GB)
 ```
 
-Then write those settings into your `.env` (everything else you have set is kept, and
-the old file is saved as `.env.bak`):
+Then write those settings (everything else you have set is kept). They go into
+`%APPDATA%\ZeroFlow\settings.json` once the engine has created it; before the first
+start they go into a `.env` in the project folder (the old one is saved as `.env.bak`),
+which the first start moves into `settings.json`:
 
 ```powershell
 python check_hardware.py --apply
 ```
 
 Disagree with its choice? Pick the tier yourself: `python check_hardware.py --tier cpu-only --apply`.
-Or skip the script and copy the matching file from [`presets/`](../presets) to `.env`.
+Or skip the script and copy the matching file from [`presets/`](../presets) to `.env` before the first start (or copy its values into `settings.json` afterwards).
 
 ---
 
@@ -88,7 +90,7 @@ CPU (not yet measured).
   Gemma 4 E4B 3.2 GB ≈ **5.3 GB**. On 4–5 GB cards the checker picks `small` (≈0.4 GB)
   and Gemma 4 E2B (≈2 GB) ≈ **3.5 GB**. Not yet tried on a real laptop card: if the AI
   does not fit, `flow_debug.log` says *Built-in AI unavailable* and Polish pastes your
-  own words — set `LLAMA_VARIANT="cpu"` (then run `tools\get_llama.py --variant cpu`)
+  own words — set `"LLAMA_VARIANT": "cpu"` (then run `tools\get_llama.py --variant cpu`)
   to run the AI on the processor instead.
 - **Plug the charger in.** Laptop GPUs slow down a lot on battery.
 
@@ -115,7 +117,7 @@ system memory and are no faster than the CPU for these models.
   engine (CTranslate2) and the voice (PyTorch) can only use NVIDIA cards.
 - **The AI can use your card:** the checker picks llama.cpp's `vulkan` build, which
   runs on Radeon and Arc cards. Not yet tried on one — if Polish fails,
-  `flow_debug.log` says why; `LLAMA_VARIANT="cpu"` (with `tools\get_llama.py
+  `flow_debug.log` says why; `"LLAMA_VARIANT": "cpu"` (with `tools\get_llama.py
   --variant cpu`) runs it on the processor instead.
 - **Install:** as the CPU-only tier (delete the two `nvidia-` lines).
 
@@ -145,7 +147,7 @@ marked *estimate* elsewhere in this guide is scaled from these numbers by model 
 
 ## 4. The settings that matter
 
-All of them live in `.env` (restart the engine after changing it). Full reference:
+All of them live in `%APPDATA%\ZeroFlow\settings.json` (restart the engine after changing it). Full reference:
 [CONFIGURATION.md](../CONFIGURATION.md).
 
 ### Speech model — `WHISPER_MODEL_NAME`
@@ -161,9 +163,10 @@ The biggest single lever. Bigger is more accurate, especially for **Arabic**, an
 | `distil-large-v3` | 1.5 GB | ≈2 / 1 GB | ≈6 s | near `large-v3` — **English only**, useless for the Arabic keys |
 
 Bold = measured; the rest are estimates from model size. Downloads happen once, on
-the first start after you change the setting.
+the first start after you change the setting. If a downloaded model folder lacks a file
+(or has an empty one), the engine fetches the missing files at the pinned version.
 
-**`large-v3-turbo`** (`WHISPER_MODEL_NAME="mobiuslabsgmbh/faster-whisper-large-v3-turbo"`,
+**`large-v3-turbo`** (`"WHISPER_MODEL_NAME": "mobiuslabsgmbh/faster-whisper-large-v3-turbo"`,
 1.6 GB) is worth it **only if you dictate English alone**. Measured on an RTX 4070
 with `tools/bench/bench_stt.py`: English just as accurate as `large-v3` and 35% faster
 (0.29 vs 0.46 s per clip) — but Arabic far worse (56% vs 35% character errors, and
@@ -181,7 +184,7 @@ Used only by Polish (`F6`/`F8`), Translate (`F9`/`F10`), fix-line (`Shift+F3`),
 vocabulary clean-up (`Shift+F1`) and the reader's optional Smart Cleaning. The raw
 modes never touch it.
 
-It runs **inside the engine** (`AI_PROVIDER="builtin"`, the default): llama.cpp's
+It runs **inside the engine** (`"AI_PROVIDER": "builtin"`, the default): llama.cpp's
 `llama-server`, installed once with `tools\get_llama.py`, with one of two Google
 models. The model downloads by itself the first time the engine starts.
 
@@ -190,13 +193,13 @@ models. The model downloads by itself the first time the engine starts.
 | Gemma 4 E4B *(default)* | 5.15 GB | **3.2 GB** | every tier with room for it; the best Arabic we measured (below) |
 | Gemma 4 E2B | 3.35 GB | ≈2 GB (estimate) | 4–5 GB laptop cards and 8 GB RAM machines — the checker picks it there. Arabic untested |
 
-Switching is two lines in `.env` (`AI_BUILTIN_REPO` and `AI_BUILTIN_FILE` —
+Switching is two lines in `settings.json` (`AI_BUILTIN_REPO` and `AI_BUILTIN_FILE` —
 [CONFIGURATION.md §6](../CONFIGURATION.md#a-the-built-in-ai-default)). `check_hardware.py
 --apply` never replaces a model or an AI provider you chose yourself. Which llama.cpp
 build runs it — `LLAMA_VARIANT`: `cuda` (NVIDIA), `vulkan` (AMD Radeon / Intel Arc) or
 `cpu` — is picked from your graphics card.
 
-**Ollama is still an option** (`AI_PROVIDER="ollama"`, then `OLLAMA_MODEL_NAME`, after
+**Ollama is still an option** (`"AI_PROVIDER": "ollama"`, then `OLLAMA_MODEL_NAME`, after
 `ollama pull <name>`), and so are other local servers and cloud services
 ([CONFIGURATION.md §6](../CONFIGURATION.md#6-choosing-the-ai-provider)).
 
@@ -225,22 +228,23 @@ default 30 minutes — decides how long it stays.)
 
 **Unload it when you do not need it.** Tray icon → **Unload AI model** frees its memory
 (3.2 GB of graphics memory, measured); the next Polish or Translate loads it again by
-itself, waiting about 4 s that once. `AI_LOAD_AT_START="False"` in `.env` keeps it out of
-memory from the start, until the first Polish needs it.
+itself, waiting about 4 s that once. `"AI_LOAD_AT_START": false` in `settings.json` keeps it
+out of memory from the start, until the first Polish needs it.
 
-**Sized for dictation.** The engine gives the AI an 8,192-token context (`AI_NUM_CTX`;
-`OLLAMA_NUM_CTX` with Ollama) — enough for a five-minute dictation and its answer.
+**Sized for dictation.** The engine gives the AI an 8,192-token context (a fixed value,
+for Ollama too) — enough for a five-minute dictation and its answer.
 Gemma 4's own setting, 131,072, held **3.58 GB** of graphics memory against **2.99 GB**
 in Ollama — 0.6 GB freed for Whisper and the voice, with the same speed and answers.
 
-### Voice — `READER_DEVICE` and batch sizes
+### Voice — `READER_DEVICE`
 
 | Setting | Default | When to change it |
 |---|---|---|
 | `READER_DEVICE` | `auto` | `cpu` on machines without an NVIDIA card (the presets do this). |
-| `READER_FIRST_BATCH_CHARS` | `120` | On a CPU, lower (e.g. `80`) makes the voice start sooner; higher reads more smoothly. |
-| `READER_BATCH_CHARS` | `300` | Rarely worth touching. |
-| `READER_SMART_MODE` | `False` | `True` sends text through the AI model before reading — only worth it on a fast AI model. |
+| `READER_SMART_MODE` | `false` | `true` sends text through the AI model before reading — only worth it on a fast AI model. |
+
+The size of the chunks sent to the voice (120 characters for the first, 300 for the rest)
+is fixed; it was measured, and is no longer a setting.
 
 ---
 
@@ -248,11 +252,11 @@ in Ollama — 0.6 GB freed for Whisper and the voice, with the same speed and an
 
 **Where to look**
 - The console prints how long each clip took: `📝 Raw (1.2s): …`
-- `flow_debug.log` has the same for every dictation: `…, 1.21s for 14.2s of audio): …`
+- `flow_debug.log` (in `%LOCALAPPDATA%\ZeroFlow\logs`) has the same for every dictation: `…, 1.21s for 14.2s of audio): …`
 - The start-up banner shows where the speech model loaded, e.g.
   `Speech to text: [Whisper large-v3 · GPU · float16]`.
 - The banner's *AI model* line names the AI and its build, e.g.
-  `Gemma 4 E4B · built in (cuda)`; `builtin_ai.log` (next to `flow_debug.log`) has its
+  `Gemma 4 E4B · built in (cuda)`; `builtin_ai.log` (in the same folder) has its
   own messages, including where it loaded.
 - `nvidia-smi` shows how much graphics memory is in use.
 
@@ -262,9 +266,9 @@ in Ollama — 0.6 GB freed for Whisper and the voice, with the same speed and an
 |---|---|---|
 | Words take more than ~3 s after you stop | speech model too big for the device | one size smaller (`large-v3` → `medium` → `small` → `base`) |
 | Banner says `CPU · int8` on an NVIDIA PC | CUDA libraries or driver missing | `flow_debug.log` says why; reinstall `nvidia-cublas-cu12` / `nvidia-cudnn-cu12`, update the NVIDIA driver |
-| Polish / Translate paste your words unchanged; `flow_debug.log` says *Built-in AI unavailable* | its runtime is missing, or the AI did not fit the card | the reason follows in the log: run `tools\get_llama.py`, or use Gemma 4 E2B, or `WHISPER_COMPUTE_TYPE="int8_float16"` to free memory |
-| Polish / Translate slow on an NVIDIA PC | the AI runs the `cpu` build | the banner shows `built in (cpu)`: set `LLAMA_VARIANT="cuda"` and run `tools\get_llama.py --variant cuda` |
-| Voice takes several seconds to start | voice on the CPU | normal on CPU; lower `READER_FIRST_BATCH_CHARS`, read a paragraph at a time |
+| Polish / Translate paste your words unchanged; `flow_debug.log` says *Built-in AI unavailable* | its runtime is missing, or the AI did not fit the card | the reason follows in the log: run `tools\get_llama.py`, or use Gemma 4 E2B, or `"WHISPER_COMPUTE_TYPE": "int8_float16"` to free memory |
+| Polish / Translate slow on an NVIDIA PC | the AI runs the `cpu` build | the banner shows `built in (cpu)`: set `"LLAMA_VARIANT": "cuda"` and run `tools\get_llama.py --variant cuda` |
+| Voice takes several seconds to start | voice on the CPU | normal on CPU; read a paragraph at a time |
 | `reader_debug.log` says "CPU-only build of torch" on an NVIDIA PC | the CPU torch was installed | reinstall torch with the CUDA command in [INSTALL.md](INSTALL.md#4-install-the-python-packages) |
 | Arabic comes out wrong, English is fine | speech model too small for Arabic | `medium` or `large-v3` — Arabic gains the most from size |
 | Arabic Polish / Translate pastes your own words unchanged; `flow_debug.log` says *"The AI did not answer in 'ar'"* | the AI model drifted into another language (often Chinese) and the guard caught it | a model that stays in Arabic — see *Arabic writing, measured* above |

@@ -5,19 +5,26 @@ import requests
 
 from zeroflow import ui
 from zeroflow.llm.base import user_message
-from zeroflow.settings import (ENABLE_TOASTS, FALLBACK_LLM, OLLAMA_HOST_URL,
-                               OLLAMA_KEEP_ALIVE, OLLAMA_MODEL_NAME, OLLAMA_NUM_CTX)
+from zeroflow.settings import (ENABLE_TOASTS, OLLAMA_HOST_URL, OLLAMA_KEEP_ALIVE,
+                               OLLAMA_MODEL_NAME)
 
 _ollama_model = None      # resolved once, on first use
+
+# The AI model's working memory, in tokens. A model file may ask for far more than a
+# dictation needs — gemma4-e4b's asks for 131,072, which held 3.58 GB of graphics
+# memory against 2.99 GB at 8,192, with the same speed and answers. 8,192 still fits
+# a five-minute dictation and its answer. (0 would keep whatever the model file says.)
+OLLAMA_NUM_CTX = 8192
 
 
 def discover_ollama_model() -> tuple[str, bool]:
     """Choose the LLM to use, in priority order:
-      1. OLLAMA_MODEL_NAME from .env, if set — pins an exact model (e.g. qwen2.5:7b).
+      1. OLLAMA_MODEL_NAME from the settings, if set — pins an exact model (e.g. qwen2.5:7b).
       2. Otherwise the first model installed in Ollama.
-      3. Otherwise FALLBACK_LLM (used when Ollama is unreachable).
-    Returns (name, settled): settled is False for the fallback, which is only a guess
-    until Ollama answers."""
+      3. Otherwise no name ("") — Ollama is unreachable or has no model, so no name
+         would work. (A fixed fallback name used to stand here; it was a model most PCs
+         never had.)
+    Returns (name, settled): settled is False when Ollama did not answer with a model."""
     if OLLAMA_MODEL_NAME:
         return OLLAMA_MODEL_NAME, True
     try:
@@ -27,7 +34,7 @@ def discover_ollama_model() -> tuple[str, bool]:
             return response.json()["models"][0]["name"], True
     except Exception:
         pass
-    return FALLBACK_LLM, False
+    return "", False
 
 
 def get_ollama_model() -> str:

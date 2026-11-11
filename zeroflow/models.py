@@ -3,7 +3,7 @@
 Without one, a fresh install takes whatever was uploaded last, so a changed or
 tampered model would be downloaded and run — the reader's voice weights are loaded
 with torch. Pinned like the llama.cpp build (llm/llama_runtime.BUILD). A model not
-listed here (one you set yourself in .env) is taken at its latest revision.
+listed here (one you set yourself in the settings) is taken at its latest revision.
 
 To move a model to a newer upload: put its new commit here and check it, once.
 """

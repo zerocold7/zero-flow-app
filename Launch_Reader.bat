@@ -27,7 +27,7 @@ if /i "%~1"=="silent" exit /b %CODE%
 if "%CODE%"=="0" exit /b 0
 
 echo.
-echo Reader stopped with an error (exit code %CODE%). Details are in reader_debug.log.
+echo Reader stopped with an error (exit code %CODE%). Details are in reader_debug.log in %%LOCALAPPDATA%%\ZeroFlow\logs.
 echo Press any key to close this window.
 pause > nul
 exit /b %CODE%

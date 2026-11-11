@@ -16,8 +16,11 @@ from zeroflow import personas, settings
 from zeroflow import llm
 from zeroflow.text import URL_PATTERN  # shared: also strips www. addresses
 
-SMART_MODE_MAX_CHARS = settings.READER_SMART_MAX_CHARS     # why: settings.py
-READER_LLM_TIMEOUT = settings.READER_LLM_TIMEOUT
+# Above this length the LLM pass is skipped: a local model needs several seconds per
+# thousand characters, which is longer than the wait for speech to simply start.
+SMART_MODE_MAX_CHARS = 1000
+# The reader is interactive, so it waits less patiently than the dictation engine.
+READER_LLM_TIMEOUT = 10.0
 
 # Footnote/reference markers, dropped whole. Stripping the brackets alone would leave
 # the digits behind, and the voice would read "[1]" aloud as "one".

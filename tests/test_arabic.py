@@ -253,21 +253,18 @@ class TestOllamaRequest(unittest.TestCase):
 
 class TestModelDiscovery(unittest.TestCase):
     def setUp(self):
-        # Fixed names, not the ones in your .env — there the fallback and the installed
-        # model can be the same, which would let this pass without testing anything.
         for patcher in (mock.patch.object(ollama, "_ollama_model", None),
-                        mock.patch.object(ollama, "OLLAMA_MODEL_NAME", ""),
-                        mock.patch.object(ollama, "FALLBACK_LLM", "fallback-model")):
+                        mock.patch.object(ollama, "OLLAMA_MODEL_NAME", "")):
             patcher.start()
             self.addCleanup(patcher.stop)
 
-    def test_the_fallback_is_not_kept_once_ollama_is_running(self):
-        """Ollama down at the first Polish bound the engine to FALLBACK_LLM for the rest
-        of the session — every later request then got a 404."""
+    def test_ollama_down_gives_no_name_and_it_is_not_kept(self):
+        """Ollama down at the first Polish once bound the engine to a fixed fallback name
+        for the rest of the session — every later request then got a 404."""
         tags = mock.Mock(status_code=200, json=lambda: {"models": [{"name": "installed-model"}]})
         with mock.patch.object(ollama.requests, "get",
                                side_effect=[ConnectionError("refused"), tags]):
-            self.assertEqual(ollama.get_ollama_model(), "fallback-model")
+            self.assertEqual(ollama.get_ollama_model(), "")
             self.assertEqual(ollama.get_ollama_model(), "installed-model")
 
     def test_a_discovered_model_is_kept(self):
