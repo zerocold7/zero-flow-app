@@ -143,6 +143,14 @@ class TestRequirements(unittest.TestCase):
             unused = {name for name in unused if not name.startswith(NVIDIA_ONLY)}
         self.assertEqual(unused, set(), "pinned but never installed")
 
+    def test_the_readers_english_model_is_installed_not_fetched_on_first_use(self):
+        """Kokoro's English phonemiser (misaki) runs `spacy.cli.download` the first
+        time it starts when en_core_web_sm is not an installed package: a hidden pip
+        install during the first F4, and a failure offline. It must come with the app,
+        at the version requirements.txt pins."""
+        line = next(r for r in requirement_lines() if canonicalize_name(r.name) == "en-core-web-sm")
+        self.assertIn(f"en_core_web_sm-{distribution('en_core_web_sm').version}-", line.url)
+
     def test_the_optional_package_is_pinned_for_its_own_install(self):
         for name in OPTIONAL:
             distribution(name)                    # installed here, for the tests

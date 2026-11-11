@@ -55,7 +55,7 @@ New settings that 5b brings are listed at the end. Terms as in `CONTEXT.md`.
 |---|---|---|---|
 | `READER_VOICE` | af_heart | Main | |
 | `READER_DEVICE` | auto | Advanced | |
-| `READER_SMART_MODE` | off | Advanced | Phase 6 stops it from adding words to the vocabulary. |
+| `READER_SMART_MODE` | off | Advanced | Adds no words to the vocabulary (AI answers learn only for English Polish). |
 | `READER_SMART_MAX_CHARS` | 1000 | **Fixed** | |
 | `READER_LLM_TIMEOUT` | 10 s | **Fixed** | |
 | `READER_FIRST_BATCH_CHARS` | 120 | **Fixed** | Measured tuning, not a choice. |
@@ -81,5 +81,12 @@ New settings that 5b brings are listed at the end. Terms as in `CONTEXT.md`.
 | Keep dictation history | on | Main (Privacy) |
 | Start with Windows | off | Main. Kept in the HKCU Run key, not in the file. |
 | Reader speed | 1.0 | Main |
+
+## New in Phase 6
+
+| Setting | Default | Goes to | Note |
+|---|---|---|---|
+| `READER_OUTPUT` (stored by name) | Windows default | Main (Speech) | A name not plugged in falls back to the default for that run. |
+| Longest read (`READER_MAX_CHARS` in `reader/app.py`) | 20,000 characters | **Fixed** | About 20 minutes of speech; longer selections are read up to the last whole sentence that fits. |
 
 **Count:** 42 settings at the start of Phase 5 (a script checked that every one is named in this table, and nothing else is). 21 go to Main, 12 to Advanced, 8 are Fixed and 1 is removed, which leaves 33 in the settings file. 5b adds 7 new ones.

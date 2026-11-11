@@ -60,9 +60,11 @@ class SettingsWindow(QDialog):
                  startup, apply_live: Callable[[str, bool], None],
                  ollama_models: list[str] | None = None, key_saved: bool = False,
                  keys_pause: Callable[[], None] = lambda: None,
-                 keys_resume: Callable[[], None] = lambda: None):
+                 keys_resume: Callable[[], None] = lambda: None,
+                 speakers: list[str] | None = None):
         super().__init__()
         self.values = dict(values)
+        self._speakers = speakers or []           # the Reader's outputs, by name
         self.settings_path, self.store, self.startup = settings_path, store, startup
         self.apply_live = apply_live
         self._keys_pause, self._keys_resume, self._keys_paused = keys_pause, keys_resume, False
@@ -138,6 +140,16 @@ class SettingsWindow(QDialog):
         self._bind(name, get, lambda v: combo.setCurrentIndex(combo.findData(v)), current)
         return combo
 
+    def _device_choice(self, name: str, devices: list[str]) -> QComboBox:
+        """A device picked by name: the Windows default (stored blank) first, then
+        `devices`. A saved name that is not plugged in is kept, and used again on return."""
+        options = {tr("general.mic_default"): ""}
+        options.update({device: device for device in devices})
+        saved = self.values.get(name, "")
+        if saved and saved not in options:
+            options[f"{saved} (not connected)"] = saved
+        return self._choice(name, options)
+
     def _text(self, name: str) -> QLineEdit:
         edit = QLineEdit()
         self._bind(name, lambda: edit.text().strip(), edit.setText, str(self.values.get(name, "")))
@@ -158,12 +170,7 @@ class SettingsWindow(QDialog):
         form.addRow(self.paused_label)
         self._show_paused()
 
-        options = {tr("general.mic_default"): ""}
-        options.update({name: name for name in microphones})
-        saved = self.values.get("MICROPHONE", "")
-        if saved and saved not in options:
-            options[f"{saved} (not connected)"] = saved       # kept, and used again on return
-        self.mic_box = self._choice("MICROPHONE", options)
+        self.mic_box = self._device_choice("MICROPHONE", microphones)
         form.addRow(tr("general.mic"), self.mic_box)
         self.language_box = self._choice("INTERFACE_LANGUAGE", {
             tr("lang.auto"): "auto", tr("lang.en"): "en", tr("lang.ar"): "ar"})
@@ -246,6 +253,8 @@ class SettingsWindow(QDialog):
         self._bind("READER_SPEED", lambda: round(speed.value(), 2), speed.setValue,
                    float(self.values.get("READER_SPEED", 1.0)))
         form.addRow(tr("speech.speed"), speed)
+        self.output_box = self._device_choice("READER_OUTPUT", self._speakers)
+        form.addRow(tr("speech.output"), self.output_box)
         return page
 
     def _advanced_tab(self) -> QWidget:

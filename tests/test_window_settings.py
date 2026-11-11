@@ -147,6 +147,49 @@ def test_a_saved_microphone_that_is_unplugged_is_kept_not_dropped(qtbot, tmp_pat
     assert win.collect() == {}                       # saving does not forget it
 
 
+# ------------------------------------------------------------------- the Reader's output
+def reader_window(qtbot, tmp_path, speakers, **saved_values):
+    values = defaults() | saved_values
+    path = tmp_path / "s.json"
+    storage.save(str(path), {k: v for k, v in values.items() if k != "AI_API_KEY"})
+    win = SettingsWindow(values, str(path), credentials.MemoryStore(), [], FakeStartup(),
+                         lambda *a: None, speakers=speakers)
+    qtbot.addWidget(win)
+    return win
+
+
+def test_the_output_picker_lists_the_speakers_and_the_default_first(qtbot, tmp_path):
+    win = reader_window(qtbot, tmp_path, ["Speakers", "Headphones"])
+    names = [win.output_box.itemText(i) for i in range(win.output_box.count())]
+    assert names == ["Windows default", "Speakers", "Headphones"]
+    assert win.output_box.currentData() == ""
+
+
+def test_picking_an_output_stores_its_name_and_restarts(qtbot, tmp_path):
+    win = reader_window(qtbot, tmp_path, ["Speakers", "Headphones"])
+    win.output_box.setCurrentIndex(win.output_box.findData("Headphones"))
+    assert win.collect() == {"READER_OUTPUT": "Headphones"}
+    assert restart_needed(win.collect())
+
+
+def test_a_saved_output_that_is_unplugged_is_kept_not_dropped(qtbot, tmp_path):
+    win = reader_window(qtbot, tmp_path, ["Speakers"], READER_OUTPUT="Old TV")
+    assert win.output_box.currentData() == "Old TV"
+    assert "not connected" in win.output_box.currentText()
+    assert win.collect() == {}
+
+
+def test_without_a_device_list_the_output_picker_still_offers_the_default(window):
+    assert window.output_box.count() == 1 and window.output_box.currentData() == ""
+
+
+def test_the_output_picker_is_named_in_both_languages():
+    for language in ("en", "ar"):
+        i18n.choose(language)
+        assert i18n.tr("speech.output") != "speech.output"
+    i18n.choose("en")
+
+
 NAMES = [{"name": "Mic A", "max_input_channels": 1, "hostapi": 0},
          {"name": "Mic A", "max_input_channels": 1, "hostapi": 2},
          {"name": "Speakers", "max_input_channels": 0, "hostapi": 0}]

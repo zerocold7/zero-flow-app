@@ -60,6 +60,22 @@ def clean_text_instant(raw_text):
     return text.strip()
 
 
+SENTENCE_END = re.compile(r'[.!?؟۔…]')
+
+
+def trim_to_limit(text, max_chars):
+    """`text`, or — when it is longer than `max_chars` — as much of it as fits, ending
+    at the last whole sentence, else at the last whole word, else at the limit."""
+    if len(text) <= max_chars:
+        return text
+    head = text[:max_chars]
+    ends = [m.end() for m in SENTENCE_END.finditer(head)]
+    if ends:
+        return head[:ends[-1]].rstrip()
+    space = head.rfind(" ")
+    return head[:space].rstrip() if space > 0 else head
+
+
 def clean_text_smart(raw_text):
     """Let the AI strip page furniture, falling back to the instant clean when it
     gives no answer (unreachable, too slow) or hands the text back unchanged — the

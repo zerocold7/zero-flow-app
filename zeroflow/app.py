@@ -33,6 +33,14 @@ def microphone_names() -> list[str]:
         return []
 
 
+def speaker_names() -> list[str]:
+    """The devices the Reader can speak on, for its output picker."""
+    try:
+        return microphone.output_names(sd.query_devices())
+    except Exception:
+        return []
+
+
 def ollama_models() -> list[str]:
     """The models Ollama has installed, for the picker; [] when it is not running."""
     try:
@@ -176,7 +184,8 @@ class EngineApp:
             values, settings.SETTINGS_FILE, store, microphone_names(),
             StartupKey(startup_command(BASE_DIR, sys.executable)), self._apply_live,
             ollama_models(), key_saved=key_is_saved(store, values["AI_PROVIDER"], values["AI_URL"]),
-            keys_pause=self._pause_keys, keys_resume=self._resume_keys)
+            keys_pause=self._pause_keys, keys_resume=self._resume_keys,
+            speakers=speaker_names())
         self.window.saved.connect(lambda restart: restart and QTimer.singleShot(300, self.restart_engine))
         self.window.setup_requested.connect(lambda: self.open_setup(first_start=False))
         self.window.show()

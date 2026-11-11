@@ -16,7 +16,7 @@ import traceback
 import keyboard
 
 from reader import voice_engine
-from reader.text_cleaner import clean_text_instant, clean_text_smart
+from reader.text_cleaner import clean_text_instant, clean_text_smart, trim_to_limit
 from zeroflow import settings, signals, ui
 from zeroflow.clipboard import POLL_INTERVAL, copy_selection
 
@@ -27,6 +27,9 @@ HOTKEY_READ = settings.HOTKEY_READ
 # Shared with the dictation half on purpose: one key silences the whole engine.
 HOTKEY_PANIC = settings.HOTKEYS["panic"]
 SMART_MODE_DEFAULT = settings.READER_SMART_MODE
+# The longest read, in characters: about 20 minutes of speech. A whole page selected by
+# mistake (Ctrl+A) is not an hour of speech, nor minutes of full CPU (Phase 6). Fixed.
+READER_MAX_CHARS = 20000
 
 # =====================================================================
 # RUNTIME STATE
@@ -41,21 +44,40 @@ use_smart_mode = SMART_MODE_DEFAULT   # settings: READER_SMART_MODE, read at sta
 # THE PIPELINE
 # =====================================================================
 def process_and_speak():
-    """Capture the selection, clean it, and speak it."""
+    """Capture the selection, clean it, and speak it.
+
+    The lock covers the copy and the clean only. Speaking lasts as long as the speech
+    (rendering stays only a few chunks ahead), and held through it, the lock made every
+    F4 during a read do nothing; now the next press interrupts and reads anew."""
     if not reading.acquire(blocking=False):
         return
     try:
-        _read_selection()
+        prepared = _read_selection()
     finally:
         reading.release()
+    if prepared:
+        _speak(*prepared)
+
+
+def _speak(cleaned, generation):
+    try:
+        _title("SPEAKING")
+        ui.play_tone("start", settings.ENABLE_AUDIO_CHIMES)
+        voice_engine.stream_audio(cleaned, generation)
+    except Exception:
+        logging.error(f"Reader pipeline failed: {traceback.format_exc()}")
+        traceback.print_exc()
+    finally:
+        _title("ONLINE")
 
 
 def _read_selection():
+    """(the cleaned text, its generation) to speak, or None when there is nothing to."""
     if signals.is_recording():
         # Dictation has the mic open. Speaking now would be picked up and transcribed.
         logging.info("Reader: declined to speak — the dictation half is recording.")
         ui.play_tone("empty", settings.ENABLE_AUDIO_CHIMES)
-        return
+        return None
 
     try:
         # A second press restarts, never overlaps. The generation it returns goes with
@@ -71,10 +93,14 @@ def _read_selection():
         if not text:
             logging.info("Reader: nothing selected — nothing to read.")
             ui.play_tone("empty", settings.ENABLE_AUDIO_CHIMES)
-            return
+            return None
 
         print(f"\n{ui.C_ERR}🔴 [READING]{ui.C_RESET} {text[:90]}...")
         logging.info(f"Reader captured {len(text)} chars (smart_mode={use_smart_mode}).")
+        if len(text) > READER_MAX_CHARS:
+            text = trim_to_limit(text, READER_MAX_CHARS)
+            logging.info(f"Reader: the selection is over {READER_MAX_CHARS} chars; "
+                         f"reading the first {len(text)}.")
 
         if use_smart_mode:
             _title("AI CLEANING")
@@ -84,15 +110,13 @@ def _read_selection():
 
         if signals.is_recording() or generation != voice_engine.current_generation():
             logging.info("Reader: dictation started while the text was prepared; not read.")
-            return
-        _title("SPEAKING")
-        ui.play_tone("start", settings.ENABLE_AUDIO_CHIMES)
-        voice_engine.stream_audio(cleaned, generation)
+            return None
+        return cleaned, generation
     except Exception:
         logging.error(f"Reader pipeline failed: {traceback.format_exc()}")
         traceback.print_exc()
-    finally:
         _title("ONLINE")
+        return None
 
 
 def _title(state):

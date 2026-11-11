@@ -26,4 +26,4 @@ for _name in ("stdout", "stderr"):
     if getattr(_sys, _name) is None:
         setattr(_sys, _name, open(_os.devnull, "w", encoding="utf-8"))
 
-__version__ = "2.0.0-alpha.8"
+__version__ = "2.0.0-alpha.9"

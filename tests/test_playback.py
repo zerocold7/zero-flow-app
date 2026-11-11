@@ -40,7 +40,7 @@ class FakeSoundDevice:
     def record(self, name):
         self.calls.append((name, threading.get_ident()))
 
-    def play(self, audio, samplerate):
+    def play(self, audio, samplerate, device=None):
         self.record("play")
         self.played.append(audio)
         self._stream = FakeStream(self, active=not self.finish_instantly)
@@ -135,10 +135,10 @@ class TestWorkerSurvivesErrors(PlaybackTestCase):
         fake = FakeSoundDevice(finish_instantly=True)
         real_play = fake.play
 
-        def play(audio, samplerate):
+        def play(audio, samplerate, device=None):
             if audio == "bad":
                 raise RuntimeError("device unplugged")
-            real_play(audio, samplerate)
+            real_play(audio, samplerate, device)
         fake.play = play
         self.install(fake)
 
