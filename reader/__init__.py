@@ -7,7 +7,7 @@ hotkey, and Kokoro speaks it aloud. Dictation (speech → text) lives in
 
 Run it with:  python -m reader        (or Launch_Reader.bat)
 """
-from zeroflow import settings  # noqa: F401  (reads .env before the reader's own settings)
+from zeroflow import settings  # noqa: F401  (reads settings.json before the reader's own settings)
 from zeroflow.logs import init_logging
 
 # Attach the reader's own rotating log before anything in the package logs a line.

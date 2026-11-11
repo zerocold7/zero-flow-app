@@ -1,7 +1,7 @@
 """
 Zero- Flow Engine — private, offline voice dictation and read-aloud for Windows.
 
-    paths, settings, logs     where files live, .env, the debug and crash logs
+    paths, settings, logs     where files live, settings.json, the debug and crash logs
     signals                   named Windows objects shared by the two processes
     ui, personas              console/toasts/tray/tones; prompts, macros, vocabulary seed
     vocabulary, history       the learned-word list and the dictation history

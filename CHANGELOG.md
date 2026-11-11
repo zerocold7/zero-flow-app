@@ -4,6 +4,49 @@ All notable work on the **Zero- Flow Engine**. Newest first.
 
 ---
 
+## [2.0.0-alpha.5] — unreleased — Settings, vocabulary and history move out of the program folder
+
+### 🗂️ One settings file (phase 5a)
+- **Settings live in `%APPDATA%\ZeroFlow\settings.json`**, a JSON object of
+  `"NAME": value`. It is the only source; restart the engine after editing it. A Settings
+  window will replace hand-editing in phase 5b. Developers can point `ZEROFLOW_SETTINGS`
+  at another settings file; its folder then holds the vocabulary and history too.
+- **First start only:** with no `settings.json`, the engine reads the old `.env` once
+  (same checks as before), writes `settings.json`, and copies `flow_vocabulary.txt` to
+  `vocabulary.txt` and `flow_history.md` to `history.md` in `%APPDATA%\ZeroFlow`. The
+  old files are never changed and never read again. `.env.example` stays as the optional
+  import template.
+- **The API key leaves the file.** `AI_API_KEY` is never in `settings.json`: the first
+  start moves it from `.env` to Windows Credential Manager, as `ZeroFlow:<address>`
+  (`ZeroFlow:https://api.anthropic.com` for Claude). A start-up notice says the old
+  `.env` still holds the key, so its line can be deleted. Claude still works with
+  `ANTHROPIC_API_KEY` or `ant auth login` when no key is stored.
+- **Logs moved** to `%LOCALAPPDATA%\ZeroFlow\logs\`: `flow_debug.log`,
+  `reader_debug.log`, `flow_crash.log`, `reader_crash.log`, `builtin_ai.log`.
+- **Models folder:** the new setting `MODELS_DIR`. Default: `HF_HOME` if set, otherwise
+  `%LOCALAPPDATA%\ZeroFlow\models`. Models are not downloaded again if it points where
+  they already are.
+- **`check_hardware.py --apply`** writes into `settings.json` once it exists; before the
+  first start it writes into `.env`, which the first start moves in.
+
+### 🧹 Nine settings gone
+- `HOTKEY_PANIC` (`Esc` always cancels and silences), `AI_NUM_CTX` and `OLLAMA_NUM_CTX`
+  (8,192), `AI_BUILTIN_PORT` (39281), `READER_SMART_MAX_CHARS` (1,000),
+  `READER_LLM_TIMEOUT` (10 s), `READER_FIRST_BATCH_CHARS` (120) and `READER_BATCH_CHARS`
+  (300) are fixed values in the code now. `FALLBACK_LLM` is removed: with Ollama down or
+  empty, no model name is guessed. An old `.env` that names them still migrates quietly.
+
+### 🛡️ Safeguard
+- **A model folder missing a file is repaired.** If a cached Whisper model folder lacks a
+  file, or has an empty one, the engine downloads the missing files at the pinned revision.
+
+### 📝 Docs
+- `CONFIGURATION.md`, the install, hardware, FAQ and beginner guides (English and
+  Arabic), `ARCHITECTURE.md`, the presets and the launchers' messages now name the new
+  places. The English beginner PDF is rebuilt from the new text.
+
+---
+
 ## [Unreleased] — 2.0 in progress
 
 ### 🛡️ Stability (phase 1)

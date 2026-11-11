@@ -1,5 +1,5 @@
 """The learned vocabulary: names and terms Whisper is primed with, and the AI keeps
-spelled right. Stored one per line in flow_vocabulary.txt."""
+spelled right. Stored one per line in vocabulary.txt, in the data folder (zeroflow.paths)."""
 import logging
 import os
 import re

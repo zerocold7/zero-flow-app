@@ -1,7 +1,7 @@
 """The AI model, whichever provider runs it.
 
 The engine and the reader call ask_ai, warm_up_ai, unload_ai and model_name; each hands the call
-to the active provider (zeroflow.llm.base.Provider), chosen with AI_PROVIDER in .env:
+to the active provider (zeroflow.llm.base.Provider), chosen with AI_PROVIDER in the settings:
 
     builtin  llama-server, run by the engine itself (llm.builtin) — the default
     ollama   a local Ollama server (llm.ollama)
@@ -35,7 +35,7 @@ def choose(name: str):
         return choose("builtin")
     if name in PROVIDERS:
         return PROVIDERS[name]
-    settings.problems.append(f'AI_PROVIDER="{name}" in .env is not one of '
+    settings.problems.append(f'AI_PROVIDER="{name}" in the settings is not one of '
                              f'{", ".join(PROVIDERS)} — using ollama.')
     return ollama
 
@@ -45,7 +45,7 @@ provider = choose(settings.AI_PROVIDER)
 
 def clipboard_context_allowed(chosen) -> bool:
     """Whether Polish may hand `chosen` the clipboard (POLISH_CLIPBOARD_CONTEXT). Decided
-    by the provider actually in use, not the one .env named: the built-in AI falls back
+    by the provider actually in use, not the one the settings named: the built-in AI falls back
     to Ollama when it is not installed, and that Ollama may be on another computer."""
     name = next(key for key, module in PROVIDERS.items() if module is chosen)
     return settings.clipboard_context_sent(settings.POLISH_CLIPBOARD_CONTEXT, name,

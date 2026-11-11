@@ -25,7 +25,7 @@ if /i "%~1"=="silent" exit /b %CODE%
 if "%CODE%"=="0" exit /b 0
 
 echo.
-echo Engine stopped with an error (exit code %CODE%). Details are in flow_debug.log.
+echo Engine stopped with an error (exit code %CODE%). Details are in flow_debug.log in %%LOCALAPPDATA%%\ZeroFlow\logs.
 echo Press any key to close this window.
 pause > nul
 exit /b %CODE%

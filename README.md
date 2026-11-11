@@ -135,7 +135,7 @@ through every click (also as a [printable PDF](docs/Zero-Flow-Setup-Guide.pdf), 
 | `F9` | Translate English → Arabic | | `Esc` | Cancel recording / stop reading |
 | `F10` | Translate Arabic → English | | | |
 
-Every key can be changed in `.env` ([CONFIGURATION.md §2](CONFIGURATION.md#2-changing-hotkeys)).
+Every key can be changed in `settings.json` ([CONFIGURATION.md §2](CONFIGURATION.md#2-changing-hotkeys)).
 Laptop F-keys changing the volume instead? Press `Fn + Esc`.
 
 **Spoken commands.** At the **start** of a dictation: *"new line"* (starts a new line),
@@ -175,10 +175,11 @@ Each has a twin that starts with no window — `Launch_Zero_Silent.vbs`,
 ## When something goes wrong
 
 1. `python check_hardware.py` — every line under *Checks* should say `[ok]`.
-2. Look at `flow_debug.log` (dictation) and `reader_debug.log` (reader) in the project
-   folder: every fallback and failure is recorded there, with how long each clip took.
-   What you dictated is not (only its length); set `LOG_DICTATION_TEXT=True` in `.env`
-   to see the words while you investigate.
+2. Look at `flow_debug.log` (dictation) and `reader_debug.log` (reader) in
+   `%LOCALAPPDATA%\ZeroFlow\logs`: every fallback and failure is recorded there, with how
+   long each clip took. What you dictated is not (only its length); set
+   `"LOG_DICTATION_TEXT": true` in `%APPDATA%\ZeroFlow\settings.json` to see the words
+   while you investigate.
 3. [HARDWARE.md §5](docs/HARDWARE.md#5-is-it-tuned-right-read-the-signs) matches
    symptoms to fixes; the [FAQ](docs/FAQ.md) covers the rest.
 
@@ -195,7 +196,9 @@ clipboard stays home: Polish only shows it to an AI on your PC.
 
 On the PC itself:
 - **The debug log never holds your words**, only how long each dictation was. Your
-  dictations are kept in one place, `flow_history.md`, which `Shift+F2` clears.
+  dictations are kept in one place, `%APPDATA%\ZeroFlow\history.md`, which `Shift+F2`
+  clears. Your settings are one file beside it; an API key, if you use a cloud AI, is kept
+  in Windows Credential Manager, never in a file.
 - **Your clipboard comes back whole** after every dictation — text, a picture or copied
   files — and the engine's own pastes stay out of clipboard history (`Win+V`) and cloud
   clipboard sync.
@@ -215,7 +218,7 @@ punctuation, quick start/stop/cancel of recordings, AI failures, the vocabulary 
 history files, sentence batching, the reader's audio-thread safety and supervision,
 one-copy-at-a-time, hardware tiers and presets. A few start real Python processes, to
 test how Windows treats them; six more use the real clipboard and run only with
-`ZEROFLOW_REAL_CLIPBOARD=1`.
+`"ZEROFLOW_REAL_CLIPBOARD": 1`.
 
 | Tool | What it proves |
 |---|---|

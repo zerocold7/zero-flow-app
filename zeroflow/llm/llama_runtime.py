@@ -72,7 +72,7 @@ def pick_variant(gpu_names: list[str]) -> str:
 
 
 def chosen_variant() -> str:
-    """LLAMA_VARIANT from .env, or — with "auto" — the one this PC's cards call for."""
+    """LLAMA_VARIANT from the settings, or — with "auto" — the one this PC's cards call for."""
     if LLAMA_VARIANT != "auto":
         return LLAMA_VARIANT
     return pick_variant([gpu["name"] for gpu in _hardware().detect()["gpus"]])

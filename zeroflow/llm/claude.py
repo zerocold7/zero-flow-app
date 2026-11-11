@@ -1,9 +1,12 @@
 """An AI provider for Anthropic's Claude, with the user's own API key.
 
-    AI_PROVIDER="claude"
-    AI_API_KEY="sk-ant-..."        # blank: the key from ANTHROPIC_API_KEY or `ant auth login`
+    AI_PROVIDER="claude"           # in settings.json
     AI_MODEL=""                    # blank: claude-opus-5-5; claude-sonnet-5-5 or
                                    # claude-haiku-5-5 cost less
+
+The key is not in settings.json: it is the Windows Credential Manager entry
+"ZeroFlow:https://api.anthropic.com". With none stored, the key comes from
+ANTHROPIC_API_KEY or `ant auth login`.
 
 Uses Anthropic's Python SDK (imported only when this provider is chosen). What you
 dictate is sent to Anthropic; the clipboard Polish uses as context only with

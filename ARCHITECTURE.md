@@ -26,13 +26,13 @@ a local LLM to clean up or translate text.
 | `zeroflow/llm/` | The AI model: `ask_ai` routes to the provider set by `AI_PROVIDER` — `builtin.py` (llama-server, run by the engine; installed by `llama_runtime.py`), `ollama.py`, `openai_compatible.py` or `claude.py` (interface in `base.py`) |
 | `zeroflow/text/` | `language.py` (which language a text is in; the AI-answer guard), `macros.py` (spoken commands and punctuation) |
 | `zeroflow/vocabulary.py`, `history.py` | The learned-word list and the dictation history |
-| `zeroflow/settings.py`, `paths.py`, `logs.py` | Every `.env` setting, checked; where files live; the debug and crash logs |
+| `zeroflow/settings.py`, `storage.py`, `credentials.py`, `paths.py`, `logs.py` | Every setting in `settings.json`, checked; the one-time move of the old `.env`, vocabulary and history; API keys in Windows Credential Manager; where files live; the debug and crash logs |
 | `zeroflow/models.py` | The fixed Hugging Face commit every model (Whisper, Gemma, Kokoro) is downloaded at |
 | `zeroflow/signals.py` | Windows named objects shared by the two processes: events, the clipboard lock, one-copy claims, the Job Object |
 | `zeroflow/ui.py`, `zeroflow/personas.py` | Console, banner, tones, toasts, tray; prompts, base vocabulary, voice macros, punctuation, pronunciation |
 | `reader/`       | Reader: `app.py` (the half itself), `text_cleaner.py`, `voice_engine.py` |
-| `check_hardware.py` | Standalone (standard library only): detects the GPU/RAM, picks a hardware tier, writes its settings into `.env` |
-| `presets/`      | One `.env` fragment per hardware tier — the model and device settings `check_hardware.py` applies |
+| `check_hardware.py` | Standalone (standard library only): detects the GPU/RAM, picks a hardware tier, writes its settings into `settings.json` (or `.env` before the first start) |
+| `presets/`      | One `.env`-format fragment per hardware tier — the model and device settings `check_hardware.py` applies |
 | `docs/`         | User guides: install, hardware & tuning, FAQ, the beginner walkthrough (English + Arabic) |
 | `tools/`        | Install the built-in AI (`tools/get_llama.py`); rebuild the printable PDFs (`tools/README.md`); measure speech and AI changes (`tools/bench/`); prove the tests guard the fixes (`tools/mutation_check.py`); check every real part end to end on this PC (`tools/smoke_check.py`) |
 | `runtime/`      | *(git-ignored)* The built-in AI's llama.cpp build, one folder per variant (`runtime/llama/cuda/`…), written by `tools/get_llama.py` |
@@ -118,13 +118,13 @@ the key press: opening the clipboard can wait up to half a second while another 
 the clipboard, which on the keyboard hook froze the keyboard and before the mic opened
 would have cut off the first words.
 
-If any stage after capture raises, the error and traceback go to `flow_debug.log`, the
+If any stage after capture raises, the error and traceback go to `flow_debug.log` (§10), the
 console says so, and the engine carries on with the next dictation.
 
 ---
 
 ## 3. Modes & hotkeys
-Each is configurable in `.env`; defaults shown. Record modes live in the `MODES`
+Each is configurable in `settings.json`; defaults shown. Record modes live in the `MODES`
 table in `zeroflow/engine.py` as `{lang, op}` pairs.
 
 | Hotkey | Mode | Forced lang | Behaviour |
@@ -196,7 +196,7 @@ answers are also stripped of vowel marks and shadda (tanween on alif stays: *ج�
 
 ## 5. Hardware: GPU with safe CPU fallback (`load_whisper_model`)
 1. Find the model on disk (`resolve_whisper_model`) — see *Model files* below.
-2. Unless `WHISPER_DEVICE="cpu"`: prepend any pip-installed CUDA DLL folders
+2. Unless `"WHISPER_DEVICE": "cpu"`: prepend any pip-installed CUDA DLL folders
    (`nvidia-cublas-cu12`, `nvidia-cudnn-cu12`) to the DLL search path, load the model
    on `cuda` at `WHISPER_COMPUTE_TYPE` (default `float16`), then **run one real
    inference immediately**. CTranslate2 loads CUDA lazily, so this forces any
@@ -213,13 +213,15 @@ answers are also stripped of vowel marks and shadda (tanween on alif stays: *ج�
 Each dictation logs its decode time next to the clip length (`1.21s for 14.2s of
 audio`) — the figure `docs/HARDWARE.md` tunes against. Which settings suit which
 hardware is decided outside the engine, by `check_hardware.py` and `presets/`: the
-engine only reads `.env`.
+engine only reads `settings.json`.
 
 **Model files.** Both models come from the Hugging Face Hub — Whisper from
 `Systran/faster-whisper-<size>`, the voice from `hexgrad/Kokoro-82M` — and both are
-read straight from the local cache (`%USERPROFILE%\.cache\huggingface\hub`) whenever
-they are there. The Hub is contacted only to download something missing: the first
-run, a new `WHISPER_MODEL_NAME`, or a voice picked for the first time.
+read straight from the local cache (the `hub` folder of `MODELS_DIR`, by default
+`%LOCALAPPDATA%\ZeroFlow\models`) whenever they are there. The Hub is contacted only to download something missing: the first
+run, a new `WHISPER_MODEL_NAME`, or a voice picked for the first time. A cached Whisper
+folder that lacks a file, or holds an empty one, counts as missing: the missing files are
+downloaded at the pinned revision.
 
 That is deliberate. Left to themselves, `WhisperModel("large-v3")` and Kokoro ask the
 Hub whether each file has changed on **every** start — five requests before a word
@@ -248,7 +250,7 @@ start makes no request at all, and the one-time download notice is silenced
 - llama.cpp's `llama-server` (build `b11619`), run as a hidden child process
   (`CREATE_NO_WINDOW`) with Google's Gemma 4 E4B (QAT q4_0 GGUF, 5.15 GB, Apache 2.0;
   E2B, 3.35 GB, for small cards and 8 GB of RAM). Flags: every layer on the card
-  (`-ngl 99`; `0` for the `cpu` build), `-c AI_NUM_CTX` (8,192), `-np 1` (dictation is
+  (`-ngl 99`; `0` for the `cpu` build), `-c` 8,192 (a fixed value), `-np 1` (dictation is
   serial), `--reasoning off` (Gemma 4's thinking made a Polish 2.4–7.8 s instead of
   0.26 s) and `--host 127.0.0.1`. Its output goes to `builtin_ai.log`.
 - **Why a child process, not `llama-cpp-python` in-process:** a separate process keeps
@@ -256,7 +258,7 @@ start makes no request at all, and the one-time download notice is silenced
   cannot take the engine down. It speaks the OpenAI chat format, so `ask` reuses
   `openai_compatible.chat`.
 - **One server for both halves.** It listens on a fixed local port
-  (`AI_BUILTIN_PORT`, 39281). `start()` first asks `/health`: whoever needs the AI
+  (39281, a constant in the code). `start()` first asks `/health`: whoever needs the AI
   first starts it, and the other process — the reader is a separate one — finds it
   answering and uses it, so the model is in memory once. The engine's `warm_up` starts
   it on a background thread while Whisper loads; `start()` returns only once `/health`
@@ -287,15 +289,15 @@ another model. A rejected key (401), a model the key may not use (403), a rate l
 (429), other HTTP errors, a lost connection and a refusal each log the reason, show a
 toast and return `None`.
 
-**Ollama** (`llm/ollama.py`, with `AI_PROVIDER="ollama"`)
+**Ollama** (`llm/ollama.py`, with `"AI_PROVIDER": "ollama"`)
 - The engine picks the LLM in priority order: (1) `OLLAMA_MODEL_NAME` from
-  `.env` if set — pins an exact model; (2) otherwise it queries Ollama's `/api/tags` and
-  binds to the **first model installed**; (3) otherwise `FALLBACK_LLM` (Ollama unreachable).
+  `settings.json` if set — pins an exact model; (2) otherwise it queries Ollama's `/api/tags` and
+  binds to the **first model installed**; (3) otherwise no model is chosen: with Ollama
+  down or empty, no model name is guessed and Polish says "AI unavailable".
   The choice is cached once Ollama has answered (`get_ollama_model`): dictation makes
   it at boot for the banner, the reader only the first time it cleans text with the
-  LLM. The fallback is **never** cached — with Ollama down at the first Polish, caching
-  it bound the whole session to a model that may not exist, so every request after
-  Ollama started got a 404.
+  LLM. A lookup that found nothing (Ollama down) is **never** cached, so the next
+  request asks again.
 - Ollama's `ask` sends `instruction + optional context + input` at `temperature 0.2`
   (low, so Polish stays faithful instead of "creatively" translating) and returns the
   answer, or `None` when there is none: unreachable or a non-200 reply (typically 404,
@@ -315,13 +317,13 @@ toast and return `None`.
   and dictation is ready ≤0.7 s later than without the warm-up. Loading the AI *after*
   Whisper instead left it ready at 10–11 s.
 - Every request — and the warm-up, with the **same** options, or Ollama would load the
-  model again on the first Polish — carries **`num_ctx`** (`OLLAMA_NUM_CTX`, default
-  8,192 tokens). A model file can ask for far more than dictation needs: gemma4-e4b's
+  model again on the first Polish — carries **`num_ctx`** (8,192 tokens, a fixed
+  value). A model file can ask for far more than dictation needs: gemma4-e4b's
   asks for 131,072, which held 3.58 GB of graphics memory against 2.99 GB, with the
   same speed and answers (`tools/bench/bench_llm.py`). 4,096 saved no more, so the
   default leaves room for a five-minute dictation and its answer.
 - If the LLM tags a term as `[LEARN: word]`, `absorb_learned_word` saves it to
-  `flow_vocabulary.txt` and strips the tag — **but only if the term appears in what was
+  `vocabulary.txt` and strips the tag — **but only if the term appears in what was
   said** (ignoring case and spacing), and never in Chinese, Japanese or Korean script.
   Learned words prime Whisper on every dictation. Before this rule, Arabic Polish had
   taught three misheard words (removed), and a model answering in Chinese tagged a
@@ -332,7 +334,7 @@ toast and return `None`.
   list to the LLM and writes back the terms it returns (`vocabulary_terms`): list
   markers are stripped, and the model's chatter — "Here is the cleaned list:", or any
   line longer than four words — is dropped, since every kept line primes Whisper.
-  The previous file is kept as `flow_vocabulary.txt.bak`, and an unchanged result —
+  The previous file is kept as `vocabulary.txt.bak`, and an unchanged result —
   which is also what an unreachable LLM returns — writes nothing.
 - Every write to the vocabulary file holds `VOCAB_LOCK`: a Polish can learn a word
   while `Shift+F1` is rewriting the list, and the rewrite keeps it. A learned word is
@@ -464,17 +466,32 @@ Design notes:
 
 ---
 
-## 10. Files written at runtime (git-ignored)
+## 10. Files written at runtime
+Your files live outside the program folder (ADR 0002, `docs/adr/0002-one-settings-file-no-env.md`).
+The settings file's folder holds the vocabulary and the history; `ZEROFLOW_SETTINGS` (for
+developers) points at another settings file and moves them with it. The logs have their
+own folder.
+
 | File | Purpose |
 |------|---------|
-| `flow_vocabulary.txt` | Learned proper nouns / tech terms (deduped on write, pruned by `Shift+F1`) |
-| `flow_vocabulary.txt.bak` | The list as it was before the last `Shift+F1` rewrite |
-| `flow_history.md` | Append-only log of injected text; trimmed after any write that takes it past ~500 KB, at an entry boundary |
-| `flow_debug.log` | Dictation diagnostics; auto-rotated at ~1 MB (×2 backups ≈ 3 MB cap) |
-| `reader_debug.log` | Reader diagnostics; rotated the same way |
-| `flow_crash.log`, `reader_crash.log` | Native crashes (e.g. a segfault in a CUDA library), written by `faulthandler`; normally empty |
-| `builtin_ai.log` | The built-in AI's own output (llama-server) |
-| `runtime/llama/<build>/` | The built-in AI's program, installed by `tools/get_llama.py` |
+| `%APPDATA%\ZeroFlow\settings.json` | The only source of settings. Created on the first start, from the old `.env` if there is one |
+| `%APPDATA%\ZeroFlow\vocabulary.txt` | Learned proper nouns / tech terms (deduped on write, pruned by `Shift+F1`) |
+| `%APPDATA%\ZeroFlow\vocabulary.txt.bak` | The list as it was before the last `Shift+F1` rewrite |
+| `%APPDATA%\ZeroFlow\history.md` | Append-only log of injected text; trimmed after any write that takes it past ~500 KB, at an entry boundary |
+| `%LOCALAPPDATA%\ZeroFlow\logs\flow_debug.log` | Dictation diagnostics; auto-rotated at ~1 MB (×2 backups ≈ 3 MB cap) |
+| `%LOCALAPPDATA%\ZeroFlow\logs\reader_debug.log` | Reader diagnostics; rotated the same way |
+| `%LOCALAPPDATA%\ZeroFlow\logs\flow_crash.log`, `reader_crash.log` | Native crashes (e.g. a segfault in a CUDA library), written by `faulthandler`; normally empty |
+| `%LOCALAPPDATA%\ZeroFlow\logs\builtin_ai.log` | The built-in AI's own output (llama-server) |
+| `%LOCALAPPDATA%\ZeroFlow\models` (`MODELS_DIR`) | The downloaded models (§5 *Model files*) |
+| Windows Credential Manager, `ZeroFlow:<address>` | API keys; never in `settings.json` |
+| `runtime/llama/<build>/` | The built-in AI's program, installed by `tools/get_llama.py` (git-ignored, in the program folder) |
+
+**The first start** (`storage.migrate`) runs only when there is no settings file. It
+reads the old `.env` in the program folder with the same checks as before, copies
+`flow_vocabulary.txt` and `flow_history.md` to the new names, and moves `AI_API_KEY` into
+Credential Manager under the provider's address. The settings file is written last, in
+one step, so a failure leaves the next start to try again. The old files are never
+changed and never read again.
 
 Your voice is never written to disk: each clip goes from the microphone to Whisper in
 memory.
@@ -489,7 +506,7 @@ on its own (it writes a handful of lines per read).
 is written, and `Shift+F2` clears the dictation pair on demand. The debug logs are the
 first place to look when something misbehaves — every transcription records `mode=…`
 and `lang=…`, and re-decodes / skips / fallbacks / failures are all logged, dictation
-in `flow_debug.log` and the reader in `reader_debug.log`. An uncaught exception on any
+in `flow_debug.log` and the reader in `reader_debug.log` (both in the logs folder). An uncaught exception on any
 thread is logged there too (`sys.excepthook`, `threading.excepthook`, set up by
 `init_logging`), and a fatal one also shows a message box — a hidden engine's console
 is never seen.

@@ -2,9 +2,9 @@
 
     venv\\Scripts\\python.exe tools\\smoke_check.py
 
-Uses the settings in .env, like the engine. Each part prints PASS or FAIL; the exit
+Uses the settings in settings.json, like the engine. Each part prints PASS or FAIL; the exit
 code is the number of failures. Nothing is typed, pasted or played aloud:
-  1. settings     .env reads with no reported problems
+  1. settings     settings.json reads with no reported problems
   2. devices      a microphone and a speaker are present
   3. speech       Whisper transcribes the recordings in tools/bench/mine (English and
                   Arabic), where it ran (graphics card or processor)

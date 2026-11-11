@@ -83,7 +83,7 @@ $parts = Get-Content requirements.txt |
 python check_hardware.py --apply
 ```
 
-ينشئ هذا الأمر ملف `.env` بإعدادات فئتك (وإن كان لديك `.env` مسبقاً يعدّل تلك الأسطر فقط ويحفظ النسخة القديمة باسم `.env.bak`). بقية الإعدادات — الأزرار والصوت والتنبيهات — مشروحة في [CONFIGURATION.md](../CONFIGURATION.md).
+تعيش إعداداتك في ملف واحد هو `%APPDATA%\ZeroFlow\settings.json`، ينشئه المحرك عند أول تشغيل له. قبل أول تشغيل ينشئ هذا الأمر ملف `.env` في مجلد المشروع بإعدادات فئتك (وإن كان لديك `.env` مسبقاً يعدّل تلك الأسطر فقط ويحفظ النسخة القديمة باسم `.env.bak`)؛ ويقرأ أول تشغيل ذلك الملف مرة واحدة ويكتب منه `settings.json` ثم لا يقرأ `.env` بعد ذلك أبداً. وإذا وُجد `settings.json` كتب الأمر فيه مباشرة. بقية الإعدادات — الأزرار والصوت والتنبيهات — مشروحة في [CONFIGURATION.md](../CONFIGURATION.md#1-settingsjson-reference). ولتغيير إعداد لاحقاً، عدّل `settings.json` بالمفكرة (Notepad) ثم أعد تشغيل المحرك.
 
 ## 6. ثبّت الذكاء المدمج
 التلميع والترجمة وبقية أزرار الذكاء تشغّل نموذج ذكاء على خادم `llama-server` من llama.cpp، والمحرك يشغّله ويوقفه بنفسه. ثبّته مرة واحدة:
@@ -106,7 +106,7 @@ python check_hardware.py --apply
 
 شغّل `python check_hardware.py` مرة أخرى — كل سطر تحت *Checks* يجب أن يبدأ بـ `[ok]`.
 
-> **تفضّل Ollama أو خدمة ذكاء سحابية؟** غيّر `AI_PROVIDER` في ملف `.env` — انظر [CONFIGURATION.md §6](../CONFIGURATION.md#6-choosing-the-ai-provider). وإن لم يكن الذكاء المدمج مثبّتاً، يقول المحرك ذلك عند التشغيل (في النافذة والسجل وإشعار منبثق يذكر `tools/get_llama.py`) ويستخدم Ollama بدلاً منه.
+> **تفضّل Ollama أو خدمة ذكاء سحابية؟** غيّر `AI_PROVIDER` في ملف `settings.json` — انظر [CONFIGURATION.md §6](../CONFIGURATION.md#6-choosing-the-ai-provider). وإن لم يكن الذكاء المدمج مثبّتاً، يقول المحرك ذلك عند التشغيل (في النافذة والسجل وإشعار منبثق يذكر `tools/get_llama.py`) ويستخدم Ollama بدلاً منه.
 
 ## 7. شغّل المحرك
 اضغط مرتين على **`Launch_Zero.bat`** داخل مجلد المشروع. (إن ظهرت رسالة *«Windows protected your PC»* اضغط **More info ← Run anyway**.)
@@ -136,15 +136,16 @@ git pull
 .\venv\Scripts\python.exe -m pip install -r requirements.txt -c constraints.txt
 ```
 
-(في فئتَي `cpu-only` و `amd-intel-gpu` استخدم أمر الخطوة 4 بدل السطر الأخير.) تحدّث من نسخة كانت تستخدم Ollama؟ نفّذ أيضاً الخطوة 6 (`.\venv\Scripts\python.exe tools\get_llama.py`) — وإلى أن تفعل يبقى المحرك على Ollama ويقول ذلك عند التشغيل. التحديث لا يمسّ أبداً ملف `.env` ولا المفردات ولا السجل. أعد تشغيل `python check_hardware.py` لترى إن تغيّرت التوصيات.
+(في فئتَي `cpu-only` و `amd-intel-gpu` استخدم أمر الخطوة 4 بدل السطر الأخير.) تحدّث من نسخة كانت تستخدم Ollama؟ نفّذ أيضاً الخطوة 6 (`.\venv\Scripts\python.exe tools\get_llama.py`) — وإلى أن تفعل يبقى المحرك على Ollama ويقول ذلك عند التشغيل. التحديث لا يمسّ أبداً الإعدادات ولا المفردات ولا السجل (وكلها في `%APPDATA%\ZeroFlow`). أعد تشغيل `python check_hardware.py` لترى إن تغيّرت التوصيات.
 
 ## الإزالة
 1. أغلق المحرك (أيقونته ← **Exit Engine**) واحذف المجلد `C:\zero-flow-app` — ويُحذف معه مجلد `runtime\` الخاص بالذكاء المدمج.
-2. النماذج المحمّلة: احذف المجلدات `models--Systran--faster-whisper-*` و `models--hexgrad--Kokoro-82M` و `models--google--gemma-4-E4B-it-qat-q4_0-gguf` (أو `…-E2B-…`) داخل `%USERPROFILE%\.cache\huggingface\hub`.
-3. يُزال Python و Git من *الإعدادات ← التطبيقات*. وإن كنت استخدمت Ollama أيضاً، احذف نموذجه أولاً (`ollama rm <الاسم>`) ثم أزِل Ollama نفسه بالطريقة ذاتها.
+2. النماذج المحمّلة: احذف المجلدات `models--Systran--faster-whisper-*` و `models--hexgrad--Kokoro-82M` و `models--google--gemma-4-E4B-it-qat-q4_0-gguf` (أو `…-E2B-…`) داخل مجلد `hub` في مجلد النماذج — وهو افتراضياً `%LOCALAPPDATA%\ZeroFlow\models` (الإعداد `MODELS_DIR`، أو `HF_HOME` إن كنت قد ضبطته).
+3. ملفاتك الخاصة: احذف `%APPDATA%\ZeroFlow` (الإعدادات والمفردات والسجل) و `%LOCALAPPDATA%\ZeroFlow` (ملفات السجل والنماذج). وإن استخدمت ذكاءً سحابياً فاحذف مفتاحه من لوحة التحكم ← Credential Manager ← Windows Credentials (الإدخالات التي تبدأ بـ `ZeroFlow:`).
+4. يُزال Python و Git من *الإعدادات ← التطبيقات*. وإن كنت استخدمت Ollama أيضاً، احذف نموذجه أولاً (`ollama rm <الاسم>`) ثم أزِل Ollama نفسه بالطريقة ذاتها.
 
 ---
 
-هل هناك مشكلة؟ [دليل العتاد والضبط](HARDWARE.ar.md) لمشكلات السرعة، و[الأسئلة الشائعة (بالإنجليزية)](FAQ.md) لغيرها، وملفا السجل — `flow_debug.log` و `reader_debug.log` في مجلد المشروع — لمعرفة ما حدث فعلاً.
+هل هناك مشكلة؟ [دليل العتاد والضبط](HARDWARE.ar.md) لمشكلات السرعة، و[الأسئلة الشائعة (بالإنجليزية)](FAQ.md) لغيرها، وملفا السجل — `flow_debug.log` و `reader_debug.log` في المجلد `%LOCALAPPDATA%\ZeroFlow\logs` — لمعرفة ما حدث فعلاً.
 
 </div>
