@@ -6,8 +6,6 @@
 
 # Binary assets — never apply line-ending/text conversion
 # (so they are never CRLF-mangled and never shown as text diffs).
-*.pdf  binary
-*.docx binary
 *.ico  binary
 *.jpg  binary
 *.jpeg binary

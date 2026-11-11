@@ -6,7 +6,7 @@
 
 ويندوز 11 · لينوفو IdeaPad Slim 5 (i7-13620H، 16 جيجابايت، Intel UHD) · المستودع: github.com/zerocold7/zero-flow-app
 
-> 🌍 In English: **[Read this guide in English](SETUP-CPU-LAPTOP.md)** · نسخة PDF: [PDF](Zero-Flow-Setup-Guide.ar.pdf)
+> 🌍 In English: **[Read this guide in English](SETUP-CPU-LAPTOP.md)**
 
 > 🎮 **في جهازك كرت شاشة NVIDIA أو AMD أو Intel؟** اتبع [دليل التثبيت](INSTALL.ar.md) بدلاً من هذا الدليل — فهو يغطي كل أنواع الأجهزة، و[دليل العتاد والضبط](HARDWARE.ar.md) يشرح ما تتوقعه من جهازك.
 

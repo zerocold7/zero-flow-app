@@ -4,9 +4,11 @@ All notable work on the **Zero- Flow Engine**. Newest first.
 
 ---
 
-## [2.0.0-alpha.5] — unreleased — Settings, vocabulary and history move out of the program folder
+## [2.0.0] — in progress
 
-### 🗂️ One settings file (phase 5a)
+### [2.0.0-alpha.5] — unreleased — Settings, vocabulary and history move out of the program folder
+
+#### 🗂️ One settings file (phase 5a)
 - **Settings live in `%APPDATA%\ZeroFlow\settings.json`**, a JSON object of
   `"NAME": value`. It is the only source; restart the engine after editing it. A Settings
   window will replace hand-editing in phase 5b. Developers can point `ZEROFLOW_SETTINGS`
@@ -29,27 +31,31 @@ All notable work on the **Zero- Flow Engine**. Newest first.
 - **`check_hardware.py --apply`** writes into `settings.json` once it exists; before the
   first start it writes into `.env`, which the first start moves in.
 
-### 🧹 Nine settings gone
+#### 🧹 Nine settings gone
 - `HOTKEY_PANIC` (`Esc` always cancels and silences), `AI_NUM_CTX` and `OLLAMA_NUM_CTX`
   (8,192), `AI_BUILTIN_PORT` (39281), `READER_SMART_MAX_CHARS` (1,000),
   `READER_LLM_TIMEOUT` (10 s), `READER_FIRST_BATCH_CHARS` (120) and `READER_BATCH_CHARS`
   (300) are fixed values in the code now. `FALLBACK_LLM` is removed: with Ollama down or
   empty, no model name is guessed. An old `.env` that names them still migrates quietly.
 
-### 🛡️ Safeguard
+#### 🛡️ Safeguard
 - **A model folder missing a file is repaired.** If a cached Whisper model folder lacks a
   file, or has an empty one, the engine downloads the missing files at the pinned revision.
 
-### 📝 Docs
+#### 📝 Docs
 - `CONFIGURATION.md`, the install, hardware, FAQ and beginner guides (English and
   Arabic), `ARCHITECTURE.md`, the presets and the launchers' messages now name the new
-  places. The English beginner PDF is rebuilt from the new text.
+  places.
+- **The guides are Markdown only.** The printable PDFs of the beginner guide and their
+  builders (`tools/build_setup_pdf.py`, the Word-based Arabic build) are gone, with
+  `reportlab` from the dev tools: two copies of every guide drifted, and the Arabic one
+  needed Word to rebuild.
 
 ---
 
-## [Unreleased] — 2.0 in progress
+### [2.0.0-alpha.0 – 2.0.0-alpha.4.5] — 2026-10-14 to 2026-11-04 — Stability, accuracy, structure, the built-in AI, the security audit (phases 1–4)
 
-### 🛡️ Stability (phase 1)
+#### 🛡️ Stability (phase 1)
 - **Quick presses no longer mix up recordings.** Every recording shared one audio
   queue and one "recording" and "cancel" flag. Stop-then-start within 40 ms kept the
   first recording running and wiped its audio; Esc followed by a record key could still
@@ -86,7 +92,7 @@ All notable work on the **Zero- Flow Engine**. Newest first.
   an invisible `cmd.exe` waiting for a key. Visible launchers now pause only after an
   error.
 
-### 📦 Install
+#### 📦 Install
 - **`constraints.txt` pins every package** to a set known to work together; install
   with `pip install -r requirements.txt -c constraints.txt`. Without it, a fresh install
   took transformers 5.19, which needs a newer torch, and the reader could not start.
@@ -94,7 +100,7 @@ All notable work on the **Zero- Flow Engine**. Newest first.
   first read (a hidden download, and a failure offline).
 - `requirements-dev.txt` and a `ruff` configuration for working on the engine.
 
-### 🎯 Accuracy and speed (phase 2)
+#### 🎯 Accuracy and speed (phase 2)
 - **Invented endings are dropped.** A stock ending — "Thank you.", "Have a good
   night.", "شكرا للمشاهدة", "اشتركوا في القناة" — is removed from the very end of a
   dictation when the audio shows it was never said: it sits 15 dB or more below your
@@ -124,7 +130,7 @@ All notable work on the **Zero- Flow Engine**. Newest first.
 153 tests at the end of phase 1 (from 109). Each fix was broken on purpose to confirm
 its test fails.
 
-### 🧱 Structure (phase 3)
+#### 🧱 Structure (phase 3)
 - **The engine is a package, `zeroflow/`.** `local_flow.py` (975 lines), `flow_core.py`,
   `engine_ui.py`, `flow_signals.py` and `personas.py` became small modules — `engine`,
   `stt`, `llm`, `capture`, `clipboard`, `settings` and others (map in ARCHITECTURE.md).
@@ -147,7 +153,7 @@ its test fails.
 
 196 tests.
 
-### 🧠 The AI built in (phase 4)
+#### 🧠 The AI built in (phase 4)
 - **No Ollama needed.** The engine runs llama.cpp's `llama-server` itself, as a hidden
   child process tied to the engine (a crash or End task takes it down too), with
   Google's **Gemma 4 E4B** (Apache 2.0), downloaded once on first start (5.15 GB). It is
@@ -180,7 +186,7 @@ its test fails.
 
 238 tests. Each new guard was broken on purpose to confirm its test fails.
 
-### 🧠 Unload the AI when you do not need it
+#### 🧠 Unload the AI when you do not need it
 - **Tray → Unload AI model** frees the AI's memory at once — 3.2 GB of graphics memory
   with the built-in AI, measured (Ollama is told to drop its model; a cloud AI has
   nothing on your PC to free). The next Polish, Translate, line fix or Smart clean
@@ -191,7 +197,7 @@ its test fails.
 
 257 tests; the five new guards were each broken on purpose and caught.
 
-### 🧹 Checked and cleaned (phases 1–4)
+#### 🧹 Checked and cleaned (phases 1–4)
 A top-to-bottom review before the app window, with nothing in it changing what you see
 except where noted.
 - **Your voice is never written to disk.** Each clip went to Whisper through a
@@ -220,7 +226,7 @@ except where noted.
 both languages in 0.33–0.43 s, the AI ready 4.6 s after start, and no `llama-server`
 left after a crash.
 
-### 🛡️ Safeguards
+#### 🛡️ Safeguards
 - **An AI that fails keeps your words.** A provider that broke instead of answering
   (a server reply in an unexpected shape, a missing package) lost the whole dictation;
   now your own words are pasted, a toast says the AI failed, and the log says why.
@@ -233,7 +239,7 @@ left after a crash.
 
 266 tests; the seven new guards were each broken on purpose and caught (76 in all).
 
-### 🔒 Privacy and security (audit)
+#### 🔒 Privacy and security (audit)
 - **Your words stay out of the debug log.** `flow_debug.log` recorded every dictation
   word for word, twice (the transcript and the pasted text), and the AI's answer when
   it was in the wrong language. It now records their size; `LOG_DICTATION_TEXT=True`
@@ -289,7 +295,7 @@ left after a crash.
 305 tests (6 more on the real clipboard with `ZEROFLOW_REAL_CLIPBOARD=1`); each fix
 was broken on purpose and caught.
 
-### 🪶 Lighter install
+#### 🪶 Lighter install
 - **The Claude package is an optional install.** Every install carried `anthropic` and
   the 7 packages it pulls in, used only with `AI_PROVIDER=claude`. It is now one extra
   command for those who choose Claude ([CONFIGURATION.md §6](CONFIGURATION.md)); without
@@ -316,7 +322,7 @@ was broken on purpose and caught.
   transformers; it runs in the background at start-up. The engine uses no processor
   while idle. `tools/bench/measure_load.py` gives these numbers.
 
-### 🧪 Every case tested
+#### 🧪 Every case tested
 391 tests (from 266 at alpha.4.3); test coverage 87% of the engine (from 77%). New:
 the whole engine's life (starting the reader, Exit from the tray, a stuck reader at
 shutdown, a crash, a second copy); every signal between the halves on real Windows
@@ -335,7 +341,7 @@ sound itself, which `tools/smoke_check.py` checks for real.
   point there, and `tests/test_docs_links.py` checks that all 134 links between the
   guides lead to a real file and heading.
 
-### 🔍 Code review
+#### 🔍 Code review
 A full review of the engine found ten faults; each is now a test that failed first
 (`tests/test_review_findings.py`):
 - **A busy clipboard after the paste** threw your clipboard away and failed a dictation

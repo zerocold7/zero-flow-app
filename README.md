@@ -118,8 +118,7 @@ Then install the packages for your tier, write your settings, install the built-
 (Ollama, LM Studio or a cloud AI such as Claude remain options —
 [CONFIGURATION.md §6](CONFIGURATION.md#6-choosing-the-ai-provider)).
 Never done anything like this? The **[Beginner Guide](docs/SETUP-CPU-LAPTOP.md)** walks
-through every click (also as a [printable PDF](docs/Zero-Flow-Setup-Guide.pdf), and
-[in Arabic](docs/SETUP-CPU-LAPTOP.ar.md) · [PDF](docs/Zero-Flow-Setup-Guide.ar.pdf)).
+through every click (also [in Arabic](docs/SETUP-CPU-LAPTOP.ar.md)).
 
 ## Keys
 
@@ -166,7 +165,7 @@ Each has a twin that starts with no window — `Launch_Zero_Silent.vbs`,
 |---|---|---|
 | **Install** — every PC, step by step | [INSTALL.md](docs/INSTALL.md) | [INSTALL.ar.md](docs/INSTALL.ar.md) |
 | **Hardware & tuning** — tiers, measured speeds, fixes | [HARDWARE.md](docs/HARDWARE.md) | [HARDWARE.ar.md](docs/HARDWARE.ar.md) |
-| **Beginner guide** — no graphics card, every click | [SETUP-CPU-LAPTOP.md](docs/SETUP-CPU-LAPTOP.md) · [PDF](docs/Zero-Flow-Setup-Guide.pdf) | [SETUP-CPU-LAPTOP.ar.md](docs/SETUP-CPU-LAPTOP.ar.md) · [PDF](docs/Zero-Flow-Setup-Guide.ar.pdf) |
+| **Beginner guide** — no graphics card, every click | [SETUP-CPU-LAPTOP.md](docs/SETUP-CPU-LAPTOP.md) | [SETUP-CPU-LAPTOP.ar.md](docs/SETUP-CPU-LAPTOP.ar.md) |
 | **FAQ** | [FAQ.md](docs/FAQ.md) | |
 | **Every setting** — keys, models, prompts, other AI providers, languages | [CONFIGURATION.md](CONFIGURATION.md) | |
 | **How it works inside** | [ARCHITECTURE.md](ARCHITECTURE.md) | |

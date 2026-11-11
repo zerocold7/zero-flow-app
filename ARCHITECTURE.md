@@ -34,7 +34,7 @@ a local LLM to clean up or translate text.
 | `check_hardware.py` | Standalone (standard library only): detects the GPU/RAM, picks a hardware tier, writes its settings into `settings.json` (or `.env` before the first start) |
 | `presets/`      | One `.env`-format fragment per hardware tier — the model and device settings `check_hardware.py` applies |
 | `docs/`         | User guides: install, hardware & tuning, FAQ, the beginner walkthrough (English + Arabic) |
-| `tools/`        | Install the built-in AI (`tools/get_llama.py`); rebuild the printable PDFs (`tools/README.md`); measure speech and AI changes (`tools/bench/`); prove the tests guard the fixes (`tools/mutation_check.py`); check every real part end to end on this PC (`tools/smoke_check.py`) |
+| `tools/`        | Install the built-in AI (`tools/get_llama.py`); measure speech and AI changes (`tools/bench/`); prove the tests guard the fixes (`tools/mutation_check.py`); check every real part end to end on this PC (`tools/smoke_check.py`) |
 | `runtime/`      | *(git-ignored)* The built-in AI's llama.cpp build, one folder per variant (`runtime/llama/cuda/`…), written by `tools/get_llama.py` |
 | `tests/`        | `unittest` tests, run in the venv: text logic, recording and AI failure paths, playback threading, vocabulary and history files, process supervision (`.\venv\Scripts\python.exe -m unittest discover -s tests -t .`) |
 

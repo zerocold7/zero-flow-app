@@ -1,8 +1,6 @@
 # Zero- Flow Engine — Beginner Setup Guide (Windows, no GPU needed)
 
-> 📄 Prefer a printable / offline copy? **[Download the PDF version](Zero-Flow-Setup-Guide.pdf)**.
->
-> 🌍 **بالعربية:** **[اقرأ هذا الدليل بالعربية](SETUP-CPU-LAPTOP.ar.md)** (نسخة PDF: [PDF](Zero-Flow-Setup-Guide.ar.pdf)).
+> 🌍 **بالعربية:** **[اقرأ هذا الدليل بالعربية](SETUP-CPU-LAPTOP.ar.md)**.
 >
 > 🎮 **Have an NVIDIA, AMD or Intel graphics card?** Follow the [Install Guide](INSTALL.md) instead — it covers every kind of PC, and the [Hardware Guide](HARDWARE.md) explains what to expect from yours.
 
