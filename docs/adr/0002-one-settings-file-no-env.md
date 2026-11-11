@@ -1,0 +1,3 @@
+# One settings file in %APPDATA%; .env is migrated once, then ignored
+
+Settings and user data live in `%APPDATA%\ZeroFlow\`, with one settings file as the only source of truth; `.env` is read once by the migration and never again. Keeping `.env` as an override layer was rejected: two sources would make the settings window show values that are not the ones in effect, breaking the Phase 5 gate ("every task through the window without touching a file"). Developers point an environment variable at a different settings file instead. API keys are not in that file: they go to Windows Credential Manager.
