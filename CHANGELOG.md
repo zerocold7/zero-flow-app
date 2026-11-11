@@ -6,6 +6,33 @@ All notable work on the **Zero- Flow Engine**. Newest first.
 
 ## [2.0.0] — in progress
 
+### [2.0.0-alpha.9] — 2026-11-11 — Reader improvements (phase 6)
+
+#### 🔊 Where and how much the Reader speaks
+- **Reader output** on the Speech tab: the device the Reader speaks on, stored by name
+  (`READER_OUTPUT`; blank is the Windows default). A name that is not plugged in falls
+  back to the default for that run. Unplugged mid-read, the Reader moves to the default
+  and plays the chunk that failed again, so the read carries on.
+- **Long selections:** a read stops at 20,000 characters (about 20 minutes of speech),
+  at the last whole sentence that fits. Rendering stays only four chunks ahead of the
+  speaker. Measured before: a 50k-character selection held 296 MB of audio and kept a
+  CPU busy for about 13 minutes.
+- **F4 during a long read** now starts the new read. It used to do nothing while
+  speech was still being rendered (on a CPU, about 80 s for 5,000 characters).
+
+#### 🛟 CPU fallback
+- If the graphics card fails to load the voice model, or fails while speaking, the
+  Reader moves to the CPU once, says so in the Debug log, and carries on from the
+  sentence that failed. Before, every F4 failed again until the Engine restarted.
+
+#### Already in place, now checked
+- Voice and speed were saved by 5b. spaCy's `en_core_web_sm` is installed from
+  `requirements.txt`, and a test now fails if it is missing. Without it Kokoro would pip-install it
+  on the first read. Smart mode adds no words to the Learned vocabulary (since the
+  code review); its guard stays.
+- Removed: `voice_engine.set_voice`, which nothing called.
+- Arabic voice: research only, in `docs/research/arabic-tts.md`.
+
 ### [2.0.0-alpha.8] — 2026-11-11 — History, vocabulary and diagnostics (phase 5d)
 
 #### 🗂️ What Zero- Flow keeps, through windows

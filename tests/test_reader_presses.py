@@ -20,7 +20,7 @@ from reader import app
 class TestTwoPresses(unittest.TestCase):
     def test_a_press_during_a_read_starts_no_second_one(self):
         in_gap, let_go = threading.Event(), threading.Event()
-        presses = []
+        presses, speakers = [], []
 
         def is_recording():
             presses.append(threading.current_thread().name)
@@ -29,7 +29,8 @@ class TestTwoPresses(unittest.TestCase):
                 let_go.wait(5)
             return False
         with mock.patch.object(app.signals, "is_recording", side_effect=is_recording), \
-             mock.patch.object(app.voice_engine, "stream_audio") as speak, \
+             mock.patch.object(app.voice_engine, "stream_audio", side_effect=lambda *a:
+                               speakers.append(threading.current_thread().name)) as speak, \
              mock.patch.object(app.keyboard, "release"), \
              mock.patch.object(app, "copy_selection", return_value="read this"), \
              mock.patch.object(app, "clean_text_instant", side_effect=lambda t: t), \
@@ -46,6 +47,7 @@ class TestTwoPresses(unittest.TestCase):
             let_go.set()
             first.join(5)
         self.assertEqual(speak.call_count, 1)
+        self.assertEqual(speakers, ["first"])           # the press that came first reads
 
     def test_the_next_press_after_a_read_works(self):
         with mock.patch.object(app.signals, "is_recording", return_value=False), \

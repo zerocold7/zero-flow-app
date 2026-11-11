@@ -16,7 +16,8 @@ spoken word, not at import time, so startup stays instant.
 **Device policy.** The reader always runs in its own process — standalone, or as the
 child `zero_flow.py` spawns — so it can hold CUDA freely and `READER_DEVICE` is
 honoured as written. (In one process with Whisper it could not use CUDA at all:
-ARCHITECTURE.md §12.)
+ARCHITECTURE.md §12.) A card that fails, loading or speaking, gives way to the CPU for
+the rest of the run (`get_pipeline`, `_switch_to_cpu`).
 
 **Model files.** The model, its config and each voice are read straight from the local
 Hugging Face cache, and fetched from the Hub only when missing (the first run, or a
@@ -33,7 +34,7 @@ import warnings
 
 import sounddevice as sd
 
-from zeroflow import models, settings, signals, ui, voices
+from zeroflow import microphone, models, settings, signals, ui
 
 warnings.filterwarnings("ignore", category=UserWarning)
 warnings.filterwarnings("ignore", category=FutureWarning)
@@ -45,8 +46,6 @@ OUTPUT_SAMPLE_RATE = 24000
 REPO_ID = "hexgrad/Kokoro-82M"
 LANG_CODE = "a"                                  # 'a' = American English
 
-# Shown name -> Kokoro voice id (zeroflow/voices.py, shared with the Settings window).
-VOICES = voices.VOICES
 DEFAULT_VOICE = settings.READER_VOICE
 
 # "auto" (GPU when available), "cpu", or "cuda". Honoured under every launcher.
@@ -63,16 +62,34 @@ FIRST_BATCH_CHARS = 120     # measured tuning, not a choice (docs/settings-table
 BATCH_CHARS = 300
 
 current_voice = DEFAULT_VOICE
+# Rendering stays this many chunks ahead of the speaker, no more. Unbounded, a GPU
+# rendered a whole 50k-character selection (51 minutes of speech) in 37 s and held
+# all of it: 296 MB, about 6 MB per minute (measured in Phase 6). A chunk is one batch,
+# up to ~20 s of speech, so four keep well ahead of playback on a CPU as well.
+AHEAD_CHUNKS = 4
 # Holds (generation, audio) pairs. interrupt_audio() bumps the generation, so every
 # chunk rendered before the interrupt is recognisably stale and is never played.
-audio_queue = queue.Queue()
+audio_queue = queue.Queue(maxsize=AHEAD_CHUNKS)
 _generation = 0
 _rendering = False      # a read is still synthesising: more chunks are coming
-# How often the playback worker checks for an interrupt while a chunk is playing.
+# How often the playback worker checks for an interrupt while a chunk is playing, and
+# how often a render waiting for room in the queue checks for one.
 PLAYBACK_POLL_SECONDS = 0.01
+QUEUE_POLL_SECONDS = 0.05
+# One render at a time: a new read waits here until the one it interrupted has let go,
+# which is within one chunk (QUEUE_POLL_SECONDS while waiting for room).
+_render_lock = threading.Lock()
 
 _pipeline = None
 _pipeline_lock = threading.Lock()
+# The device the loaded voice model runs on. Once the card has failed it is "cpu" for
+# the rest of this run: retried, a failed card failed again on every F4 (Phase 6).
+active_device = None
+
+# The sounddevice index READER_OUTPUT names, or None for the Windows default. Resolved
+# on the first chunk played; a device that fails mid-read makes it None for this run.
+UNRESOLVED = object()
+_output = UNRESOLVED
 
 
 def resolve_device():
@@ -114,31 +131,81 @@ def _model_file(filename):
     return hf_hub_download(REPO_ID, filename, revision=revision)
 
 
+def _load(device):
+    """Build the Kokoro pipeline on `device`."""
+    # Deliberately deferred — see the module docstring.
+    from huggingface_hub.utils import logging as hf_logging
+    from kokoro import KModel, KPipeline
+    # The Hub answers a download with an "unauthenticated request" notice. It is
+    # about rate limits, irrelevant to a one-time download of a public model, and
+    # huggingface_hub resets its own log level on import, so set it here.
+    hf_logging.set_verbosity_error()
+    print(f"{ui.C_ACCENT}🔵 [TTS]{ui.C_RESET} Loading Kokoro voice model on {device}...")
+    model = KModel(repo_id=REPO_ID, config=_model_file("config.json"),
+                   model=_model_file(KModel.MODEL_NAMES[REPO_ID])).to(device).eval()
+    pipeline = KPipeline(lang_code=LANG_CODE, repo_id=REPO_ID, model=model)
+    # espeak, the fallback for words outside Kokoro's dictionary, logs "words
+    # count mismatch" whenever it splits a word differently — harmless, and
+    # most of reader_debug.log. phonemizer resets this level each time it
+    # creates a backend (just now, inside KPipeline), so it is set after.
+    logging.getLogger("phonemizer").setLevel(logging.ERROR)
+    logging.info(f"Kokoro TTS pipeline loaded on {device}.")
+    print(f"{ui.C_GOOD}🔵 [TTS]{ui.C_RESET} Voice model ready.")
+    return pipeline
+
+
 def get_pipeline():
-    """Load Kokoro on first use (GPU when available, CPU otherwise) and cache it."""
-    global _pipeline
+    """Load Kokoro on first use (GPU when available, CPU otherwise) and cache it. A card
+    that fails to load it gives way to the CPU for the rest of this run."""
+    global _pipeline, active_device
     with _pipeline_lock:
         if _pipeline is None:
-            # Deliberately deferred — see the module docstring.
-            from huggingface_hub.utils import logging as hf_logging
-            from kokoro import KModel, KPipeline
-            # The Hub answers a download with an "unauthenticated request" notice. It is
-            # about rate limits, irrelevant to a one-time download of a public model, and
-            # huggingface_hub resets its own log level on import, so set it here.
-            hf_logging.set_verbosity_error()
             device = resolve_device()
-            print(f"{ui.C_ACCENT}🔵 [TTS]{ui.C_RESET} Loading Kokoro voice model on {device}...")
-            model = KModel(repo_id=REPO_ID, config=_model_file("config.json"),
-                           model=_model_file(KModel.MODEL_NAMES[REPO_ID])).to(device).eval()
-            _pipeline = KPipeline(lang_code=LANG_CODE, repo_id=REPO_ID, model=model)
-            # espeak, the fallback for words outside Kokoro's dictionary, logs "words
-            # count mismatch" whenever it splits a word differently — harmless, and
-            # most of reader_debug.log. phonemizer resets this level each time it
-            # creates a backend (just now, inside KPipeline), so it is set after.
-            logging.getLogger("phonemizer").setLevel(logging.ERROR)
-            logging.info(f"Kokoro TTS pipeline loaded on {device}.")
-            print(f"{ui.C_GOOD}🔵 [TTS]{ui.C_RESET} Voice model ready.")
+            try:
+                _pipeline = _load(device)
+            except Exception as e:
+                if device == "cpu":
+                    raise
+                logging.warning(f"The voice model failed to load on the graphics card ({e}). "
+                                f"The Reader uses the CPU for the rest of this run.")
+                device = "cpu"
+                _pipeline = _load(device)
+            active_device = device
         return _pipeline
+
+
+def _switch_to_cpu(error, failed):
+    """The card failed while speaking: replace its pipeline with a CPU one, once.
+    False when the pipeline that failed was already on the CPU (the caller raises)."""
+    global _pipeline, active_device
+    with _pipeline_lock:
+        if _pipeline is not failed:
+            return True                          # another read switched already
+        if active_device == "cpu":
+            return False
+        logging.warning(f"The graphics card failed while the Reader was speaking ({error}). "
+                        f"The Reader uses the CPU for the rest of this run.")
+        _pipeline = _load("cpu")
+        active_device = "cpu"
+        return True
+
+
+def _render(batch, voice_id, speed):
+    """The audio chunks of one batch. When the card fails part-way, the batch is rendered
+    again on the CPU and only the chunks not yet given are given."""
+    given = 0
+    while True:
+        pipeline = get_pipeline()
+        try:
+            for index, (_, _, audio) in enumerate(pipeline(batch, voice=_voice(voice_id),
+                                                           speed=speed)):
+                if index >= given:
+                    given += 1
+                    yield audio
+            return
+        except Exception as e:
+            if not _switch_to_cpu(e, pipeline):
+                raise
 
 
 def _voice(voice_id):
@@ -162,7 +229,7 @@ def _playback_worker():
         if generation != _generation:
             continue                             # rendered before an interrupt: drop it
         try:
-            sd.play(audio, OUTPUT_SAMPLE_RATE)
+            _play(audio)
             stream = sd.get_stream()
             while stream.active:
                 if generation != _generation:
@@ -178,15 +245,42 @@ def _playback_worker():
             logging.error(f"Reader playback failed: {e}")
 
 
+def _output_device():
+    """The sounddevice index for READER_OUTPUT, or None for the Windows default — also
+    what a name that is not plugged in falls back to, said once, for this run."""
+    global _output
+    if _output is UNRESOLVED:
+        _output = None
+        if settings.READER_OUTPUT:
+            try:
+                index, fell_back = microphone.resolve(settings.READER_OUTPUT, sd.query_devices(),
+                                                      sd.default.hostapi, output=True)
+            except Exception:
+                index, fell_back = None, True
+            if fell_back:
+                logging.warning(f"The Reader output '{settings.READER_OUTPUT}' is not connected; "
+                                f"using the Windows default for this run.")
+            _output = index
+    return _output
+
+
+def _play(audio):
+    """Start one chunk on the chosen output. A chosen output that fails (unplugged) gives
+    way to the Windows default for the rest of this run, starting with this chunk."""
+    global _output
+    device = _output_device()
+    try:
+        sd.play(audio, OUTPUT_SAMPLE_RATE, device=device)
+    except Exception as e:
+        if device is None:
+            raise
+        logging.warning(f"The Reader output failed ({e}); using the Windows default "
+                        f"for the rest of this run.")
+        _output = None
+        sd.play(audio, OUTPUT_SAMPLE_RATE, device=None)
+
+
 threading.Thread(target=_playback_worker, daemon=True).start()
-
-
-def set_voice(new_voice):
-    """Switch the active voice. Accepts a menu label or a raw Kokoro voice id."""
-    global current_voice
-    current_voice = VOICES.get(new_voice, new_voice)
-    logging.info(f"Reader voice switched to {current_voice}.")
-    print(f"\n{ui.C_ACCENT}🔵 [TTS]{ui.C_RESET} Voice switched to {current_voice}")
 
 
 def preload():
@@ -195,8 +289,7 @@ def preload():
     Called on a background thread at startup so the first press of the read key
     does not pay the ~13 s model load, plus a first-inference cost on top."""
     try:
-        pipeline = get_pipeline()
-        for _ in pipeline("Ready.", voice=_voice(current_voice), speed=1.0):
+        for _ in _render("Ready.", current_voice, 1.0):
             pass                                 # discard: this is a warm-up only
         logging.info("Kokoro pipeline preloaded and warmed.")
     except Exception as e:
@@ -247,27 +340,42 @@ def _split_long_first(sentence, first_max):
 def stream_audio(text, generation=None):
     """Synthesise `text` and queue it for playback, a batch of sentences at a time.
     Stops rendering as soon as interrupt_audio() is called — or has been, since the
-    read that owns `generation` began (interrupt_audio's return value)."""
+    read that owns `generation` began (interrupt_audio's return value).
+
+    Returns only once the last chunk is queued, which with AHEAD_CHUNKS is near the end
+    of the speech: the caller must not hold the read key's lock through it."""
+    global _rendering
     if generation is None:
         generation = _generation
-    if generation != _generation:
-        return
-    global _rendering
-    pipeline = get_pipeline()
-    voice = _voice(current_voice)
-    _rendering = True
-    signals.set_reading(True)
-    try:
-        for batch in _iter_batches(text):
-            for _, _, audio in pipeline(batch, voice=voice, speed=settings.READER_SPEED):
-                if generation != _generation:
-                    return
-                if audio is not None:
-                    audio_queue.put((generation, audio))
-    finally:
-        _rendering = False
-        if audio_queue.empty() and generation != _generation:
-            signals.set_reading(False)
+    with _render_lock:                           # the read this one interrupted lets go
+        if generation != _generation:
+            return
+        get_pipeline()
+        _rendering = True
+        signals.set_reading(True)
+        try:
+            for batch in _iter_batches(text):
+                for audio in _render(batch, current_voice, settings.READER_SPEED):
+                    if generation != _generation:
+                        return
+                    if audio is not None and not _queue_chunk(generation, audio):
+                        return
+        finally:
+            _rendering = False
+            if audio_queue.empty() and generation != _generation:
+                signals.set_reading(False)
+
+
+def _queue_chunk(generation, audio):
+    """Queue one chunk, waiting while AHEAD_CHUNKS are queued already. False when the
+    read is interrupted while it waits: the chunk is dropped and the render ends."""
+    while generation == _generation:
+        try:
+            audio_queue.put((generation, audio), timeout=QUEUE_POLL_SECONDS)
+            return True
+        except queue.Full:
+            pass
+    return False
 
 
 def current_generation():

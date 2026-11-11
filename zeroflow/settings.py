@@ -340,6 +340,9 @@ READER_DEVICE = choice("READER_DEVICE", "auto", ("auto", "cpu", "cuda"))
 READER_SMART_MODE = switch("READER_SMART_MODE", False)
 # How fast the voice speaks: 1.0 is normal.
 READER_SPEED = number("READER_SPEED", 1.0, minimum=0.5)
+# Where the Reader speaks, by device name; blank is the Windows default. Like MICROPHONE,
+# a name that is not plugged in falls back to the default for that run.
+READER_OUTPUT = text("READER_OUTPUT", "")
 
 # ---------------------------------------------------------------- the halves, the mic, the look
 # Each half can be switched off from the tray or the Settings window; off frees its memory.
