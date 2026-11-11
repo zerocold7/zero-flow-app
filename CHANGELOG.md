@@ -6,6 +6,33 @@ All notable work on the **Zero- Flow Engine**. Newest first.
 
 ## [2.0.0] — in progress
 
+### [2.0.0-alpha.7] — 2026-11-11 — First-run wizard (phase 5c)
+
+#### 🧭 Set up through a window
+- **The wizard runs on a first start with nothing to migrate**, and again from **Run
+  setup again** in Settings. Its screens: Interface language (Arabic switches it to
+  right-to-left at once), This PC, Models folder, AI Provider, Downloads, Microphone,
+  AI test, and a last screen with the keys. Nothing is written until Finish, so a
+  wizard closed half-way runs again next time. Finish writes the settings file and
+  restarts the Engine (about 5 s).
+- **This PC** shows `check_hardware.py`'s `detect()` and `recommend()` unchanged
+  (66 ms on this PC), with the reasons for the choice.
+- **Models folder** is saved as `MODELS_DIR`, and every download goes there.
+- **Downloads** show their measured size (pinned revisions, so the sizes are fixed),
+  progress, speed and time left. Each runs in a child process that Cancel stops at
+  once. A cancelled or failed download leaves nothing half-written. A model already in
+  the folder is not downloaded again. The built-in AI runtime installs with progress.
+- **Mic test** records 3 s and passes on a voice. **AI test** asks the chosen
+  Provider one sentence through the Engine's own code. Each says plainly whether it
+  passed or failed, and why.
+- **The API key** goes to Credential Manager at Finish, before the settings file. The
+  AI test hands it to its child process on standard input, never in a file.
+
+#### 🔒 A new Windows account starts clean
+- The program folder is shared by every Windows user. The old `.env`, vocabulary and
+  history now migrate only when they belong to the user starting Zero- Flow; any other
+  user gets the wizard, and nothing of the first user's is copied.
+
 ### [2.0.0-alpha.6] — 2026-11-11 — Tray, overlay and the Settings window (phase 5b)
 
 #### 🪟 One program with a real interface

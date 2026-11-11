@@ -39,6 +39,37 @@ EN = {
     "adv.smart": "Reader Smart mode", "adv.load_ai": "Load the AI at start",
     "saved.restart": "Saved. Restarting…", "saved.live": "Saved.",
     "problem.key": "The API key could not be saved: ",
+    "general.setup_again": "Run setup again…",
+    "wiz.title": "Set up Zero- Flow", "wiz.next": "Next", "wiz.back": "Back",
+    "wiz.finish": "Finish",
+    "wiz.welcome": "Welcome",
+    "wiz.welcome_text": "Zero- Flow types what you say where the cursor is, and reads "
+                        "selected text aloud, in English and Arabic. This takes a few "
+                        "minutes, most of it downloading the models once.",
+    "wiz.this_pc": "This PC", "wiz.cpu": "Processor", "wiz.ram": "Memory",
+    "wiz.card": "Graphics card", "wiz.no_card": "none", "wiz.kind": "Best set-up",
+    "wiz.this_pc_hint": "Chosen for this PC. A smaller speech model is faster and less accurate.",
+    "wiz.models_text": "The speech, voice and AI models are downloaded once into this folder.",
+    "wiz.space": "Needs {need}; {free} free.",
+    "wiz.space_short": "Not enough space: choose another folder.",
+    "wiz.ai_text": "Built-in runs on this PC and needs no account. Polish and Translate use it.",
+    "wiz.downloads": "Downloads",
+    "wiz.downloads_text": "Each model is downloaded once. You can cancel and try again.",
+    "wiz.cancel_download": "Cancel download", "wiz.retry": "Try again",
+    "wiz.speed": "{speed} Mbit/s, about {minutes} min left",
+    "wiz.download_failed": "A download failed and was removed: ",
+    "wiz.download_cancelled": "Cancelled. Nothing half-downloaded was kept.",
+    "wiz.downloads_done": "Everything is downloaded.",
+    "wiz.mic_text": "Choose the microphone, press Test and say a few words.",
+    "wiz.mic_test": "Test the microphone (3 s)",
+    "wiz.ai_test_title": "AI test",
+    "wiz.ai_test_text": "Sends one short sentence to the AI. The built-in AI takes up to a "
+                        "minute to load the first time.",
+    "wiz.ai_test": "Test the AI",
+    "wiz.pass": "Passed", "wiz.fail": "Failed",
+    "wiz.done": "Ready",
+    "wiz.done_text": "Press Finish: Zero- Flow restarts in about 5 seconds. Then click where "
+                     "you want to type, hold a key and speak:",
 }
 
 AR = {
@@ -74,6 +105,37 @@ AR = {
     "adv.smart": "الوضع الذكي للقارئ", "adv.load_ai": "تحميل الذكاء عند التشغيل",
     "saved.restart": "تم الحفظ. إعادة التشغيل…", "saved.live": "تم الحفظ.",
     "problem.key": "تعذر حفظ مفتاح API: ",
+    "general.setup_again": "إعادة الإعداد…",
+    "wiz.title": "إعداد زيرو فلو", "wiz.next": "التالي", "wiz.back": "السابق",
+    "wiz.finish": "إنهاء",
+    "wiz.welcome": "مرحبًا",
+    "wiz.welcome_text": "زيرو فلو يكتب ما تقوله حيث يوجد المؤشر، ويقرأ النص المحدد بصوت "
+                        "عالٍ، بالإنجليزية والعربية. يستغرق الإعداد بضع دقائق، معظمها "
+                        "لتنزيل النماذج مرة واحدة.",
+    "wiz.this_pc": "هذا الجهاز", "wiz.cpu": "المعالج", "wiz.ram": "الذاكرة",
+    "wiz.card": "بطاقة الرسومات", "wiz.no_card": "لا يوجد", "wiz.kind": "الإعداد الأنسب",
+    "wiz.this_pc_hint": "تم الاختيار لهذا الجهاز. نموذج الكلام الأصغر أسرع وأقل دقة.",
+    "wiz.models_text": "تُنزَّل نماذج الكلام والصوت والذكاء مرة واحدة في هذا المجلد.",
+    "wiz.space": "يحتاج {need}؛ المتاح {free}.",
+    "wiz.space_short": "المساحة غير كافية: اختر مجلدًا آخر.",
+    "wiz.ai_text": "المدمج يعمل على هذا الجهاز ولا يحتاج حسابًا. يستخدمه التنقيح والترجمة.",
+    "wiz.downloads": "التنزيلات",
+    "wiz.downloads_text": "يُنزَّل كل نموذج مرة واحدة. يمكنك الإلغاء والمحاولة مجددًا.",
+    "wiz.cancel_download": "إلغاء التنزيل", "wiz.retry": "المحاولة مجددًا",
+    "wiz.speed": "{speed} ميغابت/ث، يتبقى نحو {minutes} دقيقة",
+    "wiz.download_failed": "فشل تنزيل وتمت إزالته: ",
+    "wiz.download_cancelled": "تم الإلغاء. لم يُحتفظ بأي تنزيل ناقص.",
+    "wiz.downloads_done": "تم تنزيل كل شيء.",
+    "wiz.mic_text": "اختر الميكروفون، واضغط اختبار وقل بضع كلمات.",
+    "wiz.mic_test": "اختبار الميكروفون (3 ثوانٍ)",
+    "wiz.ai_test_title": "اختبار الذكاء",
+    "wiz.ai_test_text": "يرسل جملة قصيرة واحدة إلى الذكاء. يحتاج الذكاء المدمج حتى دقيقة "
+                        "للتحميل في المرة الأولى.",
+    "wiz.ai_test": "اختبار الذكاء",
+    "wiz.pass": "نجح", "wiz.fail": "فشل",
+    "wiz.done": "جاهز",
+    "wiz.done_text": "اضغط إنهاء: يُعاد تشغيل زيرو فلو خلال نحو 5 ثوانٍ. ثم انقر حيث تريد "
+                     "الكتابة، واضغط مفتاحًا وتحدّث:",
 }
 
 TABLES = {"en": EN, "ar": AR}

@@ -77,6 +77,7 @@ class EngineApp:
         self.halves.changed.connect(self._refresh_tray)
         self.halves.problem.connect(lambda text: ui.show_toast("⚠️ Zero- Flow", text))
         self.window = None
+        self.wizard = None
         self._build_tray()
         self._reading = QTimer()
         self._reading.timeout.connect(self._follow_reader)
@@ -151,6 +152,9 @@ class EngineApp:
         storage.update(settings.SETTINGS_FILE, {name: value})
 
     def open_settings(self) -> None:
+        if settings.NEEDS_SETUP:                  # no settings file yet: the wizard makes it
+            self.open_setup(first_start=True)
+            return
         if self.window is not None and self.window.isVisible():
             self.window.raise_()
             self.window.activateWindow()
@@ -164,9 +168,32 @@ class EngineApp:
             ollama_models(), key_saved=key_is_saved(store, values["AI_PROVIDER"], values["AI_URL"]),
             keys_pause=self._pause_keys, keys_resume=self._resume_keys)
         self.window.saved.connect(lambda restart: restart and QTimer.singleShot(300, self.restart_engine))
+        self.window.setup_requested.connect(lambda: self.open_setup(first_start=False))
         self.window.show()
         self.window.raise_()
         self.window.activateWindow()
+
+    # ------------------------------------------------------------------ first-run wizard
+    def open_setup(self, first_start: bool) -> None:
+        """The wizard (zeroflow/wizard.py). Finishing writes the settings file and
+        restarts the Engine, so every setting is read fresh. Closed on a first start, it
+        writes nothing and the Engine ends: the next start opens it again."""
+        if self.wizard is not None and self.wizard.isVisible():
+            self.wizard.raise_()
+            self.wizard.activateWindow()
+            return
+        from zeroflow.wizard import SetupWizard
+        self.wizard = SetupWizard(settings.SETTINGS_FILE, credentials.WindowsStore(),
+                                  microphone_names(), keys_pause=self._pause_keys,
+                                  keys_resume=self._resume_keys, ollama_models=ollama_models())
+        if not first_start:
+            self.wizard.load_current()
+        self.wizard.completed.connect(lambda: QTimer.singleShot(300, self.restart_engine))
+        if first_start:
+            self.wizard.rejected.connect(self._exit)
+        self.wizard.show()
+        self.wizard.raise_()
+        self.wizard.activateWindow()
 
     def _pause_keys(self) -> None:
         signals.set_keys_paused(True)             # the Reader process lets go of its keys
@@ -203,9 +230,15 @@ class EngineApp:
         self.bridge.booted.emit()
 
     def run(self) -> None:
-        self.bridge.booted.connect(self._booted)
-        threading.Thread(target=self.boot, args=(settings.DICTATION_ON, settings.READER_ON),
-                         daemon=True).start()
+        if settings.NEEDS_SETUP:
+            # A first start with nothing to migrate: nothing loads until the wizard has
+            # written the settings file and restarted the Engine.
+            logging.info("First start: opening the setup wizard.")
+            QTimer.singleShot(0, lambda: self.open_setup(first_start=True))
+        else:
+            self.bridge.booted.connect(self._booted)
+            threading.Thread(target=self.boot, args=(settings.DICTATION_ON, settings.READER_ON),
+                             daemon=True).start()
         self.app.exec()
 
     def _booted(self) -> None:

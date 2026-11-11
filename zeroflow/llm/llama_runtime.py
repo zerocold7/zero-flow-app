@@ -94,7 +94,9 @@ def _sha256(path: str) -> str:
     return digest.hexdigest()
 
 
-def _download(name: str, dest: str) -> None:
+def _download(name: str, dest: str, progress=None) -> None:
+    """`progress(bytes)` is told of each block as it arrives (the first-run wizard);
+    raising in it stops the download."""
     print(f"  downloading {name} ...", flush=True)
     with urllib.request.urlopen(RELEASE_URL + name, timeout=60) as response, \
             open(dest, "wb") as out:
@@ -102,6 +104,8 @@ def _download(name: str, dest: str) -> None:
         while block := response.read(1 << 20):
             out.write(block)
             done += len(block)
+            if progress:
+                progress(len(block))
             if total:
                 print(f"\r  {done / 2**20:6.0f} / {total / 2**20:.0f} MB", end="", flush=True)
     print()
@@ -119,7 +123,7 @@ def _unpack(archive: str, dest: str) -> None:
         z.extractall(dest)
 
 
-def install(variant: str, from_dir: str | None = None) -> str:
+def install(variant: str, from_dir: str | None = None, progress=None) -> str:
     """Install `variant`'s runtime: each archive taken from `from_dir` when it is there
     (already downloaded), otherwise downloaded; verified; then unpacked. Nothing is
     left half-installed: the files go to a temporary folder first. Returns the folder."""
@@ -133,7 +137,7 @@ def install(variant: str, from_dir: str | None = None) -> str:
             local = os.path.join(from_dir, name) if from_dir else None
             archive = local if local and os.path.isfile(local) else os.path.join(work, name)
             if archive != local:
-                _download(name, archive)
+                _download(name, archive, progress)
             actual = _sha256(archive)
             if actual != expected:
                 raise RuntimeInstallError(f"{name} does not match its published checksum "

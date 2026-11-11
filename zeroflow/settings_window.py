@@ -54,6 +54,7 @@ def restart_needed(changed: dict) -> bool:
 class SettingsWindow(QDialog):
     saved = Signal(bool)              # True: the Engine must restart now
     failed = Signal(str)
+    setup_requested = Signal()        # "Run setup again": the app opens the wizard
 
     def __init__(self, values: dict, settings_path: str, store, microphones: list[str],
                  startup, apply_live: Callable[[str, bool], None],
@@ -177,7 +178,15 @@ class SettingsWindow(QDialog):
         form.addRow(self._check("ENABLE_AUDIO_CHIMES", tr("general.sounds")))
         form.addRow(self._check("ENABLE_TOAST_NOTIFICATIONS", tr("general.notices")))
         form.addRow(QLabel(tr("general.clipboard")))
+        self.setup_again_button = QPushButton(tr("general.setup_again"))
+        self.setup_again_button.clicked.connect(self._setup_again)
+        form.addRow(self.setup_again_button)
         return page
+
+    def _setup_again(self) -> None:
+        """Closed first, so its keys come back before the wizard takes them."""
+        self.reject()
+        self.setup_requested.emit()
 
     def _show_paused(self) -> None:
         self.paused_label.setVisible(not (self.dictation_box.isChecked()
