@@ -6,8 +6,9 @@
 
 The build is pinned (BUILD) and every archive is checked against its published SHA-256
 before anything is unpacked, so a changed or corrupted download is never run. The
-runtime lives in runtime/llama/<variant>/ in the program folder (git-ignored);
-tools/get_llama.py installs it.
+runtime lives in <paths.runtime_dir()>/llama/<variant>/: runtime/ in the program folder
+from source (git-ignored, tools/get_llama.py installs it), %LOCALAPPDATA%\\ZeroFlow\\runtime
+in the installed program (the first-run wizard installs it).
 """
 import hashlib
 import os
@@ -17,12 +18,13 @@ import tempfile
 import urllib.request
 import zipfile
 
+from zeroflow import paths
 from zeroflow.paths import BASE_DIR
 from zeroflow.settings import LLAMA_VARIANT
 
 BUILD = "b11619"
 RELEASE_URL = f"https://github.com/ggml-org/llama.cpp/releases/download/{BUILD}/"
-RUNTIME_DIR = os.path.join(BASE_DIR, "runtime", "llama")
+RUNTIME_DIR = os.path.join(paths.runtime_dir(), "llama")
 # (archive, SHA-256) per variant, as published with the release.
 ARCHIVES = {
     "cuda": [

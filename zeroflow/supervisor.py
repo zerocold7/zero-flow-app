@@ -16,7 +16,7 @@ import time
 # loads the model. Importing it first also establishes "flow_debug.log" as this
 # process's log.
 from zeroflow import engine
-from zeroflow import settings, signals, stt, ui
+from zeroflow import frozen, settings, signals, stt, ui
 from zeroflow.paths import BASE_DIR
 
 
@@ -40,7 +40,7 @@ def spawn_reader() -> subprocess.Popen | None:
     """Launch the Reader as a child process: a Qt-free process of its own, so it can hold
     CUDA freely, and one that ends with this process (signals.bind_child_to_this_process)."""
     try:
-        child = subprocess.Popen([sys.executable, "-m", "reader"], cwd=BASE_DIR)
+        child = subprocess.Popen(frozen.child_command("reader"), cwd=BASE_DIR)
         # So a crash of this process — no clean-up code runs — cannot leave the
         # Reader running on its own.
         signals.bind_child_to_this_process(child)
@@ -171,7 +171,7 @@ def restart() -> None:
     """Saving settings: start a new Engine, which waits for this one's claim on the single
     copy (up to RESTART_WAIT seconds), then end this one."""
     try:
-        subprocess.Popen([sys.executable, os.path.join(BASE_DIR, "zero_flow.py"), RESTART_FLAG],
+        subprocess.Popen(frozen.engine_command(RESTART_FLAG),
                          cwd=BASE_DIR, creationflags=DETACHED)
     except Exception:
         logging.error("Could not start the new Engine; staying as it is.", exc_info=True)

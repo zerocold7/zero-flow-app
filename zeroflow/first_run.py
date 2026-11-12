@@ -23,7 +23,7 @@ import time
 from ctypes import wintypes
 from dataclasses import dataclass, field
 
-from zeroflow import storage
+from zeroflow import frozen, storage
 from zeroflow.paths import BASE_DIR
 
 # The old files the migration moves (zeroflow.storage).
@@ -296,7 +296,7 @@ def real_fetch(item: Item, cache_dir: str, on_bytes) -> None:
     env = dict(os.environ, HF_HOME=os.path.dirname(cache_dir), HF_HUB_CACHE=cache_dir,
                HF_XET_CHUNK_CACHE_SIZE_BYTES="0", HF_HUB_DISABLE_PROGRESS_BARS="1")
     before = _files_under(cache_dir)
-    child = subprocess.Popen([sys.executable, "-m", "zeroflow.fetch", json.dumps(request)],
+    child = subprocess.Popen(frozen.child_command("fetch", json.dumps(request)),
                              cwd=BASE_DIR, env=env, stdout=subprocess.DEVNULL,
                              stderr=subprocess.PIPE, text=True, creationflags=CREATE_NO_WINDOW)
     signals.bind_child_to_this_process(child)
@@ -386,7 +386,7 @@ def real_ask(values: dict, key: str | None, text: str) -> str | None:
         storage.save(path, {n: v for n, v in values.items() if n != storage.KEY_NAME})
         env = dict(os.environ, ZEROFLOW_SETTINGS=path)
         from zeroflow import signals
-        child = subprocess.Popen([sys.executable, "-m", "zeroflow.ai_check"], cwd=BASE_DIR,
+        child = subprocess.Popen(frozen.child_command("ai-check"), cwd=BASE_DIR,
                                  env=env, stdin=subprocess.PIPE, stdout=subprocess.PIPE,
                                  stderr=subprocess.DEVNULL, text=True,
                                  creationflags=CREATE_NO_WINDOW)

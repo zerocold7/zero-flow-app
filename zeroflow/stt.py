@@ -27,7 +27,7 @@ finally:
 from huggingface_hub import snapshot_download
 from huggingface_hub.utils import logging as hf_logging
 
-from zeroflow import models, personas, ui
+from zeroflow import frozen, models, personas, ui
 from zeroflow.settings import WHISPER_COMPUTE_TYPE, WHISPER_DEVICE, WHISPER_MODEL_NAME
 from zeroflow.text.language import ARABIC_LETTERS, plain_words
 from zeroflow.vocabulary import load_vocabulary
@@ -115,14 +115,11 @@ def load_whisper_model() -> WhisperModel:
     global model_runtime
     model_path = resolve_whisper_model()
     if WHISPER_DEVICE != "cpu":
-        # Make any pip-installed CUDA DLLs (nvidia-cublas-cu12 / nvidia-cudnn-cu12) findable.
-        for entry in sys.path:
-            for lib in ("cublas", "cudnn"):
-                bin_dir = os.path.join(entry, "nvidia", lib, "bin")
-                if os.path.isdir(bin_dir):
-                    os.environ["PATH"] = bin_dir + os.pathsep + os.environ.get("PATH", "")
-                    if hasattr(os, "add_dll_directory"):
-                        os.add_dll_directory(bin_dir)
+        # Make the CUDA DLLs findable: the pip packages from source, torch's own in a build.
+        for bin_dir in frozen.cuda_dll_dirs(sys.path):
+            os.environ["PATH"] = bin_dir + os.pathsep + os.environ.get("PATH", "")
+            if hasattr(os, "add_dll_directory"):
+                os.add_dll_directory(bin_dir)
         try:
             m = WhisperModel(model_path, device="cuda", compute_type=WHISPER_COMPUTE_TYPE)
             # CTranslate2 loads the CUDA libs lazily on first inference, so force a tiny

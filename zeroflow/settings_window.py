@@ -376,8 +376,12 @@ class StartupKey:
                     pass
 
 
-def startup_command(root: str, executable: str) -> str:
-    """The command Windows runs at sign-in: the engine on pythonw, with no console."""
+def startup_command(root: str, executable: str, frozen=None) -> str:
+    """The command Windows runs at sign-in: ZeroFlow.exe in the installed program; from
+    source the engine on pythonw, with no console."""
+    from zeroflow import frozen as build
+    if build.is_frozen() if frozen is None else frozen:
+        return f'"{executable}"'
     pythonw = os.path.join(os.path.dirname(executable), "pythonw.exe")
     return f'"{pythonw if os.path.exists(pythonw) else executable}" "{os.path.join(root, "zero_flow.py")}"'
 

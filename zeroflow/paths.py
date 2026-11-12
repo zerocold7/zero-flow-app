@@ -31,6 +31,19 @@ VOCAB_CACHE_FILE = os.path.join(data_dir(), VOCABULARY_NAME)
 HISTORY_FILE = os.path.join(data_dir(), HISTORY_NAME)
 
 
+def runtime_dir(frozen=None, environ=None) -> str:
+    """Where the built-in AI's runtime is installed. Installed, the program folder may not
+    be writable (and an update replaces it), so it is %LOCALAPPDATA%\\ZeroFlow\\runtime;
+    from source it stays in runtime\\ in the program folder, as before."""
+    import sys
+    frozen = bool(getattr(sys, "frozen", False)) if frozen is None else frozen
+    if not frozen:
+        return os.path.join(BASE_DIR, "runtime")
+    environ = os.environ if environ is None else environ
+    local = environ.get("LOCALAPPDATA") or os.path.expanduser("~")
+    return os.path.join(local, "ZeroFlow", "runtime")
+
+
 def log_dir() -> str:
     """Where the debug and crash logs go: %LOCALAPPDATA%\\ZeroFlow\\logs, unless
     ZEROFLOW_LOG_DIR says otherwise. The test suite points it at a temporary folder, so

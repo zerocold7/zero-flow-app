@@ -31,3 +31,10 @@ runtime/
 
 # Left behind only if tools/mutation_check.py is killed mid-run
 *.mutbak
+
+# PyInstaller builds (packaging/zeroflow.spec)
+build/
+dist/
+venv-cpu/
+# Generated per edition by tools/licence_audit.py
+THIRD-PARTY-NOTICES.txt

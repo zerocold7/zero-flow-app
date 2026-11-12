@@ -35,6 +35,8 @@ NOT_IMPORTED = {
 OPTIONAL = {"anthropic": "AI_PROVIDER=claude (llm/claude.py)"}
 # Pinned for working on the engine (requirements-dev.txt), never installed for running it.
 DEV_ONLY = {"pytest-qt"}
+# Builds the installer (Phase 7, requirements-dev.txt): pinned with all it pulls in.
+BUILD = ("pyinstaller",)
 # Installed on NVIDIA PCs only (docs/INSTALL.md step 4): a CPU-only install skips them,
 # so their pins are fine there even though nothing installed them.
 NVIDIA_ONLY = "nvidia-"
@@ -135,7 +137,7 @@ class TestRequirements(unittest.TestCase):
 
     def test_constraints_pin_exactly_what_an_install_pulls_in(self):
         main = pulled_in(requirement_lines())
-        optional = pulled_in(Requirement(name) for name in OPTIONAL)
+        optional = pulled_in(Requirement(name) for name in (*OPTIONAL, *BUILD))
         url_pinned = {canonicalize_name(r.name) for r in requirement_lines() if r.url}
         self.assertEqual(main - pinned() - url_pinned, set(), "pulled in but not pinned")
         unused = pinned() - main - optional - DEV_ONLY

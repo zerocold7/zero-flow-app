@@ -224,6 +224,30 @@ MUTATIONS = [
     ('output: an unplugged output is reported', '            if fell_back:\n                logging.warning(f"The Reader output', '            if False:\n                logging.warning(f"The Reader output', 'tests.test_reader_output.TestPlaybackDevice.test_a_device_not_plugged_in_plays_on_the_default_and_says_so_once'),
     ('output: the window lists the outputs', '        self.output_box = self._device_choice("READER_OUTPUT", self._speakers)\n', '        self.output_box = self._device_choice("READER_OUTPUT", [])\n', 'tests/test_window_settings.py::test_the_output_picker_lists_the_speakers_and_the_default_first'),
     ('output: an unplugged saved device is kept', '            options[f"{saved} (not connected)"] = saved\n', '            pass\n','tests/test_window_settings.py::test_a_saved_output_that_is_unplugged_is_kept_not_dropped'),
+    ('frozen: a build child is the exe and its role', '    if _frozen(frozen):\n        return [executable, CHILD_FLAG, role, *args]\n', '    if False:\n        return [executable, CHILD_FLAG, role, *args]\n', 'tests/test_frozen.py::test_in_a_build_a_child_is_the_exe_with_its_role'),
+    ('frozen: a build restart runs the exe', '    if _frozen(frozen):\n        return [executable, *args]\n', '    if False:\n        return [executable, *args]\n', 'tests/test_frozen.py::test_a_restart_in_a_build_runs_the_exe'),
+    ('frozen: a child sees its own arguments', '    sys.argv = [argv[0], *argv[3:]]\n', '', 'tests/test_frozen.py::test_a_child_flag_runs_that_module_as_main'),
+    ('frozen: an unknown role exits with 2', '    if role not in CHILD_MODULES:\n', '    if False:\n', 'tests/test_frozen.py::test_an_unknown_child_role_exits_with_an_error'),
+    ('frozen: a working stream is kept', '        if getattr(target, name) is not None:\n            continue\n', '', 'tests/test_frozen.py::test_missing_streams_are_reopened_from_the_handles_windows_gave'),
+    ('frozen: no handle becomes a sink', '            stream = _Sink()\n', '            stream = None\n', 'tests/test_frozen.py::test_a_stream_with_no_handle_becomes_a_sink'),
+    ('frozen: the entry point hands children over first', '    if frozen.run_child(sys.argv):\n        sys.exit(0)\n', '', 'tests/test_frozen.py::test_the_entry_point_hands_children_over_before_the_engine'),
+    ('frozen: sign-in runs the exe in a build', '    if build.is_frozen() if frozen is None else frozen:\n        return f\'"{executable}"\'\n', '', 'tests/test_frozen.py::test_start_with_windows_in_a_build_runs_the_exe'),
+    ('frozen: the reader starts through child_command', 'frozen.child_command("reader")', '[sys.executable, "-m", "reader"]', 'tests/test_frozen.py::test_no_child_is_started_with_dash_m_any_more'),
+    ('runtime dir: from source it stays in the program folder', '    if not frozen:\n        return os.path.join(BASE_DIR, "runtime")\n', '', 'tests/test_frozen.py::test_from_source_the_runtime_stays_in_the_program_folder'),
+    ('runtime dir: a build uses local app data', '    return os.path.join(local, "ZeroFlow", "runtime")\n', '    return os.path.join(BASE_DIR, "runtime")\n', 'tests/test_frozen.py::test_in_a_build_the_runtime_goes_to_local_app_data'),
+    ('runtime dir: llama_runtime follows it', 'RUNTIME_DIR = os.path.join(paths.runtime_dir(), "llama")', 'RUNTIME_DIR = os.path.join(BASE_DIR, "runtime", "llama")', 'tests/test_frozen.py::test_the_llama_runtime_uses_runtime_dir'),
+    ('cuda dirs: the pip packages from source', '            if os.path.isdir(folder):\n                found.append(folder)\n', '', 'tests/test_frozen.py::test_from_source_the_pip_cuda_packages_are_found'),
+    ('cuda dirs: a build looks in the bundle', '    if _frozen(frozen):\n        bundle_dir', '    if False:\n        bundle_dir', 'tests/test_frozen.py::test_in_a_build_whisper_uses_the_cuda_libraries_torch_ships'),
+    ('cuda dirs: a cpu build has none', '        if os.path.isdir(torch_lib):\n', '        if True:\n', 'tests/test_frozen.py::test_a_cpu_build_has_no_cuda_folders'),
+    ('cuda dirs: whisper adds them', '        for bin_dir in frozen.cuda_dll_dirs(sys.path):\n', '        for bin_dir in []:\n', 'tests/test_frozen.py::test_whisper_loading_uses_cuda_dll_dirs'),
+    ('build: PyAV folder refused', 'FORBIDDEN_FOLDERS = ("_internal/av/", ', 'FORBIDDEN_FOLDERS = (', 'tests/test_packaging.py::test_gpl_ffmpeg_fails_the_build'),
+    ('build: PyAV metadata refused', '"_internal/av-", ', '', 'tests/test_packaging.py::test_pyav_metadata_does_not_ship_either'),
+    ('build: GPL x264/x265 refused', 'FORBIDDEN_NAMES = ("libx264", "libx265", ', 'FORBIDDEN_NAMES = (', 'tests/test_packaging.py::test_gpl_ffmpeg_fails_the_build'),
+    ('build: nvidia packages refused', '"_internal/anthropic/", "_internal/nvidia/",', '"_internal/anthropic/",', 'tests/test_packaging.py::test_the_nvidia_packages_are_not_shipped_twice'),
+    ('build: CUDA refused in the CPU edition', '        elif edition == "cpu" and base.endswith(".dll") and base.startswith(CUDA_NAMES):\n', '        elif False:\n', 'tests/test_packaging.py::test_cuda_in_the_cpu_edition_fails_the_build'),
+    ('build: GPU edition needs CUDA', 'REQUIRED + (GPU_REQUIRED if edition == "gpu" else ())', 'REQUIRED', 'tests/test_packaging.py::test_the_gpu_edition_without_cuda_fails_the_build'),
+    ('build: num2words loose', '    "_internal/num2words/__init__.py",\n', '', 'tests/test_packaging.py::test_num2words_packed_into_the_exe_fails_the_build'),
+    ('av stand-in: AttributeError, not RuntimeError', '    raise AttributeError(f"av.{name}', '    raise RuntimeError(f"av.{name}', 'tests/test_packaging.py::test_the_av_stand_in_survives_being_inspected'),
 ]
 
 only = sys.argv[1] if len(sys.argv) > 1 else ""
@@ -232,7 +256,8 @@ for label, old, new, test in MUTATIONS:
     if only and only not in label:
         continue
     homes = [f for f in glob.glob("zeroflow/**/*.py", recursive=True) + glob.glob("reader/*.py")
-             + ["zero_flow.py"]
+             + ["zero_flow.py", "tools/check_build.py", "tools/licence_audit.py",
+                "packaging/stubs/av.py"]
              if open(f, encoding="utf-8").read().count(old) == 1]
     if len(homes) != 1:
         print(f"SKIPPED  {label}: anchor found in {homes or 'no file'}")

@@ -484,7 +484,7 @@ own folder.
 | `%LOCALAPPDATA%\ZeroFlow\logs\builtin_ai.log` | The built-in AI's own output (llama-server) |
 | `%LOCALAPPDATA%\ZeroFlow\models` (`MODELS_DIR`) | The downloaded models (§5 *Model files*) |
 | Windows Credential Manager, `ZeroFlow:<address>` | API keys; never in `settings.json` |
-| `runtime/llama/<build>/` | The built-in AI's program, installed by `tools/get_llama.py` (git-ignored, in the program folder) |
+| `runtime/llama/<build>/` | The built-in AI's program, installed by `tools/get_llama.py` (git-ignored, in the program folder); in the installed program, `%LOCALAPPDATA%\ZeroFlow\runtime\llama\<build>\`, installed by the first-run wizard |
 
 **The first start** (`storage.migrate`) runs only when there is no settings file. It
 reads the old `.env` in the program folder with the same checks as before, copies
