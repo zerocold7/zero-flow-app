@@ -45,6 +45,9 @@ class MemoryStore:
     def delete(self, address: str) -> None:
         self._keys.pop(address, None)
 
+    def addresses(self) -> list[str]:
+        return list(self._keys)
+
 
 class WindowsStore:
     """Windows Credential Manager, through advapi32 (no extra package)."""
@@ -78,8 +81,13 @@ class WindowsStore:
         api.CredWriteW.restype = wintypes.BOOL
         api.CredDeleteW.argtypes = [wintypes.LPCWSTR, wintypes.DWORD, wintypes.DWORD]
         api.CredDeleteW.restype = wintypes.BOOL
+        api.CredEnumerateW.argtypes = [
+            wintypes.LPCWSTR, wintypes.DWORD, ctypes.POINTER(wintypes.DWORD),
+            ctypes.POINTER(ctypes.POINTER(ctypes.POINTER(CREDENTIAL)))]
+        api.CredEnumerateW.restype = wintypes.BOOL
         api.CredFree.argtypes = [ctypes.c_void_p]
         self._api, self._ctypes, self._CREDENTIAL = api, ctypes, CREDENTIAL
+        self._DWORD = wintypes.DWORD
 
     def _fail(self, what: str):
         code = self._ctypes.get_last_error()
@@ -119,3 +127,20 @@ class WindowsStore:
         if not self._api.CredDeleteW(PREFIX + address, self._GENERIC, 0):
             if self._ctypes.get_last_error() != self._NOT_FOUND:
                 self._fail("delete a key")
+
+    def addresses(self) -> list[str]:
+        """The address of every key Zero- Flow saved (the "ZeroFlow:*" entries only)."""
+        if self._api is None:
+            return []
+        ctypes = self._ctypes
+        count = self._DWORD()
+        found = ctypes.POINTER(ctypes.POINTER(self._CREDENTIAL))()
+        if not self._api.CredEnumerateW(PREFIX + "*", 0, ctypes.byref(count), ctypes.byref(found)):
+            if ctypes.get_last_error() == self._NOT_FOUND:
+                return []
+            self._fail("list the keys")
+        try:
+            names = [found[i].contents.TargetName for i in range(count.value)]
+        finally:
+            self._api.CredFree(found)
+        return [name[len(PREFIX):] for name in names if name.startswith(PREFIX)]

@@ -357,6 +357,9 @@ INTERFACE_LANGUAGE = choice("INTERFACE_LANGUAGE", "auto", ("auto", "en", "ar"))
 LANGUAGE_PAIR = choice("LANGUAGE_PAIR", "en-ar", ("en-ar",))
 # Keep the list of past dictations. Off writes nothing to it.
 KEEP_HISTORY = switch("KEEP_HISTORY", True)
+# Ask GitHub Releases once at start whether a newer version is out (zeroflow/updates.py).
+# Off by default: off, nothing is ever sent.
+CHECK_FOR_UPDATES = switch("CHECK_FOR_UPDATES", False)
 
 # ---------------------------------------------------------------- retired settings
 # Settings that became constants in the code that uses them (docs/settings-table.md),

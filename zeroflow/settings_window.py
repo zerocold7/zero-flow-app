@@ -16,7 +16,7 @@ from PySide6.QtWidgets import (QCheckBox, QComboBox, QDialog, QDoubleSpinBox, QF
                                QFormLayout, QHBoxLayout, QLabel, QLineEdit, QPushButton,
                                QSpinBox, QTabWidget, QVBoxLayout, QWidget)
 
-from zeroflow import credentials, i18n, storage
+from zeroflow import __version__, credentials, i18n, storage
 from zeroflow.hotkey_capture import CANNOT_SEE_OTHER_APPS, HotkeyEdit
 from zeroflow.i18n import tr
 from zeroflow.key_saving import KeyNotSaved, save_provider
@@ -82,6 +82,9 @@ class SettingsWindow(QDialog):
         self.tabs.addTab(self._speech_tab(), tr("tab.speech"))
         self.tabs.addTab(self._advanced_tab(), tr("tab.advanced"))
 
+        self.version = QLabel(tr("win.version").format(version=__version__))
+        self.version.setObjectName("version")
+        self.version.setEnabled(False)               # greyed: it is information, not a field
         self.status = QLabel()
         self.status.setWordWrap(True)
         self.save_button = QPushButton(tr("win.save"))
@@ -89,6 +92,7 @@ class SettingsWindow(QDialog):
         self.save_button.clicked.connect(self.save)
         self.cancel_button.clicked.connect(self.reject)
         buttons = QHBoxLayout()
+        buttons.addWidget(self.version)
         buttons.addWidget(self.status, 1)
         buttons.addWidget(self.save_button)
         buttons.addWidget(self.cancel_button)
@@ -118,6 +122,7 @@ class SettingsWindow(QDialog):
 
     def _check(self, name: str, label: str) -> QCheckBox:
         box = QCheckBox(label)
+        box.setObjectName(name)
         self._bind(name, box.isChecked, box.setChecked, bool(self.values.get(name)))
         return box
 
@@ -184,6 +189,9 @@ class SettingsWindow(QDialog):
         form.addRow(self._check("LOG_DICTATION_TEXT", tr("general.logwords")))
         form.addRow(self._check("ENABLE_AUDIO_CHIMES", tr("general.sounds")))
         form.addRow(self._check("ENABLE_TOAST_NOTIFICATIONS", tr("general.notices")))
+        updates_box = self._check("CHECK_FOR_UPDATES", tr("general.updates"))
+        updates_box.setToolTip(tr("general.updates_hint"))
+        form.addRow(updates_box)
         form.addRow(QLabel(tr("general.clipboard")))
         self.setup_again_button = QPushButton(tr("general.setup_again"))
         self.setup_again_button.clicked.connect(self._setup_again)
@@ -345,35 +353,6 @@ class SettingsWindow(QDialog):
 
     def _say(self, text: str) -> None:
         self.status.setText(text)
-
-
-class StartupKey:
-    """Start with Windows: the HKCU Run key, not the settings file."""
-    RUN = r"Software\Microsoft\Windows\CurrentVersion\Run"
-    NAME = "ZeroFlow"
-
-    def __init__(self, command: str):
-        self.command = command
-
-    def get(self) -> bool:
-        import winreg
-        try:
-            with winreg.OpenKey(winreg.HKEY_CURRENT_USER, self.RUN) as key:
-                winreg.QueryValueEx(key, self.NAME)
-            return True
-        except OSError:
-            return False
-
-    def set(self, on: bool) -> None:
-        import winreg
-        with winreg.OpenKey(winreg.HKEY_CURRENT_USER, self.RUN, 0, winreg.KEY_SET_VALUE) as key:
-            if on:
-                winreg.SetValueEx(key, self.NAME, 0, winreg.REG_SZ, self.command)
-            else:
-                try:
-                    winreg.DeleteValue(key, self.NAME)
-                except OSError:
-                    pass
 
 
 def startup_command(root: str, executable: str, frozen=None) -> str:

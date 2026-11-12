@@ -56,7 +56,7 @@ Inno Setup asks "Also delete your settings, vocabulary, history, logs and downlo
 **10. Clean-PC gate in Windows Sandbox** (`packaging/sandbox.wsb`)
 The installer folder is mapped read-only. The run: install, the wizard, first run's downloads, a dictation (Raw, CPU: the Sandbox has no NVIDIA), F4, Settings save → restart, Start with Windows, uninstall both ways. The CPU-light edition is the one the Sandbox can test fully; the GPU edition's CUDA path is checked on your PC. **I stop there: no merge, tag or push.**
 
-## Status (2026-11-12, end of step 4)
+## Status (2026-11-12, step 9)
 
 Approved: the plan, the tests, per-user install, and the second venv (`venv-cpu`, created).
 
@@ -66,11 +66,11 @@ Approved: the plan, the tests, per-user install, and the second venv (`venv-cpu`
 | 2 AI runtime folder | done |
 | 3 CUDA in a build | done |
 | 4 Build file, check_build, av stand-in | done; both editions built and started with the Reader child |
-| 5 Version shown | **next**: 3 failing tests in `tests/test_packaging.py` (tooltip, Settings label) |
-| 6 Update check | `tests/test_updates.py` (24, fails on import), plus 3 in `test_packaging.py` (checkbox, settings table) |
-| 7 Uninstaller | `tests/test_uninstall.py` (10, fails on import) |
-| 8 Inno Setup script, build script | 8 failing in `test_packaging.py`; **ask before installing Inno Setup** |
-| 9 measure_load fix | 1 failing in `test_packaging.py` |
+| 5 Version shown | done |
+| 6 Update check | done |
+| 7 Uninstaller | done |
+| 8 Inno Setup script, build script | done. Inno Setup 6.7.4 is installed per user at `F:\Tools\Inno Setup 6`, and `Arabic.isl` ships with it. Installers: CPU-light 0.215 GB, GPU 1.660 GB (under the ~4 GB single-file limit, so no disk spanning). ISCC gave 0 warnings. The build runs the licence audit before `check_build`, because `check_build` needs the notices the audit writes. Both installers are unsigned, so SmartScreen warns about them (a Phase 8 question). |
+| 9 measure_load fix | done, waiting for Zero's OK |
 | 10 Sandbox gate | not started; stop there, no merge, tag or push |
 
 Numbers at the end of step 4: 709 passed, 13 failed (all steps 5–9), 11 skipped, with `--ignore=tests/test_updates.py --ignore=tests/test_uninstall.py` (their import errors stop pytest's whole run until the modules exist). 231 mutation guards, all caught.

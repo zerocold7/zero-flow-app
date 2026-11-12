@@ -68,6 +68,7 @@ New settings that 5b brings are listed at the end. Terms as in `CONTEXT.md`.
 | `ENABLE_AUDIO_CHIMES` | on | Main | Sounds |
 | `ENABLE_TOAST_NOTIFICATIONS` | on | Main | Notifications |
 | `LOG_DICTATION_TEXT` | off | Main (Privacy) | Show dictated words in the log |
+| `CHECK_FOR_UPDATES` | off | Main | Check for updates. On, asks GitHub Releases once at start and shows a notification with the release page; downloads and installs nothing. New in Phase 7. |
 | `MODELS_DIR` | %LOCALAPPDATA%\ZeroFlow\models | Advanced | Models folder. On your copy it is F:\HuggingFace. |
 
 ## New in 5b (not in the file yet)

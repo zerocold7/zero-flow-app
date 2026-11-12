@@ -118,3 +118,91 @@ def test_memory_store_lists_its_addresses():
 def test_the_windows_store_can_list_zero_flow_keys():
     """CredEnumerateW with the "ZeroFlow:*" filter; checked for real in the Sandbox gate."""
     assert callable(getattr(credentials.WindowsStore, "addresses", None))
+
+
+def test_a_models_folder_inside_zero_flows_own_is_not_reported_as_kept(tmp_path):
+    roaming, local, environ = layout(tmp_path)
+    report = uninstall.remove_data(environ, {"MODELS_DIR": str(local / "models")},
+                                   credentials.MemoryStore(), FakeRunKey())
+    assert report.kept == [] and str(local) in report.removed
+
+
+def test_a_relative_folder_in_the_environment_is_never_used(tmp_path, monkeypatch):
+    """A relative APPDATA would point into the folder the uninstaller runs in."""
+    monkeypatch.chdir(tmp_path)
+    (tmp_path / "relative" / "ZeroFlow").mkdir(parents=True)
+    environ = {"APPDATA": "relative", "LOCALAPPDATA": "relative"}
+    report = uninstall.remove_data(environ, {}, credentials.MemoryStore(), FakeRunKey())
+    assert (tmp_path / "relative" / "ZeroFlow").exists() and report.removed == []
+
+
+def test_without_a_setting_the_default_models_folder_is_named(tmp_path):
+    roaming, local, environ = layout(tmp_path)
+    assert uninstall.models_dir(environ) == str(local / "models")
+
+
+# ---------------------------------------------------------------- ZeroFlow.exe --remove-*
+def test_other_arguments_start_the_engine(tmp_path):
+    """Fakes only: with the flag check broken, a real run would delete this PC's data."""
+    roaming, local, environ = layout(tmp_path)
+    run = FakeRunKey()
+    for argv in (["ZeroFlow.exe"], ["ZeroFlow.exe", "--child", "reader"]):
+        assert uninstall.run(argv, environ, credentials.MemoryStore(), run) is None
+    assert run.on is True and roaming.exists() and local.exists()
+
+
+def test_remove_startup_touches_only_the_run_key(tmp_path):
+    roaming, local, environ = layout(tmp_path)
+    run = FakeRunKey()
+    assert uninstall.run(["ZeroFlow.exe", "--remove-startup"], environ,
+                         credentials.MemoryStore(), run) == 0
+    assert run.on is False and roaming.exists() and local.exists()
+
+
+def test_remove_data_removes_everything_and_says_so(tmp_path, capsys):
+    roaming, local, environ = layout(tmp_path)
+    run, store = FakeRunKey(), credentials.MemoryStore()
+    store.set("https://api.anthropic.com", "sk-x")
+    assert uninstall.run(["ZeroFlow.exe", "--remove-data"], environ, store, run) == 0
+    assert not roaming.exists() and not local.exists()
+    assert store.addresses() == [] and run.on is False
+    assert f"Removed: {roaming}" in capsys.readouterr().out
+
+
+def test_remove_data_exits_with_1_when_something_stays(tmp_path, monkeypatch):
+    roaming, local, environ = layout(tmp_path)
+
+    def busy(path, *args, **kwargs):
+        raise PermissionError("in use")
+    monkeypatch.setattr(uninstall.shutil, "rmtree", busy)
+    assert uninstall.run(["ZeroFlow.exe", "--remove-data"], environ,
+                         credentials.MemoryStore(), FakeRunKey()) == 1
+
+
+def test_the_entry_point_hands_the_flags_over_before_the_engine(monkeypatch):
+    import runpy
+    from zeroflow import frozen
+
+    def engine_started(argv):
+        raise AssertionError("the uninstall step reached the Engine's start")
+    monkeypatch.setattr(uninstall, "run", lambda argv: 0)
+    monkeypatch.setattr(frozen, "run_child", engine_started)
+    monkeypatch.setattr(sys, "argv", ["ZeroFlow.exe", "--remove-data"])
+    root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+    try:
+        runpy.run_path(os.path.join(root, "zero_flow.py"), run_name="__main__")
+    except SystemExit as stop:
+        assert stop.code == 0
+    else:
+        raise AssertionError("zero_flow.py did not exit")
+
+
+def test_the_uninstaller_loads_neither_qt_nor_the_settings():
+    """Importing zeroflow.settings reads, and can migrate, the settings file."""
+    import subprocess
+    root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+    code = ("import sys; from zeroflow import startup, uninstall; "
+            "print(sorted(m for m in ('zeroflow.settings', 'PySide6') if m in sys.modules))")
+    out = subprocess.run([sys.executable, "-c", code], cwd=root, capture_output=True,
+                         text=True, timeout=60).stdout
+    assert out.strip() == "[]"

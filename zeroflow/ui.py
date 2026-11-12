@@ -128,7 +128,9 @@ def already_running(what: str = "Zero- Flow") -> None:
                 f"has not started.", MB_ICONINFORMATION)
 
 
-def show_toast(title: str, body: str = "", enable_toasts: bool = True) -> None:
+def show_toast(title: str, body: str = "", enable_toasts: bool = True,
+               link: str | None = None) -> None:
+    """`link`: a web page that a click on the notification opens (the update check's)."""
     if enable_toasts:
         def _fire():
             try:
@@ -144,7 +146,7 @@ def show_toast(title: str, body: str = "", enable_toasts: bool = True) -> None:
                 def ignore(*_):
                     return None
                 toast(title, body, audio={"silent": "true"},
-                      on_click=ignore, on_dismissed=ignore, on_failed=ignore)
+                      on_click=link or ignore, on_dismissed=ignore, on_failed=ignore)
             except Exception:
                 pass
         threading.Thread(target=_fire, daemon=True).start()

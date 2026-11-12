@@ -10,7 +10,9 @@ Each part runs in a fresh process, one after another, so their memory is not mix
   reader      the voice on the device READER_DEVICE picks: load, the start-up warm-up
               (as the reader does it), then time to the first sound and real-time
               factor for a paragraph
-  reader-cpu  the same, forced onto the processor
+  reader-cpu  the same, forced onto the processor by READER_DEVICE=cpu in a temporary
+              copy of your settings file (ADR 0002: the engine reads settings only from
+              that file, so the variable in the environment would be ignored)
 
 Graphics memory is the card's total use before and after loading (nvidia-smi), so
 another program changing its use at the same moment would show up in it. Logs go to a
@@ -19,8 +21,10 @@ temporary folder, removed afterwards.
 import ctypes
 import json
 import os
+import shutil
 import subprocess
 import sys
+import tempfile
 import time
 import wave
 from ctypes import wintypes
@@ -28,6 +32,7 @@ from ctypes import wintypes
 ROOT = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 sys.path.insert(0, ROOT)
 
+from zeroflow import paths, storage  # noqa: E402
 from zeroflow.paths import use_temporary_log_dir  # noqa: E402
 
 use_temporary_log_dir("zeroflow-measure-")  # inherited by each part's process
@@ -139,17 +144,42 @@ def part_reader() -> dict:
 
 
 PARTS = {"dictation": (part_dictation, {}), "ai": (part_ai, {}),
-         "reader": (part_reader, {}), "reader-cpu": (part_reader, {"READER_DEVICE": "cpu"})}
+         "reader": (part_reader, {}), "reader-cpu": (part_reader, {})}
+# Settings a part changes, written into a temporary copy of the settings file.
+PART_SETTINGS = {"reader-cpu": {"READER_DEVICE": "cpu"}}
+
+
+def settings_copy(changes: dict, folder: str, source: str) -> str:
+    """Your settings (none if `source` is missing) with `changes`, saved in `folder`;
+    returns the copy's path, for ZEROFLOW_SETTINGS. Its folder also takes the part's
+    vocabulary and history, so your own are not touched."""
+    values = storage.load(source) if os.path.exists(source) else {}
+    copy = os.path.join(folder, paths.SETTINGS_NAME)
+    storage.save(copy, {**values, **changes})
+    return copy
+
+
+def part_env(name: str, folder: str, environ, source: str) -> dict:
+    """The environment part `name` runs with."""
+    env = {**environ, **PARTS[name][1]}
+    if name in PART_SETTINGS:
+        env["ZEROFLOW_SETTINGS"] = settings_copy(PART_SETTINGS[name], folder, source)
+    return env
 
 
 def main():
     if len(sys.argv) == 3 and sys.argv[1] == "--part":
         print("RESULT " + json.dumps(PARTS[sys.argv[2]][0]()))
         return
-    for name, (_, env) in PARTS.items():
-        run = subprocess.run([sys.executable, os.path.abspath(__file__), "--part", name],
-                             capture_output=True, text=True, encoding="utf-8", errors="replace",
-                             env={**os.environ, **env}, cwd=ROOT)
+    for name in PARTS:
+        folder = tempfile.mkdtemp(prefix="zeroflow-measure-settings-")
+        try:
+            env = part_env(name, folder, os.environ, paths.settings_file())
+            run = subprocess.run([sys.executable, os.path.abspath(__file__), "--part", name],
+                                 capture_output=True, text=True, encoding="utf-8",
+                                 errors="replace", env=env, cwd=ROOT)
+        finally:
+            shutil.rmtree(folder, ignore_errors=True)
         line = next((ln for ln in run.stdout.splitlines() if ln.startswith("RESULT ")), None)
         if line is None:
             print(f"{name}: FAILED\n{run.stderr[-1500:]}")

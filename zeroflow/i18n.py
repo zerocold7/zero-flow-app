@@ -90,6 +90,13 @@ EN = {
     "vocab.tidy_failed": "Tidy failed: ",
     "diag.copied": "Diagnostics copied. They hold no dictated words and no keys.",
     "diag.failed": "Diagnostics could not be copied: ",
+    "tray.tooltip": "Zero- Flow {version} - {state}",
+    "state.active": "Active", "state.paused": "Paused",
+    "win.version": "Version {version}",
+    "general.updates": "Check for updates",
+    "general.updates_hint": "Asks GitHub once at start whether a newer version is out. "
+                            "Nothing is downloaded or installed.",
+    "update.available": "Version {version} is out. Click to open its page.",
 }
 
 AR = {
@@ -175,6 +182,13 @@ AR = {
     "vocab.tidy_failed": "فشل الترتيب: ",
     "diag.copied": "تم نسخ معلومات التشخيص. لا تحتوي على كلمات مملاة ولا مفاتيح.",
     "diag.failed": "تعذر نسخ معلومات التشخيص: ",
+    "tray.tooltip": "زيرو فلو {version} - {state}",
+    "state.active": "يعمل", "state.paused": "متوقف مؤقتًا",
+    "win.version": "الإصدار {version}",
+    "general.updates": "التحقق من التحديثات",
+    "general.updates_hint": "يسأل GitHub مرة واحدة عند التشغيل عن وجود إصدار أحدث. "
+                            "لا يُنزَّل أو يُثبَّت أي شيء.",
+    "update.available": "صدر الإصدار {version}. انقر لفتح صفحته.",
 }
 
 TABLES = {"en": EN, "ar": AR}

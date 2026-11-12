@@ -211,6 +211,12 @@ ERROR_ALREADY_EXISTS = 183
 _instance_handles = {}
 
 
+def instance_mutex_name(role: str) -> str:
+    """The named mutex a running `role` holds. The installer's AppMutex names it too, so
+    setup and the uninstaller wait for the Engine to exit."""
+    return f"Local\\ZeroFlow.instance.{role}"
+
+
 def claim_single_instance(role: str, wait: float = 0.0) -> bool:
     """Claim `role` ("dictation", "reader") for this process. False if another
     process — or an earlier call here — already holds it. `wait`: keep trying this many
@@ -225,7 +231,7 @@ def claim_single_instance(role: str, wait: float = 0.0) -> bool:
         return False
     deadline = time.monotonic() + wait
     while True:
-        handle = _kernel32.CreateMutexW(None, False, f"Local\\ZeroFlow.instance.{role}")
+        handle = _kernel32.CreateMutexW(None, False, instance_mutex_name(role))
         if not handle:
             logging.warning(f"Single-instance check unavailable for '{role}'.")
             return True

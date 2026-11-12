@@ -15,15 +15,31 @@ from PySide6.QtCore import QTimer, Qt
 from PySide6.QtGui import QAction, QIcon
 from PySide6.QtWidgets import QApplication, QMenu, QSystemTrayIcon
 
-from zeroflow import credentials, engine, i18n, microphone, paths, settings, signals, storage, ui
+from zeroflow import (__version__, credentials, engine, i18n, microphone, paths, settings,
+                      signals, storage, ui, updates)
 from zeroflow.halves import Halves
 from zeroflow.i18n import tr
 from zeroflow.overlay import Overlay, UiBridge
 from zeroflow.paths import BASE_DIR
-from zeroflow.settings_window import (KEYS, SettingsWindow, StartupKey, key_is_saved,
-                                      startup_command)
+from zeroflow.settings_window import KEYS, SettingsWindow, key_is_saved, startup_command
+from zeroflow.startup import StartupKey
 
 READING_POLL_MS = 150
+
+
+def tray_tooltip(state: str) -> str:
+    """The tray icon's tooltip: the name, the version and the state ("Active")."""
+    return tr("tray.tooltip").format(version=__version__, state=state)
+
+
+def check_for_updates(enabled: bool, fetch=updates.fetch_json) -> None:
+    """Once at start, on a worker thread: a notification when a newer version is out.
+    Off sends nothing (updates.check)."""
+    found = updates.check(enabled, __version__, fetch=fetch)
+    if found:
+        logging.info(f"Update check: {found.version} is out ({found.page}).")
+        ui.show_toast("⬆️ Zero- Flow", tr("update.available").format(version=found.version),
+                      settings.ENABLE_TOASTS, link=found.page)
 
 
 def microphone_names() -> list[str]:
@@ -139,9 +155,8 @@ class EngineApp:
     def _refresh_tray(self) -> None:
         self.dictation_action.setChecked(self.halves.dictation_on)
         self.reader_action.setChecked(self.halves.reader_on)
-        text = tr(f"tray.{self.halves.state}")
-        self.title_action.setText(text)
-        self.tray.setToolTip(text)
+        self.title_action.setText(tr(f"tray.{self.halves.state}"))
+        self.tray.setToolTip(tray_tooltip(tr(f"state.{self.halves.state}")))
 
     def _exit(self) -> None:
         self.tray.hide()
@@ -297,6 +312,9 @@ class EngineApp:
         self.halves.state_changed.emit(self.halves.state)
         if self.halves.state == "active":
             ui.show_toast("🚀 Zero- Flow", tr("tray.active"), settings.ENABLE_TOASTS)
+        # After the boot: a toast loads WinRT, which must come after Whisper's CUDA (ui).
+        threading.Thread(target=check_for_updates, args=(settings.CHECK_FOR_UPDATES,),
+                         daemon=True).start()
 
 
 def run(dictation, reader, restart_engine, quit_engine, banner=None) -> None:

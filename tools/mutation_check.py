@@ -5,8 +5,8 @@ fail. A test that stays green while the code it guards is broken guards nothing.
     venv\Scripts\python.exe tools\mutation_check.py "ending:"  (labels containing this)
 
 Each entry: (label, exact code, what to replace it with, test to run). The code
-is found by its exact text in zeroflow/, reader/ or the entry points, so it must appear
-exactly once; after a refactor, update an entry whose text changed (it shows SKIPPED).
+is found by its exact text in zeroflow/, reader/, the entry points or the tool and build
+files listed below (homes), so it must appear exactly once; after a refactor, update an entry whose text changed (it shows SKIPPED).
 Every file is restored afterwards. Run it from the project root, with the venv's Python.
 """
 import glob
@@ -248,6 +248,81 @@ MUTATIONS = [
     ('build: GPU edition needs CUDA', 'REQUIRED + (GPU_REQUIRED if edition == "gpu" else ())', 'REQUIRED', 'tests/test_packaging.py::test_the_gpu_edition_without_cuda_fails_the_build'),
     ('build: num2words loose', '    "_internal/num2words/__init__.py",\n', '', 'tests/test_packaging.py::test_num2words_packed_into_the_exe_fails_the_build'),
     ('av stand-in: AttributeError, not RuntimeError', '    raise AttributeError(f"av.{name}', '    raise RuntimeError(f"av.{name}', 'tests/test_packaging.py::test_the_av_stand_in_survives_being_inspected'),
+    ('version: the tooltip names it', '    return tr("tray.tooltip").format(version=__version__, state=state)\n', '    return tr("tray.tooltip").format(version="", state=state)\n', 'tests/test_packaging.py::test_the_tray_tooltip_names_the_version'),
+    ('version: the tray icon uses the tooltip', '        self.tray.setToolTip(tray_tooltip(tr(f"state.{self.halves.state}")))\n', '        self.tray.setToolTip(tr(f"tray.{self.halves.state}"))\n', 'tests/test_packaging.py::test_the_tray_icon_gets_the_tooltip_with_the_version'),
+    ('version: the tray title is unchanged', '        self.title_action.setText(tr(f"tray.{self.halves.state}"))\n', '        self.title_action.setText(tray_tooltip(tr(f"state.{self.halves.state}")))\n', 'tests/test_packaging.py::test_the_tray_icon_gets_the_tooltip_with_the_version'),
+    ('version: the Settings label is findable', '        self.version.setObjectName("version")\n', '', 'tests/test_packaging.py::test_the_settings_window_shows_the_version'),
+    ('version: the Settings label goes through i18n', '        self.version = QLabel(tr("win.version").format(version=__version__))\n', '        self.version = QLabel(f"Version {__version__}")\n', 'tests/test_packaging.py::test_the_version_is_shown_in_arabic'),
+    ('version: the Arabic tooltip', '    "tray.tooltip": "زيرو فلو {version} - {state}",\n', '', 'tests/test_packaging.py::test_the_version_is_shown_in_arabic'),
+    ('updates: off sends nothing', '    if not enabled:\n        return None\n    try:\n        answer = fetch(RELEASES_URL)', '    try:\n        answer = fetch(RELEASES_URL)', 'tests/test_updates.py::test_off_means_no_request_at_all'),
+    ('updates: off by default', 'CHECK_FOR_UPDATES = switch("CHECK_FOR_UPDATES", False)', 'CHECK_FOR_UPDATES = switch("CHECK_FOR_UPDATES", True)', 'tests/test_updates.py::test_it_is_off_by_default'),
+    ('updates: asks releases/latest', '/releases/latest"\n', '/releases"\n', 'tests/test_updates.py::test_it_asks_github_releases_over_https'),
+    ('updates: a draft is no update', ' or answer.get("draft")', '', 'tests/test_updates.py::test_a_draft_a_prerelease_or_a_strange_answer_reports_nothing'),
+    ('updates: a prerelease is no update', ' or answer.get("prerelease")', '', 'tests/test_updates.py::test_a_draft_a_prerelease_or_a_strange_answer_reports_nothing'),
+    ('updates: only github.com pages', '    return address.scheme == "https" and address.hostname == "github.com"\n', '    return address.scheme == "https"\n', 'tests/test_updates.py::test_a_link_that_is_not_github_is_not_shown'),
+    ('updates: only https pages', '    return address.scheme == "https" and address.hostname == "github.com"\n', '    return address.hostname == "github.com"\n', 'tests/test_updates.py::test_a_plain_http_link_is_not_shown'),
+    ('updates: only a newer one', '    if not is_newer(version, current):\n        return None\n', '', 'tests/test_updates.py::test_the_same_or_an_older_release_is_not_reported'),
+    ('updates: numbers, not text', '    pre = (_STAGES[stage], int(n)) if stage else _RELEASE\n', '    pre = (_STAGES[stage], n) if stage else _RELEASE\n', 'tests/test_updates.py::test_versions_compare_as_versions'),
+    ('updates: a release beats its alphas', '_RELEASE = (3, 0)', '_RELEASE = (-1, 0)', 'tests/test_updates.py::test_versions_compare_as_versions'),
+    ('updates: offline is no answer', '    except (OSError, ValueError) as e:              # offline, timeout', '    except ValueError as e:              # offline, timeout', 'tests/test_updates.py::test_no_network_reports_nothing_and_does_not_raise'),
+    ('updates: a generic client name', '"User-Agent": f"ZeroFlow/{version}",', '"User-Agent": "Python-urllib",', 'tests/test_updates.py::test_the_request_has_a_short_timeout_and_names_no_user'),
+    ('updates: the timeout is used', 'build_request(url, __version__), timeout=TIMEOUT)', 'build_request(url, __version__), timeout=None)', 'tests/test_updates.py::test_the_real_fetch_uses_the_timeout_and_the_client_name'),
+    ('updates: the notice carries the page', '                      settings.ENABLE_TOASTS, link=found.page)\n', '                      settings.ENABLE_TOASTS)\n', 'tests/test_updates.py::test_a_newer_release_becomes_a_notification_with_its_page'),
+    ('updates: the Arabic notice', '    "update.available": "صدر الإصدار {version}. انقر لفتح صفحته.",\n', '', 'tests/test_updates.py::test_a_newer_release_becomes_a_notification_with_its_page'),
+    ('updates: checked after the boot', '        threading.Thread(target=check_for_updates, args=(settings.CHECK_FOR_UPDATES,),\n                         daemon=True).start()\n', '', 'tests/test_updates.py::test_the_engine_checks_once_after_it_has_booted_with_the_setting'),
+    ('updates: the check follows the setting', 'args=(settings.CHECK_FOR_UPDATES,)', 'args=(True,)', 'tests/test_updates.py::test_the_engine_checks_once_after_it_has_booted_with_the_setting'),
+    ('updates: a click opens the page', 'on_click=link or ignore', 'on_click=ignore', 'tests/test_updates.py::test_a_click_on_the_notification_opens_the_link'),
+    ('updates: the checkbox is findable', '        box.setObjectName(name)\n', '', 'tests/test_packaging.py::test_check_for_updates_is_in_the_window_and_off'),
+    ('uninstall: keeping data still removes the Run key', 'def remove_startup(run_key) -> None:\n    run_key.set(False)\n', 'def remove_startup(run_key) -> None:\n    pass\n', 'tests/test_uninstall.py::test_keeping_data_removes_only_the_start_with_windows_entry'),
+    ('uninstall: the keys are deleted', '                store.delete(address)\n            except OSError:\n                report.failed', '                pass\n            except OSError:\n                report.failed', 'tests/test_uninstall.py::test_deleting_data_removes_both_folders_and_the_keys'),
+    ('uninstall: only the ZeroFlow folder, never its parent', '    return os.path.join(base, FOLDER)\n', '    return base\n', 'tests/test_uninstall.py::test_only_zero_flow_folders_are_touched'),
+    ('uninstall: a relative folder is refused', '    if not base or not os.path.isabs(base):\n', '    if not base:\n', 'tests/test_uninstall.py::test_a_relative_folder_in_the_environment_is_never_used'),
+    ('uninstall: a chosen models folder is reported kept', '        report.kept.append(models)\n', '        pass\n', 'tests/test_uninstall.py::test_the_report_says_what_was_kept'),
+    ('uninstall: a models folder inside ours is not kept', '    if models and not any(_inside(models, f) for f in folders):\n', '    if models:\n', 'tests/test_uninstall.py::test_a_models_folder_inside_zero_flows_own_is_not_reported_as_kept'),
+    ('uninstall: missing folders are skipped', '        if not os.path.lexists(folder):\n            continue\n', '', 'tests/test_uninstall.py::test_missing_folders_are_not_an_error'),
+    ('uninstall: a file in use is reported', '            report.failed.append(folder)\n', '            pass\n', 'tests/test_uninstall.py::test_a_file_in_use_is_reported_not_raised'),
+    ('uninstall: MODELS_DIR from the settings file', '    return chosen if isinstance(chosen, str) and chosen else storage.default_models_dir(environ)\n', '    return storage.default_models_dir(environ)\n', 'tests/test_uninstall.py::test_the_settings_are_read_from_the_settings_file'),
+    ('uninstall: the default models folder without one', '    return chosen if isinstance(chosen, str) and chosen else storage.default_models_dir(environ)\n', '    return chosen\n', 'tests/test_uninstall.py::test_without_a_setting_the_default_models_folder_is_named'),
+    ('uninstall: other arguments start the engine', '    if flag not in FLAGS:\n        return None\n', '', 'tests/test_uninstall.py::test_other_arguments_start_the_engine'),
+    ('uninstall: --remove-startup keeps the data', '    if flag == "--remove-startup":\n', '    if False:\n', 'tests/test_uninstall.py::test_remove_startup_touches_only_the_run_key'),
+    ('uninstall: the report is printed', '    for line in report.lines():\n        print(line)\n', '', 'tests/test_uninstall.py::test_remove_data_removes_everything_and_says_so'),
+    ('uninstall: exit 1 when something stays', '    return 1 if report.failed else 0\n', '    return 0\n', 'tests/test_uninstall.py::test_remove_data_exits_with_1_when_something_stays'),
+    ('uninstall: handed over before the engine', '    if (code := uninstall.run(sys.argv)) is not None:\n        sys.exit(code)\n', '', 'tests/test_uninstall.py::test_the_entry_point_hands_the_flags_over_before_the_engine'),
+    ('uninstall: no settings import', 'from zeroflow import credentials, paths, storage\n\nFOLDER', 'from zeroflow import credentials, paths, settings, storage\n\nFOLDER', 'tests/test_uninstall.py::test_the_uninstaller_loads_neither_qt_nor_the_settings'),
+    ('uninstall: the memory store lists its keys', '        return list(self._keys)\n', '        return []\n', 'tests/test_uninstall.py::test_memory_store_lists_its_addresses'),
+    ('installer: the old build is emptied first', '        shutil.rmtree(folder, ignore_errors=True)\n        if os.path.exists(folder):\n            raise Stop', '        pass\n        if os.path.exists(folder):\n            raise Stop', 'tests/test_packaging.py::test_an_old_build_is_removed_before_pyinstaller_runs'),
+    ('installer: PyInstaller failing stops it', '        raise Stop("PyInstaller failed")\n', '        pass\n', 'tests/test_packaging.py::test_an_old_build_is_removed_before_pyinstaller_runs'),
+    ('installer: the audit stops it', '    if found := audit_problems(names):\n', '    if (found := audit_problems(names)) and False:\n', 'tests/test_packaging.py::test_the_licence_audit_stops_the_build'),
+    ('installer: only the two accepted GPL parts', 'ACCEPTED_GPL = {"phonemizer-fork", "espeak-ng"}', 'ACCEPTED_GPL = {"phonemizer-fork", "espeak-ng", "x264"}', 'tests/test_packaging.py::test_the_build_stops_on_an_unexpected_gpl_package'),
+    ('installer: an unknown licence stops it', 'for cls in (PROPRIETARY, UNKNOWN)', 'for cls in (PROPRIETARY,)', 'tests/test_packaging.py::test_the_licence_audit_stops_the_build'),
+    ('installer: a proprietary part stops it', 'for cls in (PROPRIETARY, UNKNOWN)', 'for cls in (UNKNOWN,)', 'tests/test_packaging.py::test_the_licence_audit_stops_the_build'),
+    ('installer: LICENSE.txt is copied', '    shutil.copyfile(os.path.join(root, "LICENSE"), os.path.join(program, "LICENSE.txt"))\n', '', 'tests/test_packaging.py::test_the_build_runs_every_step_in_order'),
+    ('installer: the notices are copied', '    shutil.copyfile(notices, os.path.join(program, "THIRD-PARTY-NOTICES.txt"))\n', '', 'tests/test_packaging.py::test_the_build_runs_every_step_in_order'),
+    ('installer: check_build stops it', '        raise Stop("check_build found problems (listed above)")\n', '        pass\n', 'tests/test_packaging.py::test_check_build_problems_stop_the_installer'),
+    ('installer: an ISCC failure stops it', '        raise Stop("Inno Setup failed")\n', '        pass\n', 'tests/test_packaging.py::test_an_inno_setup_failure_stops'),
+    ('installer: the wrong venv is refused', '    if not right_venv(edition, prefix, root):\n', '    if False:\n', 'tests/test_packaging.py::test_the_wrong_venv_is_refused_before_anything_runs'),
+    ('installer: ISCC is looked for first', '    if not os.path.isfile(iscc):\n', '    if False:\n', 'tests/test_packaging.py::test_a_missing_inno_setup_stops_before_the_old_build_is_removed'),
+    ('installer: the version is passed', 'f"/DAppVersion={zeroflow.__version__}"', 'f"/DAppVersion=0"', 'tests/test_packaging.py::test_the_installer_gets_the_version_and_edition'),
+    ('installer: the edition is passed', 'f"/DEdition={edition}"', '"/DEdition=gpu"', 'tests/test_packaging.py::test_the_installer_gets_the_version_and_edition'),
+    ('iss: per user, no admin', 'PrivilegesRequired=lowest\n', 'PrivilegesRequired=admin\n', 'tests/test_packaging.py::test_it_installs_for_this_user_without_admin_rights'),
+    ("iss: the Reader's lock too", 'AppMutex=ZeroFlow.instance.dictation,ZeroFlow.instance.reader\n', 'AppMutex=ZeroFlow.instance.dictation\n', 'tests/test_packaging.py::test_the_running_engine_is_detected_by_its_own_lock'),
+    ('iss: No is the default answer', ' or MB_DEFBUTTON2', '', 'tests/test_packaging.py::test_the_uninstaller_asks_before_deleting_data'),
+    ("iss: the other edition's files go", 'Type: filesandordirs; Name: "{app}\\_internal"\n', '', 'tests/test_packaging.py::test_the_other_editions_files_are_removed_first'),
+    ('iss: data is kept by default', "  Flag := '--remove-startup';\n", "  Flag := '--remove-data';\n", 'tests/test_packaging.py::test_the_uninstaller_keeps_data_unless_the_user_says_yes'),
+    ('iss: a silent uninstall never asks', '  if (not UninstallSilent) and\n     (MsgBox(', '  if (MsgBox(', 'tests/test_packaging.py::test_the_uninstaller_keeps_data_unless_the_user_says_yes'),
+    ('iss: it waits for the clean-up', 'ewWaitUntilTerminated', 'ewNoWait', 'tests/test_packaging.py::test_the_uninstaller_keeps_data_unless_the_user_says_yes'),
+    ("signals: the installer names the Engine's lock", '    return f"Local\\\\ZeroFlow.instance.{role}"\n', '    return f"Local\\\\ZeroFlow.{role}"\n', 'tests/test_packaging.py::test_the_running_engine_is_detected_by_its_own_lock'),
+    ('measure_load: the CPU part changes READER_DEVICE', 'PART_SETTINGS = {"reader-cpu": {"READER_DEVICE": "cpu"}}\n', 'PART_SETTINGS = {}\n', 'tests/test_packaging.py::test_the_load_benchmark_forces_the_cpu_through_a_settings_file'),
+    ('measure_load: not through the environment', '"reader-cpu": (part_reader, {})}\n', '"reader-cpu": (part_reader, {"READER_DEVICE": "cpu"})}\n', 'tests/test_packaging.py::test_the_load_benchmark_forces_the_cpu_through_a_settings_file'),
+    ('measure_load: your settings are kept', '    values = storage.load(source) if os.path.exists(source) else {}\n', '    values = {}\n', 'tests/test_packaging.py::test_the_settings_copy_keeps_your_settings_and_adds_the_change'),
+    ('measure_load: a missing settings file is fine', ' if os.path.exists(source) else {}\n', ' if source else {}\n', 'tests/test_packaging.py::test_without_a_settings_file_the_copy_holds_only_the_change'),
+    ('measure_load: the change wins', '{**values, **changes}', '{**changes, **values}', 'tests/test_packaging.py::test_the_settings_copy_keeps_your_settings_and_adds_the_change'),
+    ('measure_load: the copy is pointed at', '        env["ZEROFLOW_SETTINGS"] = settings_copy(', '        env["ZEROFLOW_SETTING"] = settings_copy(', 'tests/test_packaging.py::test_the_cpu_part_s_engine_reads_cpu'),
+    ('measure_load: only parts that change settings', '    if name in PART_SETTINGS:\n', '    if True:\n', 'tests/test_packaging.py::test_only_the_cpu_part_gets_a_settings_copy'),
+    ('measure_load: each part gets its environment', 'errors="replace", env=env, cwd=ROOT)', 'errors="replace", cwd=ROOT)', 'tests/test_packaging.py::test_each_part_runs_with_its_environment_and_the_copy_is_removed'),
+    ('measure_load: the copy is removed', '            shutil.rmtree(folder, ignore_errors=True)\n        line', '            pass\n        line', 'tests/test_packaging.py::test_each_part_runs_with_its_environment_and_the_copy_is_removed'),
+    ('iss: no code line looks like a section', "'DataNotAllRemoved'), [\n                      ExpandConstant", "'DataNotAllRemoved'),\n                      [ExpandConstant", 'tests/test_packaging.py::test_no_line_of_the_iss_starts_like_a_section_but_the_sections'),
+    ('version: the Arabic state word','    "state.active": "يعمل", "state.paused": "متوقف مؤقتًا",\n', '', 'tests/test_packaging.py::test_the_version_is_shown_in_arabic'),
 ]
 
 only = sys.argv[1] if len(sys.argv) > 1 else ""
@@ -257,7 +332,8 @@ for label, old, new, test in MUTATIONS:
         continue
     homes = [f for f in glob.glob("zeroflow/**/*.py", recursive=True) + glob.glob("reader/*.py")
              + ["zero_flow.py", "tools/check_build.py", "tools/licence_audit.py",
-                "packaging/stubs/av.py"]
+                "tools/build_installer.py", "tools/bench/measure_load.py",
+                "packaging/stubs/av.py", "packaging/zeroflow.iss"]
              if open(f, encoding="utf-8").read().count(old) == 1]
     if len(homes) != 1:
         print(f"SKIPPED  {label}: anchor found in {homes or 'no file'}")

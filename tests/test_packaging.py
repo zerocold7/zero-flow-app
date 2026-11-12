@@ -8,6 +8,7 @@
   Engine detected, the uninstaller asking before it deletes data.
 The real build is checked here too when dist/ holds one; otherwise those tests skip.
 """
+import json
 import os
 import re
 import sys
@@ -54,6 +55,54 @@ def test_the_settings_window_shows_the_version(qtbot, tmp_path):
     qtbot.addWidget(win)
     label = win.findChild(QLabel, "version")
     assert label is not None and zeroflow.__version__ in label.text()
+
+
+def test_the_tray_icon_gets_the_tooltip_with_the_version():
+    from types import SimpleNamespace
+    from zeroflow import app, i18n
+    i18n.choose("en")
+    shown = {}
+
+    class Action:
+        def setChecked(self, on):
+            pass
+
+        def setText(self, text):
+            shown["title"] = text
+    tray = SimpleNamespace(setToolTip=lambda text: shown.update(tooltip=text))
+    fake = SimpleNamespace(dictation_action=Action(), reader_action=Action(),
+                           title_action=Action(), tray=tray,
+                           halves=SimpleNamespace(dictation_on=False, reader_on=False,
+                                                  state="paused"))
+    app.EngineApp._refresh_tray(fake)
+    assert shown["tooltip"] == f"Zero- Flow {zeroflow.__version__} - Paused"
+    assert shown["title"] == "Zero- Flow — paused"
+
+
+def test_the_version_is_shown_in_arabic(qtbot, tmp_path):
+    from PySide6.QtWidgets import QLabel
+    from zeroflow import app, credentials, i18n, storage
+    from zeroflow.settings_window import SettingsWindow
+    values, _ = settings.resolve({})
+    path = tmp_path / "settings.json"
+    storage.save(str(path), {k: v for k, v in values.items() if k != "AI_API_KEY"})
+
+    class Startup:
+        def get(self):
+            return False
+
+        def set(self, on):
+            pass
+    i18n.choose("ar")
+    try:
+        assert app.tray_tooltip(i18n.tr("state.active")) == \
+            f"زيرو فلو {zeroflow.__version__} - يعمل"
+        win = SettingsWindow(values, str(path), credentials.MemoryStore(), [], Startup(),
+                             lambda name, on: None, [])
+        qtbot.addWidget(win)
+        assert win.findChild(QLabel, "version").text() == f"الإصدار {zeroflow.__version__}"
+    finally:
+        i18n.choose("en")
 
 
 def test_check_for_updates_is_in_the_window_and_off(qtbot, tmp_path):
@@ -233,6 +282,103 @@ def test_the_build_stops_on_an_unexpected_gpl_package():
     assert build_installer.unexpected_gpl(["phonemizer-fork", "x264"]) == ["x264"]
 
 
+class FakeBuild:
+    """A project folder in tmp_path, and fakes for the commands: nothing real is built."""
+    def __init__(self, tmp_path, codes=None, names=None):
+        import build_installer
+        self.bi, self.root = build_installer, str(tmp_path)
+        (tmp_path / "LICENSE").write_text("GPL-3")
+        (tmp_path / "THIRD-PARTY-NOTICES.txt").write_text("notices")
+        self.iscc = tmp_path / "ISCC.exe"
+        self.iscc.write_text("")
+        self.program = tmp_path / "dist" / "gpu" / "ZeroFlow"
+        self.codes = codes or {}
+        self.names = {"strong copyleft": ["phonemizer-fork", "espeak-ng"]} if names is None \
+            else names
+        self.steps = []
+
+    def run(self, command):
+        step = ("pyinstaller" if "PyInstaller" in command else
+                "check_build" if command[1].endswith("check_build.py") else "iscc")
+        self.steps.append(step)
+        if step == "pyinstaller":
+            self.program.mkdir(parents=True)
+        if step == "check_build":
+            self.copied = sorted(p.name for p in self.program.iterdir())
+        return self.codes.get(step, 0)
+
+    def build(self, prefix=None):
+        return self.bi.build("gpu", iscc=str(self.iscc), root=self.root,
+                             prefix=prefix or os.path.join(self.root, "venv"),
+                             run=self.run, audit=lambda workpath: self.names)
+
+
+def test_the_build_runs_every_step_in_order(tmp_path):
+    fake = FakeBuild(tmp_path)
+    made = fake.build()
+    assert fake.steps == ["pyinstaller", "check_build", "iscc"]
+    assert fake.copied == ["LICENSE.txt", "THIRD-PARTY-NOTICES.txt"]
+    assert made.endswith(f"ZeroFlow-{zeroflow.__version__}-gpu-setup.exe")
+
+
+def test_an_old_build_is_removed_before_pyinstaller_runs(tmp_path):
+    import build_installer
+    fake = FakeBuild(tmp_path, codes={"pyinstaller": 1})
+    old = tmp_path / "dist" / "gpu" / "ZeroFlow" / "old.dll"
+    old.parent.mkdir(parents=True)
+    old.write_text("")
+    fake.program = tmp_path / "elsewhere"           # PyInstaller "fails" without a folder
+    with pytest.raises(build_installer.Stop, match="PyInstaller"):
+        fake.build()
+    assert not old.exists() and fake.steps == ["pyinstaller"]
+
+
+@pytest.mark.parametrize("names, why", [
+    ({"strong copyleft": ["espeak-ng", "x264"]}, "x264"),
+    ({"unknown": ["mystery-package"]}, "mystery-package"),
+    ({"proprietary": ["closed-thing"]}, "closed-thing"),
+])
+def test_the_licence_audit_stops_the_build(tmp_path, names, why):
+    import build_installer
+    fake = FakeBuild(tmp_path, names=names)
+    with pytest.raises(build_installer.Stop, match=why):
+        fake.build()
+    assert fake.steps == ["pyinstaller"]
+
+
+def test_check_build_problems_stop_the_installer(tmp_path):
+    import build_installer
+    fake = FakeBuild(tmp_path, codes={"check_build": 1})
+    with pytest.raises(build_installer.Stop, match="check_build"):
+        fake.build()
+    assert "iscc" not in fake.steps
+
+
+def test_an_inno_setup_failure_stops(tmp_path):
+    import build_installer
+    fake = FakeBuild(tmp_path, codes={"iscc": 2})
+    with pytest.raises(build_installer.Stop, match="Inno Setup"):
+        fake.build()
+
+
+def test_the_wrong_venv_is_refused_before_anything_runs(tmp_path):
+    import build_installer
+    fake = FakeBuild(tmp_path)
+    with pytest.raises(build_installer.Stop, match="venv-cpu|venv"):
+        fake.build(prefix=os.path.join(fake.root, "venv-cpu"))
+    assert fake.steps == []
+
+
+def test_a_missing_inno_setup_stops_before_the_old_build_is_removed(tmp_path):
+    import build_installer
+    fake = FakeBuild(tmp_path)
+    fake.iscc.unlink()
+    (fake.program / "kept").mkdir(parents=True)
+    with pytest.raises(build_installer.Stop, match="ISCC"):
+        fake.build()
+    assert (fake.program / "kept").exists() and fake.steps == []
+
+
 # ---------------------------------------------------------------- packaging/zeroflow.iss
 def iss() -> str:
     with open(ISS, encoding="utf-8") as f:
@@ -276,6 +422,34 @@ def test_the_notices_and_licence_ship_with_the_program():
     assert "THIRD-PARTY-NOTICES.txt" in text and "LICENSE" in text
 
 
+def test_the_other_editions_files_are_removed_first():
+    """CPU-light over the GPU edition must not keep the CUDA libraries."""
+    section = re.search(r"^\[InstallDelete\](.*?)^\[", iss(), re.M | re.S).group(1)
+    assert re.search(r'^Type: filesandordirs; Name: "\{app\}\\_internal"', section, re.M)
+
+
+def test_the_uninstaller_keeps_data_unless_the_user_says_yes():
+    """--remove-startup is what runs unless Yes was pressed; a silent uninstall never asks."""
+    code = iss().split("[Code]", 1)[1]
+    assert "Flag := '--remove-startup';" in code
+    assert re.search(r"\(not UninstallSilent\) and\s+\(MsgBox\(.*= IDYES\) then\s+"
+                     r"Flag := '--remove-data';", code, re.S)
+    assert "ewWaitUntilTerminated" in code             # done before the files go
+    assert "if CurUninstallStep <> usUninstall then" in code
+
+
+def test_the_iss_has_a_bom_for_the_arabic_text():
+    with open(ISS, "rb") as f:
+        assert f.read(3) == b"\xef\xbb\xbf"
+
+
+def test_no_line_of_the_iss_starts_like_a_section_but_the_sections():
+    """ISCC reads any line starting with "[" as a section tag, even inside [Code]."""
+    with open(ISS, encoding="utf-8-sig") as f:
+        starts = [line.strip() for line in f if line.lstrip().startswith("[")]
+    assert all(re.fullmatch(r"\[[A-Za-z]+\]", line) for line in starts), starts
+
+
 # ---------------------------------------------------------------- the benchmark fix
 def test_the_load_benchmark_forces_the_cpu_through_a_settings_file():
     """ADR 0002: settings come only from the settings file, so READER_DEVICE in the
@@ -285,3 +459,76 @@ def test_the_load_benchmark_forces_the_cpu_through_a_settings_file():
     for name, (_, env) in measure_load.PARTS.items():
         assert not set(env) & set(settings.SPEC), name
     assert measure_load.PART_SETTINGS["reader-cpu"] == {"READER_DEVICE": "cpu"}
+
+
+def _measure_load():
+    sys.path.insert(0, os.path.join(ROOT, "tools", "bench"))
+    import measure_load
+    return measure_load
+
+
+def test_the_settings_copy_keeps_your_settings_and_adds_the_change(tmp_path):
+    from zeroflow import storage
+    mine = tmp_path / "mine" / "settings.json"
+    mine.parent.mkdir()
+    storage.save(str(mine), {"MODELS_DIR": r"F:\HuggingFace", "READER_DEVICE": "auto"})
+    folder = tmp_path / "copy"
+    folder.mkdir()
+    copy = _measure_load().settings_copy({"READER_DEVICE": "cpu"}, str(folder), str(mine))
+    assert copy == str(folder / "settings.json")
+    assert storage.load(copy) == {"MODELS_DIR": r"F:\HuggingFace", "READER_DEVICE": "cpu"}
+    assert storage.load(str(mine))["READER_DEVICE"] == "auto"           # yours unchanged
+
+
+def test_without_a_settings_file_the_copy_holds_only_the_change(tmp_path):
+    from zeroflow import storage
+    copy = _measure_load().settings_copy({"READER_DEVICE": "cpu"}, str(tmp_path),
+                                         str(tmp_path / "missing.json"))
+    assert storage.load(copy) == {"READER_DEVICE": "cpu"}
+
+
+def test_only_the_cpu_part_gets_a_settings_copy(tmp_path):
+    measure_load = _measure_load()
+    environ = {"PATH": "x"}
+    for name in measure_load.PARTS:
+        env = measure_load.part_env(name, str(tmp_path), environ, str(tmp_path / "none.json"))
+        assert env["PATH"] == "x"
+        if name == "reader-cpu":
+            assert env["ZEROFLOW_SETTINGS"] == str(tmp_path / "settings.json")
+        else:
+            assert "ZEROFLOW_SETTINGS" not in env, name
+    assert environ == {"PATH": "x"}
+
+
+def test_each_part_runs_with_its_environment_and_the_copy_is_removed(monkeypatch, capsys):
+    from types import SimpleNamespace
+    from zeroflow import storage
+    measure_load = _measure_load()
+    seen = {}
+
+    def fake_run(command, env, **_):
+        name = command[-1]
+        copy = env.get("ZEROFLOW_SETTINGS")
+        seen[name] = copy if name == "reader-cpu" else None
+        if name == "reader-cpu":
+            assert storage.load(copy)["READER_DEVICE"] == "cpu"
+        return SimpleNamespace(stdout="RESULT " + json.dumps({"runs on": name}), stderr="")
+
+    monkeypatch.setattr(measure_load.subprocess, "run", fake_run)
+    monkeypatch.setattr(sys, "argv", ["measure_load.py"])
+    measure_load.main()
+    assert set(seen) == set(measure_load.PARTS)
+    assert not os.path.exists(seen["reader-cpu"])            # removed afterwards
+    assert "runs on                      reader-cpu" in capsys.readouterr().out
+
+
+def test_the_cpu_part_s_engine_reads_cpu(tmp_path):
+    """The whole way: a fresh Python with the part's environment sees READER_DEVICE=cpu."""
+    import subprocess
+    env = _measure_load().part_env("reader-cpu", str(tmp_path), os.environ,
+                                   str(tmp_path / "none.json"))
+    env["ZEROFLOW_LOG_DIR"] = str(tmp_path / "logs")
+    out = subprocess.run([sys.executable, "-c",
+                          "from zeroflow import settings; print(settings.READER_DEVICE)"],
+                         capture_output=True, text=True, env=env, cwd=ROOT, timeout=60)
+    assert out.stdout.strip().splitlines()[-1] == "cpu", out.stderr[-800:]

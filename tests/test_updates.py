@@ -83,3 +83,67 @@ def test_the_request_has_a_short_timeout_and_names_no_user():
     request = updates.build_request(updates.RELEASES_URL, "2.0.0")
     assert request.headers["User-agent"] == "ZeroFlow/2.0.0"
     assert updates.TIMEOUT <= 10
+
+
+def test_a_plain_http_link_is_not_shown():
+    answer = release(url="http://github.com/o/r/releases/tag/v2.0.1")
+    assert updates.check(True, "2.0.0", fetch=lambda url: answer) is None
+
+
+def test_the_real_fetch_uses_the_timeout_and_the_client_name(monkeypatch):
+    import io
+    import zeroflow
+    used = {}
+
+    def urlopen(request, timeout):
+        used.update(agent=request.headers["User-agent"], timeout=timeout)
+        return io.BytesIO(b'{"tag_name": "v2.0.1"}')
+    monkeypatch.setattr(updates.urllib.request, "urlopen", urlopen)
+    assert updates.fetch_json(updates.RELEASES_URL) == {"tag_name": "v2.0.1"}
+    assert used == {"agent": f"ZeroFlow/{zeroflow.__version__}", "timeout": updates.TIMEOUT}
+
+
+# ---------------------------------------------------------------- the Engine's side
+@pytest.mark.parametrize("language, text", [
+    ("en", "Version 99.0.0 is out. Click to open its page."),
+    ("ar", "صدر الإصدار 99.0.0. انقر لفتح صفحته."),
+])
+def test_a_newer_release_becomes_a_notification_with_its_page(monkeypatch, language, text):
+    from zeroflow import app, i18n
+    shown = []
+    monkeypatch.setattr(app.ui, "show_toast", lambda *a, **k: shown.append((a, k)))
+    i18n.choose(language)
+    try:
+        app.check_for_updates(True, fetch=lambda url: release("v99.0.0"))
+    finally:
+        i18n.choose("en")
+    (title, body, _), extra = shown[0]
+    assert body == text
+    assert extra["link"] == "https://github.com/o/r/releases/tag/v2.0.1"
+
+
+def test_the_engine_checks_once_after_it_has_booted_with_the_setting(monkeypatch):
+    import threading
+    from types import SimpleNamespace
+    from zeroflow import app
+    asked, done = [], threading.Event()
+    monkeypatch.setattr(app, "check_for_updates", lambda on: asked.append(on) or done.set())
+    monkeypatch.setattr(app.settings, "CHECK_FOR_UPDATES", "the setting's value")
+    fake = SimpleNamespace(_refresh_tray=lambda: None,
+                           halves=SimpleNamespace(state="paused",
+                                                  state_changed=SimpleNamespace(
+                                                      emit=lambda state: None)))
+    app.EngineApp._booted(fake)
+    assert done.wait(2) and asked == ["the setting's value"]
+
+
+def test_a_click_on_the_notification_opens_the_link(monkeypatch):
+    import threading
+    import types
+    from zeroflow import ui
+    seen, done = {}, threading.Event()
+    fake = types.ModuleType("win11toast")
+    fake.toast = lambda *a, **k: seen.update(k) or done.set()
+    monkeypatch.setitem(sys.modules, "win11toast", fake)
+    ui.show_toast("t", "b", True, link="https://github.com/o/r/releases/tag/v2")
+    assert done.wait(2) and seen["on_click"] == "https://github.com/o/r/releases/tag/v2"
