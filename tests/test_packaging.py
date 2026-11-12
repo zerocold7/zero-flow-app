@@ -450,6 +450,33 @@ def test_no_line_of_the_iss_starts_like_a_section_but_the_sections():
     assert all(re.fullmatch(r"\[[A-Za-z]+\]", line) for line in starts), starts
 
 
+# ---------------------------------------------------------------- packaging/sandbox.wsb
+WSB = os.path.join(ROOT, "packaging", "sandbox.wsb")
+
+
+def _wsb():
+    import xml.etree.ElementTree as ET
+    return ET.parse(WSB).getroot()
+
+
+def test_the_sandbox_gets_the_installers_read_only_and_nothing_else():
+    """A .wsb takes only absolute paths: moving the project means changing it too."""
+    folders = _wsb().findall("MappedFolders/MappedFolder")
+    assert len(folders) == 1                       # nothing in the Sandbox can write here
+    (folder,) = folders
+    assert (os.path.normcase(folder.findtext("HostFolder"))
+            == os.path.normcase(os.path.join(ROOT, "dist", "installer")))
+    assert folder.findtext("ReadOnly").lower() == "true"
+
+
+def test_the_sandbox_is_a_pc_without_a_graphics_card_but_with_a_microphone():
+    root = _wsb()
+    assert root.findtext("VGpu") == "Disable"
+    assert root.findtext("AudioInput") == "Enable"          # a dictation
+    assert root.findtext("Networking") != "Disable"         # first run's downloads
+    assert int(root.findtext("MemoryInMB")) == 8192         # a typical 8 GB PC: CPU Reader and Whisper
+
+
 # ---------------------------------------------------------------- the benchmark fix
 def test_the_load_benchmark_forces_the_cpu_through_a_settings_file():
     """ADR 0002: settings come only from the settings file, so READER_DEVICE in the

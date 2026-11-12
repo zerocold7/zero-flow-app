@@ -322,6 +322,12 @@ MUTATIONS = [
     ('measure_load: each part gets its environment', 'errors="replace", env=env, cwd=ROOT)', 'errors="replace", cwd=ROOT)', 'tests/test_packaging.py::test_each_part_runs_with_its_environment_and_the_copy_is_removed'),
     ('measure_load: the copy is removed', '            shutil.rmtree(folder, ignore_errors=True)\n        line', '            pass\n        line', 'tests/test_packaging.py::test_each_part_runs_with_its_environment_and_the_copy_is_removed'),
     ('iss: no code line looks like a section', "'DataNotAllRemoved'), [\n                      ExpandConstant", "'DataNotAllRemoved'),\n                      [ExpandConstant", 'tests/test_packaging.py::test_no_line_of_the_iss_starts_like_a_section_but_the_sections'),
+    ('wsb: the installers are read-only', '      <ReadOnly>true</ReadOnly>\n', '      <ReadOnly>false</ReadOnly>\n', 'tests/test_packaging.py::test_the_sandbox_gets_the_installers_read_only_and_nothing_else'),
+    ('wsb: the installer folder is mapped', '<HostFolder>F:\\Claude Project\\zero-flow-app\\dist\\installer</HostFolder>', '<HostFolder>F:\\Claude Project\\zero-flow-app\\dist</HostFolder>', 'tests/test_packaging.py::test_the_sandbox_gets_the_installers_read_only_and_nothing_else'),
+    ('wsb: no graphics card', '  <VGpu>Disable</VGpu>\n', '  <VGpu>Default</VGpu>\n', 'tests/test_packaging.py::test_the_sandbox_is_a_pc_without_a_graphics_card_but_with_a_microphone'),
+    ('wsb: a microphone', '  <AudioInput>Enable</AudioInput>\n', '  <AudioInput>Disable</AudioInput>\n', 'tests/test_packaging.py::test_the_sandbox_is_a_pc_without_a_graphics_card_but_with_a_microphone'),
+    ('wsb: the network', '  <Networking>Default</Networking>\n', '  <Networking>Disable</Networking>\n', 'tests/test_packaging.py::test_the_sandbox_is_a_pc_without_a_graphics_card_but_with_a_microphone'),
+    ('wsb: enough memory', '  <MemoryInMB>8192</MemoryInMB>\n', '  <MemoryInMB>16384</MemoryInMB>\n', 'tests/test_packaging.py::test_the_sandbox_is_a_pc_without_a_graphics_card_but_with_a_microphone'),
     ('version: the Arabic state word','    "state.active": "يعمل", "state.paused": "متوقف مؤقتًا",\n', '', 'tests/test_packaging.py::test_the_version_is_shown_in_arabic'),
 ]
 
@@ -333,7 +339,7 @@ for label, old, new, test in MUTATIONS:
     homes = [f for f in glob.glob("zeroflow/**/*.py", recursive=True) + glob.glob("reader/*.py")
              + ["zero_flow.py", "tools/check_build.py", "tools/licence_audit.py",
                 "tools/build_installer.py", "tools/bench/measure_load.py",
-                "packaging/stubs/av.py", "packaging/zeroflow.iss"]
+                "packaging/stubs/av.py", "packaging/zeroflow.iss", "packaging/sandbox.wsb"]
              if open(f, encoding="utf-8").read().count(old) == 1]
     if len(homes) != 1:
         print(f"SKIPPED  {label}: anchor found in {homes or 'no file'}")

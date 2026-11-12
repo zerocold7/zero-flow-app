@@ -71,7 +71,7 @@ Approved: the plan, the tests, per-user install, and the second venv (`venv-cpu`
 | 7 Uninstaller | done |
 | 8 Inno Setup script, build script | done. Inno Setup 6.7.4 is installed per user at `F:\Tools\Inno Setup 6`, and `Arabic.isl` ships with it. Installers: CPU-light 0.215 GB, GPU 1.660 GB (under the ~4 GB single-file limit, so no disk spanning). ISCC gave 0 warnings. The build runs the licence audit before `check_build`, because `check_build` needs the notices the audit writes. Both installers are unsigned, so SmartScreen warns about them (a Phase 8 question). |
 | 9 measure_load fix | done, waiting for Zero's OK |
-| 10 Sandbox gate | not started; stop there, no merge, tag or push |
+| 10 Sandbox gate | `packaging/sandbox.wsb` and the checklist `docs/sandbox-gate.md` are ready. The run waits for Zero to turn on Windows Sandbox (an admin step and a restart). Stop there: no merge, tag or push. |
 
 Numbers at the end of step 4: 709 passed, 13 failed (all steps 5–9), 11 skipped, with `--ignore=tests/test_updates.py --ignore=tests/test_uninstall.py` (their import errors stop pytest's whole run until the modules exist). 231 mutation guards, all caught.
 

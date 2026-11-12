@@ -1,0 +1,27 @@
+<!-- Phase 7 clean-PC gate (docs/sandbox-gate.md). Open this file to start Windows Sandbox:
+     a fresh Windows with nothing of ours on it, thrown away when it closes.
+     - dist\installer is mapped read-only: the Sandbox can run the installers, not change them.
+     - No graphics card (vGPU off): the CPU-light edition is the one tested fully here.
+     - Network on (first run's downloads), microphone on (a dictation), clipboard on
+       (Copy diagnostics comes back to this PC that way).
+     A .wsb takes only absolute paths: this one is for the project at F:\Claude Project. -->
+<Configuration>
+  <VGpu>Disable</VGpu>
+  <Networking>Default</Networking>
+  <AudioInput>Enable</AudioInput>
+  <VideoInput>Disable</VideoInput>
+  <ClipboardRedirection>Enable</ClipboardRedirection>
+  <PrinterRedirection>Disable</PrinterRedirection>
+  <ProtectedClient>Disable</ProtectedClient>
+  <MemoryInMB>8192</MemoryInMB>
+  <MappedFolders>
+    <MappedFolder>
+      <HostFolder>F:\Claude Project\zero-flow-app\dist\installer</HostFolder>
+      <SandboxFolder>C:\Users\WDAGUtilityAccount\Desktop\installer</SandboxFolder>
+      <ReadOnly>true</ReadOnly>
+    </MappedFolder>
+  </MappedFolders>
+  <LogonCommand>
+    <Command>explorer.exe C:\Users\WDAGUtilityAccount\Desktop\installer</Command>
+  </LogonCommand>
+</Configuration>
